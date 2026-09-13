@@ -10,6 +10,7 @@ public final class Checker: SyntaxVisitor {
     private let file: String
     private let converter: SourceLocationConverter
     private var findings: [Diagnostic] = []
+    private var conformanceDepth = 0
 
     /// Lints the source text of one file.
     ///
@@ -29,6 +30,15 @@ public final class Checker: SyntaxVisitor {
         self.file = file
         self.converter = converter
         super.init(viewMode: .sourceAccurate)
+    }
+
+    override public func visit(_ node: ExtensionDeclSyntax) -> SyntaxVisitorContinueKind {
+        if node.inheritanceClause != nil { conformanceDepth += 1 }
+        return .visitChildren
+    }
+
+    override public func visitPost(_ node: ExtensionDeclSyntax) {
+        if node.inheritanceClause != nil { conformanceDepth -= 1 }
     }
 
     // Local declarations inside bodies are not API; skip them wholesale.
@@ -103,7 +113,7 @@ public final class Checker: SyntaxVisitor {
     ) {
         let location = converter.location(for: anchor.positionAfterSkippingLeadingTrivia)
         let names = modifiers.map(\.name.text)
-        let declaration = Declaration(
+        var declaration = Declaration(
             kind: kind,
             name: name,
             parameters: parameters.map { list in
@@ -121,8 +131,28 @@ public final class Checker: SyntaxVisitor {
             line: location.line,
             column: location.column
         )
+        if let reason = Self.exemptMarker(in: node.leadingTrivia) {
+            declaration.exemption = .marker(reason: reason)
+        } else if Declaration.knownRequirements.contains(declaration.signature) {
+            declaration.exemption = .knownRequirement
+        } else if conformanceDepth > 0 {
+            declaration.exemption = .conformanceExtension
+        }
         let doc = DocComment.leading(node, converter: converter)
         findings += Rules.check(declaration, doc: doc)
+    }
+
+    /// Reads a `// gloss:exempt <reason>` line from the trivia directly above a declaration.
+    /// - Parameter trivia: The declaration's leading trivia.
+    /// - Returns: The reason text (possibly empty, which the rules refuse), or `nil` with no marker.
+    static func exemptMarker(in trivia: Trivia) -> String? {
+        for piece in trivia.pieces {
+            guard case .lineComment(let text) = piece else { continue }
+            let body = text.dropFirst(2).trimmed
+            guard body.hasPrefix("gloss:exempt") else { continue }
+            return body.dropFirst("gloss:exempt".count).trimmed
+        }
+        return nil
     }
 
     private static func isVoid(_ type: TypeSyntax) -> Bool {

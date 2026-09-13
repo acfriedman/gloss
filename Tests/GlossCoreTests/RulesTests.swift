@@ -91,6 +91,24 @@ final class RulesTests: XCTestCase {
         XCTAssertEqual(lint("/// A bag of probes.\nstruct S {\n    /// how many\n    var count: Int\n}"), [.summaryCapital, .summarySentences, .summaryTerminator])
     }
 
+    func testKnownRequirementsAreExempt() {
+        XCTAssertEqual(lint("struct S: Decodable {\n    init(from decoder: Decoder) throws {}\n}"), [.missingDoc])
+        XCTAssertEqual(lint("/// A thing.\nstruct S: Decodable {\n    init(from decoder: Decoder) throws {}\n}"), [])
+        XCTAssertEqual(lint("/// A thing.\nstruct S {\n    func hash(into hasher: inout Hasher) {}\n    static func buildBlock(_ parts: Int...) -> Int { 0 }\n}"), [])
+    }
+
+    func testConformanceExtensionMembersNeedNoDocButKeepShape() {
+        XCTAssertEqual(lint("extension S: P {\n    func requirement() -> Int { 0 }\n}"), [])
+        XCTAssertEqual(lint("extension S {\n    func helper() -> Int { 0 }\n}"), [.missingDoc])
+        XCTAssertEqual(lint("extension S: P {\n    /// Does it.\n    func requirement() -> Int { 0 }\n}"), [.returnsMissing])
+    }
+
+    func testExemptMarker() {
+        XCTAssertEqual(lint("// gloss:exempt implements Foo.bar, documented there\nfunc bar() {}"), [])
+        XCTAssertEqual(lint("// gloss:exempt\nfunc bar() {}"), [.exemptReason])
+        XCTAssertEqual(lint("// gloss:exempt because\n/// Does it.\nfunc bar() {}"), [.exemptDocumented])
+    }
+
     func testLocalDeclarationsAreSkipped() {
         XCTAssertEqual(lint("/// Runs it.\nfunc f() { func g() {}; struct T {} }"), [])
     }

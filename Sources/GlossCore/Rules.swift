@@ -12,6 +12,22 @@ public enum Rules {
     ///   - doc: Its doc comment, or `nil` when it has none.
     /// - Returns: Every violation found, in source order.
     public static func check(_ declaration: Declaration, doc: DocComment?) -> [Diagnostic] {
+        switch declaration.exemption {
+        case .knownRequirement:
+            return []
+        case .marker(let reason):
+            if reason.isBlank {
+                return [diagnostic(declaration, line: declaration.line, column: declaration.column, .exemptReason,
+                                   "`// gloss:exempt` needs a reason: `// gloss:exempt implements Foo.bar, documented there`.")]
+            }
+            if doc != nil {
+                return [diagnostic(declaration, line: declaration.line, column: declaration.column, .exemptDocumented,
+                                   "`\(declaration.name)` is both exempted and documented; keep one. Drop the marker if the doc is real.")]
+            }
+            return []
+        case .conformanceExtension, .none:
+            break
+        }
         guard let doc else {
             guard declaration.requiresDoc else { return [] }
             return [diagnostic(declaration, line: declaration.line, column: declaration.column, .missingDoc,

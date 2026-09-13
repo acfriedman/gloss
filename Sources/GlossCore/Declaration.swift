@@ -28,8 +28,23 @@ public struct Declaration: Sendable, Equatable {
         }
     }
 
+    /// Why a declaration is excused from the harness, when it is.
+    ///
+    /// Syntax cannot prove that a method implements a protocol requirement, so the harness accepts
+    /// three proxies: a signature every Swift author recognizes, residence in a conformance
+    /// extension, or an author's marker naming the reason.
+    public enum Exemption: Sendable, Equatable {
+        /// The signature is a well-known protocol requirement (`init(from:)`, `hash(into:)`, …).
+        case knownRequirement
+        /// The declaration sits in an `extension T: P { }` block, which houses P's requirements.
+        case conformanceExtension
+        /// A `// gloss:exempt <reason>` line directly above the declaration.
+        case marker(reason: String)
+    }
+
     public var kind: Kind
     public var name: String
+    public var exemption: Exemption?
     public var parameters: [Parameter]?
     public var returnsValue: Bool
     public var throwsErrors: Bool
@@ -42,6 +57,7 @@ public struct Declaration: Sendable, Equatable {
     public init(
         kind: Kind,
         name: String,
+        exemption: Exemption? = nil,
         parameters: [Parameter]? = nil,
         returnsValue: Bool = false,
         throwsErrors: Bool = false,
@@ -53,6 +69,7 @@ public struct Declaration: Sendable, Equatable {
     ) {
         self.kind = kind
         self.name = name
+        self.exemption = exemption
         self.parameters = parameters
         self.returnsValue = returnsValue
         self.throwsErrors = throwsErrors
@@ -65,9 +82,10 @@ public struct Declaration: Sendable, Equatable {
 
     /// Whether the harness demands a doc comment on this declaration at all.
     ///
-    /// Private members and overrides are exempt: the first are implementation detail, the second
-    /// inherit the documented contract of what they override.
+    /// Private members, overrides, and exempt declarations are excused: the first are
+    /// implementation detail, the rest inherit the documented contract of what they implement.
     public var requiresDoc: Bool {
+        guard exemption == nil else { return false }
         switch kind {
         case .function, .initializer, .subscript, .type:
             return !isPrivate && !isOverride
@@ -75,4 +93,45 @@ public struct Declaration: Sendable, Equatable {
             return false
         }
     }
+
+    /// The signature as the harness names it: base name plus argument labels, `init(from:)` style.
+    ///
+    /// Argument labels are what distinguish `init(from:)` from `init(rawValue:)`, so this is the key
+    /// the known-requirement list is matched on.
+    public var signature: String {
+        guard let parameters else { return name }
+        return name + "(" + parameters.map { ($0.label ?? "_") + ":" }.joined() + ")"
+    }
+
+    /// Signatures the standard library, Foundation, and the macro system require of conformers.
+    ///
+    /// Their contract is the protocol's; a doc comment here would restate it. Keep the list to
+    /// requirements every Swift author recognizes on sight.
+    public static let knownRequirements: Set<String> = [
+        // Codable / NSCoding / NSCopying
+        "init(from:)", "encode(to:)", "init(coder:)", "encode(with:)", "copy(with:)",
+        // Hashable / Equatable / Comparable / Identifiable helpers
+        "hash(into:)", "isEqual(_:)",
+        // RawRepresentable and the literal protocols
+        "init(rawValue:)", "init(stringLiteral:)", "init(extendedGraphemeClusterLiteral:)",
+        "init(unicodeScalarLiteral:)", "init(integerLiteral:)", "init(floatLiteral:)",
+        "init(booleanLiteral:)", "init(arrayLiteral:)", "init(dictionaryLiteral:)", "init(nilLiteral:)",
+        "init(stringInterpolation:)", "init(literalCapacity:interpolationCount:)", "appendLiteral(_:)",
+        // Sequence / IteratorProtocol / Collection
+        "makeIterator()", "next()", "index(after:)", "index(before:)",
+        // Entry points and command runners
+        "main()", "run()", "validate()",
+        // Error / CustomStringConvertible-style descriptions are properties; listed as methods only
+        "encode(to:configuration:)", "init(from:configuration:)",
+        // swift-syntax macro roles
+        "expansion(of:in:)", "expansion(of:providingMembersOf:in:)",
+        "expansion(of:providingMembersOf:conformingTo:in:)", "expansion(of:providingPeersOf:in:)",
+        "expansion(of:attachedTo:providingExtensionsOf:conformingTo:in:)",
+        "expansion(of:attachedTo:providingAttributesFor:in:)", "expansion(of:providingAccessorsOf:in:)",
+        "expansion(of:providingPreambleFor:in:)", "expansion(of:providingBodyFor:in:)",
+        // Result builders
+        "buildBlock(_:)", "buildExpression(_:)", "buildOptional(_:)", "buildEither(first:)",
+        "buildEither(second:)", "buildArray(_:)", "buildPartialBlock(first:)",
+        "buildPartialBlock(accumulated:next:)", "buildFinalResult(_:)", "buildLimitedAvailability(_:)"
+    ]
 }

@@ -22,6 +22,8 @@ public enum Rule: String, CaseIterable, Sendable {
     case throwsMissing = "throws-missing"
     case throwsUnexpected = "throws-unexpected"
     case throwsEmpty = "throws-empty"
+    case exemptReason = "exempt-reason"
+    case exemptDocumented = "exempt-documented"
 }
 
 /// A single violation, addressed the way Xcode and GitHub Actions parse diagnostics.

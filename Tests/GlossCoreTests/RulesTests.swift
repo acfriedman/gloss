@@ -1,4 +1,4 @@
-import DocLintCore
+import GlossCore
 import XCTest
 
 /// Pins each rule against a literal doc comment, so a message or threshold change is a visible diff.

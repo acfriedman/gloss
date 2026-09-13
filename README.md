@@ -1,4 +1,4 @@
-# doclint
+# gloss
 
 A doc-comment harness for Swift. It parses each file with swift-syntax and reports, as errors, every
 declaration whose `///` comment does not match the org's shape: a one-or-two-sentence summary
@@ -8,7 +8,7 @@ thrown error, then notes. The shape itself is specified in `.claude/skills/doc-c
 ## Usage
 
 ```bash
-swift run -c release doclint ../haruspec/Sources
+swift run -c release gloss ../haruspec/Sources
 ```
 
 Paths may be files or directories. Directories are walked for `.swift` files, skipping `.build`

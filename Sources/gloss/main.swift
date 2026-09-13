@@ -1,7 +1,7 @@
-import DocLintCore
+import GlossCore
 import Foundation
 
-/// Command-line entry: `doclint [--include-tests] [--summary] <path>...`.
+/// Command-line entry: `gloss [--include-tests] [--summary] <path>...`.
 ///
 /// Paths may be files or directories; directories are walked for `.swift` files, skipping `.build`
 /// and, unless `--include-tests` is given, any `Tests` directory.
@@ -11,14 +11,14 @@ let summaryOnly = arguments.contains("--summary")
 let paths = arguments.filter { !$0.hasPrefix("--") }
 
 guard !paths.isEmpty else {
-    FileHandle.standardError.write(Data("usage: doclint [--include-tests] [--summary] <path>...\n".utf8))
+    FileHandle.standardError.write(Data("usage: gloss [--include-tests] [--summary] <path>...\n".utf8))
     exit(64)
 }
 
 func swiftFiles(under path: String) -> [String] {
     var isDirectory: ObjCBool = false
     guard FileManager.default.fileExists(atPath: path, isDirectory: &isDirectory) else {
-        FileHandle.standardError.write(Data("doclint: no such path: \(path)\n".utf8))
+        FileHandle.standardError.write(Data("gloss: no such path: \(path)\n".utf8))
         exit(66)
     }
     guard isDirectory.boolValue else { return path.hasSuffix(".swift") ? [path] : [] }

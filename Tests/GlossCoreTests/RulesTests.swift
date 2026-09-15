@@ -154,3 +154,17 @@ extension RulesTests {
         XCTAssertEqual(lint("func `default`() {}"), [.missingDoc])
     }
 }
+
+extension RulesTests {
+    func testMemberwiseInitializersNeedNoDocAndNoEntries() {
+        let plain = "/// A pair.\nstruct S {\n    var a: Int; var b: Int\n    init(a: Int, into b: Int) { self.a = a; self.b = b }\n}"
+        XCTAssertEqual(lint(plain), [])
+        let summarized = "/// A pair.\nstruct S {\n    var a: Int\n    /// Builds a pair.\n    init(a: Int) { self.a = a }\n}"
+        XCTAssertEqual(lint(summarized), [])
+        let computed = "/// A pair.\nstruct S {\n    var a: Int\n    init(a: Int) { self.a = a + 1 }\n}"
+        XCTAssertEqual(lint(computed), [.missingDoc])
+        let extra = "/// A pair.\nstruct S {\n    var a: Int\n    init(a: Int) { self.a = a; validate() }\n}"
+        XCTAssertEqual(lint(extra), [.missingDoc])
+        XCTAssertEqual(lint("/// A pair.\nstruct S {\n    init() {}\n}"), [.missingDoc])
+    }
+}

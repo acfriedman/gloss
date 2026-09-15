@@ -71,3 +71,7 @@ the harness accepts three proxies:
    ```
 
    The marker and a `///` doc on the same declaration is an error; keep one.
+4. **Memberwise initializers**, whose body is nothing but `self.x = x` for their own parameters,
+   are exempt from `missing-doc` and the parameter rules: an entry there could only restate the
+   property's doc. A summary they do carry is still shape-checked. Any other statement, default
+   value, or expression in the body makes it a real initializer with a contract of its own.

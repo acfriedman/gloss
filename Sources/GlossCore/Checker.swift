@@ -77,8 +77,44 @@ public final class Checker: SyntaxVisitor {
                parameters: node.signature.parameterClause.parameters,
                returnType: nil,
                throwsErrors: node.signature.effectSpecifiers?.throwsClause != nil,
-               modifiers: node.modifiers)
+               modifiers: node.modifiers,
+               isMemberwise: Self.isMemberwise(node))
         return .skipChildren
+    }
+
+    /// Whether an initializer's body is nothing but `self.x = x` for its own parameters, the shape the
+    /// compiler would have synthesized. Any other statement, default, or expression makes it a real
+    /// initializer with a contract of its own.
+    /// - Parameter node: The initializer.
+    /// - Returns: `true` for a non-empty body of bare parameter-to-property assignments.
+    static func isMemberwise(_ node: InitializerDeclSyntax) -> Bool {
+        guard let statements = node.body?.statements, !statements.isEmpty else { return false }
+        let parameters = Set(node.signature.parameterClause.parameters.map { ($0.secondName ?? $0.firstName).text })
+        return statements.allSatisfy { statement in
+            guard let (target, source) = Self.assignment(statement.item),
+                  target.base?.as(DeclReferenceExprSyntax.self)?.baseName.text == "self"
+            else { return false }
+            return parameters.contains(source.baseName.text)
+        }
+    }
+
+    /// Reads `lhs = rhs` from a statement, whether the parser left it as an unfolded sequence (its
+    /// default) or an operator table already folded it.
+    /// - Parameter item: The statement.
+    /// - Returns: The member being assigned and the bare name assigned to it, or `nil` for any other shape.
+    private static func assignment(_ item: CodeBlockItemSyntax.Item) -> (MemberAccessExprSyntax, DeclReferenceExprSyntax)? {
+        if let folded = item.as(InfixOperatorExprSyntax.self), folded.operator.is(AssignmentExprSyntax.self),
+           let target = folded.leftOperand.as(MemberAccessExprSyntax.self),
+           let source = folded.rightOperand.as(DeclReferenceExprSyntax.self) {
+            return (target, source)
+        }
+        guard let sequence = item.as(SequenceExprSyntax.self) else { return nil }
+        let parts = Array(sequence.elements)
+        guard parts.count == 3, parts[1].is(AssignmentExprSyntax.self),
+              let target = parts[0].as(MemberAccessExprSyntax.self),
+              let source = parts[2].as(DeclReferenceExprSyntax.self)
+        else { return nil }
+        return (target, source)
     }
 
     override public func visit(_ node: SubscriptDeclSyntax) -> SyntaxVisitorContinueKind {
@@ -135,7 +171,8 @@ public final class Checker: SyntaxVisitor {
         parameters: FunctionParameterListSyntax?,
         returnType: TypeSyntax?,
         throwsErrors: Bool,
-        modifiers: DeclModifierListSyntax
+        modifiers: DeclModifierListSyntax,
+        isMemberwise: Bool = false
     ) {
         let location = converter.location(for: anchor.positionAfterSkippingLeadingTrivia)
         let names = modifiers.map(\.name.text)
@@ -163,6 +200,8 @@ public final class Checker: SyntaxVisitor {
             declaration.exemption = .knownRequirement
         } else if conformanceDepth > 0 {
             declaration.exemption = .conformanceExtension
+        } else if isMemberwise {
+            declaration.exemption = .memberwiseInit
         }
         let doc = DocComment.leading(node, converter: converter)
         findings += Rules.check(declaration, doc: doc)

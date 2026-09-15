@@ -45,6 +45,9 @@ public struct Declaration: Sendable, Equatable {
         case conformanceExtension
         /// A `// gloss:exempt <reason>` line directly above the declaration.
         case marker(reason: String)
+        /// An initializer whose body only assigns its parameters to stored properties, so a parameter
+        /// entry could only restate the property's own doc.
+        case memberwiseInit
     }
 
     public var kind: Kind
@@ -103,7 +106,8 @@ public struct Declaration: Sendable, Equatable {
     /// Whether the harness demands a doc comment on this declaration at all.
     ///
     /// Private members, overrides, and exempt declarations are excused: the first are
-    /// implementation detail, the rest inherit the documented contract of what they implement.
+    /// implementation detail, the rest inherit the documented contract of what they implement or,
+    /// for a memberwise initializer, of the properties they set.
     public var requiresDoc: Bool {
         guard exemption == nil else { return false }
         switch kind {

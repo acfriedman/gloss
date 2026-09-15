@@ -4,7 +4,8 @@
 /// literal tests and so the CLI adds nothing but file walking.
 public enum Rules {
     /// Runs every rule against one declaration. An undocumented declaration yields at most the
-    /// `missing-doc` finding; the shape rules only speak once there is a comment to shape.
+    /// `missing-doc` finding; the shape rules only speak once there is a comment to shape, and a
+    /// memberwise initializer gets only the summary and markup rules, never the parameter ones.
     /// - Parameters:
     ///   - declaration: The declaration under review.
     ///   - doc: Its doc comment, or `nil` when it has none.
@@ -23,7 +24,7 @@ public enum Rules {
                                    "`\(declaration.name)` is both exempted and documented; keep one. Drop the marker if the doc is real.")]
             }
             return []
-        case .conformanceExtension, .none:
+        case .conformanceExtension, .memberwiseInit, .none:
             break
         }
         guard let doc else {
@@ -39,9 +40,11 @@ public enum Rules {
         var findings: [Diagnostic] = []
         findings += summaryRules(declaration, doc, structure)
         findings += markupRules(declaration, structure)
-        findings += parameterRules(declaration, structure)
-        findings += returnsRules(declaration, structure)
-        findings += throwsRules(declaration, structure)
+        if declaration.exemption != .memberwiseInit {
+            findings += parameterRules(declaration, structure)
+            findings += returnsRules(declaration, structure)
+            findings += throwsRules(declaration, structure)
+        }
         return findings.sorted { ($0.line, $0.column, $0.rule.rawValue) < ($1.line, $1.column, $1.rule.rawValue) }
     }
 

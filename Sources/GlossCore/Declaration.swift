@@ -3,6 +3,8 @@
 /// Decoupling from SwiftSyntax keeps every rule testable from a literal and lets the checker
 /// stay a thin adapter.
 public struct Declaration: Sendable, Equatable {
+    /// The syntactic category of a declaration, which decides which rules apply. Callables get the
+    /// markup rules; types, properties, and cases get only the summary rules once documented.
     public enum Kind: String, Sendable {
         case function, initializer, `subscript`, type, property, enumCase, other
     }
@@ -12,15 +14,18 @@ public struct Declaration: Sendable, Equatable {
         public var label: String?
         public var name: String
 
+        /// Creates a parameter from its two names.
+        /// - Parameters:
+        ///   - label: The external argument label, or `nil` for `_`.
+        ///   - name: The internal name; the same as `label` when the signature gives only one.
         public init(label: String?, name: String) {
             self.label = label
             self.name = name
         }
 
-        /// Whether a `- Parameter x:` entry naming `x` refers to this parameter.
-        ///
-        /// DocC matches the internal name, and Xcode tolerates the external label; both are accepted
-        /// so the doc never has to be rewritten when only the label changes.
+        /// Whether a `- Parameter x:` entry naming `x` refers to this parameter. DocC matches the internal
+        /// name and Xcode tolerates the external label, so both are accepted and a label-only change
+        /// never forces a doc rewrite.
         /// - Parameter written: The name as it appears in the doc comment.
         /// - Returns: `true` when `written` is the internal name or the external label.
         public func matches(_ written: String) -> Bool {
@@ -54,6 +59,21 @@ public struct Declaration: Sendable, Equatable {
     public var line: Int
     public var column: Int
 
+    /// Creates a declaration by hand, for tests and tools that have no syntax tree.
+    /// - Parameters:
+    ///   - kind: The syntactic category; decides which rules apply.
+    ///   - name: The base name as diagnostics report it (`init` for initializers, `subscript` for subscripts).
+    ///   - exemption: Why the declaration is excused, or `nil` when it is not.
+    ///   - parameters: The parameter list of a callable; `nil` for types, properties, and cases, which
+    ///     also skips the returns and throws rules.
+    ///   - returnsValue: `true` when the declared return type is anything but `Void`, `()`, or `Never`.
+    ///   - throwsErrors: `true` for `throws` and `rethrows`.
+    ///   - isPrivate: `true` for `private` or `fileprivate`, including members of a private type or
+    ///     extension; excuses `missing-doc` only.
+    ///   - isOverride: `true` for `override`; excuses `missing-doc`, since the doc is inherited.
+    ///   - file: The path diagnostics report.
+    ///   - line: The 1-based source line of the name token.
+    ///   - column: The 1-based column of the name token.
     public init(
         kind: Kind,
         name: String,

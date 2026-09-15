@@ -36,6 +36,13 @@ public struct Diagnostic: Sendable, Equatable {
     public var rule: Rule
     public var message: String
 
+    /// Creates a diagnostic at a source position.
+    /// - Parameters:
+    ///   - file: The path as given on the command line.
+    ///   - line: The 1-based line: the offending comment line for a doc rule, the declaration for `missing-doc`.
+    ///   - column: The 1-based column: 1 for comment lines, the name token's column for declarations.
+    ///   - rule: The rule that fired.
+    ///   - message: The fix in one or two sentences, quoting the fragment it names.
     public init(file: String, line: Int, column: Int, rule: Rule, message: String) {
         self.file = file
         self.line = line
@@ -44,9 +51,8 @@ public struct Diagnostic: Sendable, Equatable {
         self.message = message
     }
 
-    /// Renders the diagnostic on one line in compiler format.
-    ///
-    /// The bracketed rule code at the end keeps the message human-first while staying greppable.
+    /// Renders the diagnostic on one line in compiler format. The bracketed rule code at the end keeps
+    /// the message human-first while staying greppable.
     /// - Returns: `file:line:column: error: message [rule]`.
     public var rendered: String {
         "\(file):\(line):\(column): error: \(message) [\(rule.rawValue)]"

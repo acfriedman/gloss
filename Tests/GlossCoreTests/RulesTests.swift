@@ -1,4 +1,4 @@
-import GlossCore
+@testable import GlossCore
 import XCTest
 
 /// Pins each rule against a literal doc comment, so a message or threshold change is a visible diff.
@@ -111,5 +111,46 @@ final class RulesTests: XCTestCase {
 
     func testLocalDeclarationsAreSkipped() {
         XCTAssertEqual(lint("/// Runs it.\nfunc f() { func g() {}; struct T {} }"), [])
+    }
+}
+
+extension RulesTests {
+    func testCodeSpansMatchByBacktickRunLength() {
+        XCTAssertEqual(Sentences.stripCodeSpans("a `` ```x <y> `` b."), "a ` b.")
+        XCTAssertEqual(Sentences.stripCodeSpans("a `x` b."), "a ` b.")
+        XCTAssertEqual(Sentences.stripCodeSpans("a `x b."), "a `x b.")
+        XCTAssertEqual(lint("/// The spec a `` ```fence <spec> `` names. Needed for parity.\nfunc f() {}"), [])
+    }
+
+    func testMisplacedMarkupBlockIsOneFinding() {
+        let source = """
+        /// Records it.
+        ///
+        /// Some notes first.
+        /// - Parameters:
+        ///   - a: A.
+        ///   - b: B.
+        /// - Returns: It.
+        func f(a: Int, b: Int) -> Int { 0 }
+        """
+        XCTAssertEqual(lint(source), [.markupOrder])
+    }
+
+    func testMembersOfPrivateTypesArePrivate() {
+        XCTAssertEqual(lint("private struct S { func f() {} }"), [])
+        XCTAssertEqual(lint("fileprivate enum E { struct T { func f() {} } }"), [])
+        XCTAssertEqual(lint("private extension S { func f() {} }"), [])
+        XCTAssertEqual(lint("/// A thing.\nstruct S { private struct T { func f() {} }\n    func g() {} }"), [.missingDoc])
+    }
+
+    func testMacroDeclarationsAreCallables() {
+        XCTAssertEqual(lint("@attached(member) public macro Traced(label: String) = #externalMacro(module: \"M\", type: \"T\")"),
+                       [.missingDoc])
+        XCTAssertEqual(lint("/// Instruments the type. Needed for capture.\n/// - Parameter label: The trace label.\n@attached(member) public macro Traced(label: String) = #externalMacro(module: \"M\", type: \"T\")"),
+                       [])
+    }
+
+    func testBacktickedNamesAreChecked() {
+        XCTAssertEqual(lint("func `default`() {}"), [.missingDoc])
     }
 }

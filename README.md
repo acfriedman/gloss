@@ -12,7 +12,7 @@ swift run -c release gloss ../haruspec/Sources
 ```
 
 Paths may be files or directories. Directories are walked for `.swift` files, skipping `.build`
-and any `Tests` directory unless `--include-tests` is passed. `--summary` prints only the per-rule
+and any directory whose name ends in `Tests` unless `--include-tests` is passed. `--summary` prints only the per-rule
 counts. Exit status is 1 when anything was reported, so the same command gates CI and hooks.
 
 Each finding is one line in compiler format, so Xcode and GitHub Actions render it unchanged:
@@ -25,7 +25,7 @@ Sources/Spec/Intent.swift:82:1: error: `declares` returns a value but has no `- 
 
 | Code | Fires when |
 |---|---|
-| `missing-doc` | A non-private, non-override function, initializer, subscript, or type has no `///` comment. |
+| `missing-doc` | A non-private, non-override function, initializer, subscript, macro, or type has no `///` comment. Members of a `private` type or extension count as private. |
 | `block-doc` | The comment is `/** */`. |
 | `summary-empty` | The comment opens with a blank `///` or a callout. |
 | `summary-sentences` | The summary has zero or more than two sentences. |
@@ -45,8 +45,10 @@ Sources/Spec/Intent.swift:82:1: error: `declares` returns a value but has no `- 
 | `exempt-documented` | A declaration carries both a marker and a `///` doc. |
 
 Properties and enum cases are not required to carry a doc, but once they do, the summary rules
-apply. Declarations inside function bodies are skipped. Sentence counting ignores backticked
-spans and common abbreviations (`e.g.`, `etc.`).
+apply. Declarations inside function bodies are skipped. Sentence counting ignores code spans
+(matched by backtick run length, so `` `` ```x`` `` `` is one span) and common abbreviations
+(`e.g.`, `etc.`). A misplaced markup block is one `markup-order` finding; its entries still count
+as documentation, so it does not also fan out into `parameter-missing`.
 
 ## Exemptions
 

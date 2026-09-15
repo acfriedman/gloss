@@ -11,10 +11,9 @@ public final class Checker: SyntaxVisitor {
     private let converter: SourceLocationConverter
     private var findings: [Diagnostic] = []
     private var conformanceDepth = 0
+    private var privateDepth = 0
 
-    /// Lints the source text of one file.
-    ///
-    /// Parsing happens here so callers hand over text, not trees.
+    /// Lints the source text of one file. Parsing happens here so callers hand over text, not trees.
     /// - Parameters:
     ///   - source: The file's contents.
     ///   - file: The path reported in diagnostics.
@@ -34,24 +33,41 @@ public final class Checker: SyntaxVisitor {
 
     override public func visit(_ node: ExtensionDeclSyntax) -> SyntaxVisitorContinueKind {
         if node.inheritanceClause != nil { conformanceDepth += 1 }
+        if Self.isPrivate(node.modifiers) { privateDepth += 1 }
         return .visitChildren
     }
 
     override public func visitPost(_ node: ExtensionDeclSyntax) {
         if node.inheritanceClause != nil { conformanceDepth -= 1 }
+        if Self.isPrivate(node.modifiers) { privateDepth -= 1 }
     }
+
+    override public func visitPost(_ node: ClassDeclSyntax) { leaveType(node.modifiers) }
+    override public func visitPost(_ node: StructDeclSyntax) { leaveType(node.modifiers) }
+    override public func visitPost(_ node: EnumDeclSyntax) { leaveType(node.modifiers) }
+    override public func visitPost(_ node: ActorDeclSyntax) { leaveType(node.modifiers) }
+    override public func visitPost(_ node: ProtocolDeclSyntax) { leaveType(node.modifiers) }
 
     // Local declarations inside bodies are not API; skip them wholesale.
     override public func visit(_ node: CodeBlockSyntax) -> SyntaxVisitorContinueKind { .skipChildren }
     override public func visit(_ node: AccessorBlockSyntax) -> SyntaxVisitorContinueKind { .skipChildren }
 
     override public func visit(_ node: FunctionDeclSyntax) -> SyntaxVisitorContinueKind {
-        let name = node.name.text
+        let name = node.name.text.trimmingCharacters(in: CharacterSet(charactersIn: "`"))
         guard name.first?.isLetter == true || name.first == "_" else { return .skipChildren }
         record(node, kind: .function, name: name, at: node.name,
                parameters: node.signature.parameterClause.parameters,
                returnType: node.signature.returnClause?.type,
                throwsErrors: node.signature.effectSpecifiers?.throwsClause != nil,
+               modifiers: node.modifiers)
+        return .skipChildren
+    }
+
+    override public func visit(_ node: MacroDeclSyntax) -> SyntaxVisitorContinueKind {
+        record(node, kind: .function, name: node.name.text, at: node.name,
+               parameters: node.signature.parameterClause.parameters,
+               returnType: node.signature.returnClause?.type,
+               throwsErrors: false,
                modifiers: node.modifiers)
         return .skipChildren
     }
@@ -98,7 +114,17 @@ public final class Checker: SyntaxVisitor {
     private func type(_ node: some DeclSyntaxProtocol, _ nameToken: TokenSyntax, _ modifiers: DeclModifierListSyntax) -> SyntaxVisitorContinueKind {
         record(node, kind: .type, name: nameToken.text, at: nameToken, parameters: nil, returnType: nil,
                throwsErrors: false, modifiers: modifiers)
+        if Self.isPrivate(modifiers) { privateDepth += 1 }
         return .visitChildren
+    }
+
+    // Typealiases have no members, so only the five container kinds balance `privateDepth`.
+    private func leaveType(_ modifiers: DeclModifierListSyntax) {
+        if Self.isPrivate(modifiers) { privateDepth -= 1 }
+    }
+
+    private static func isPrivate(_ modifiers: DeclModifierListSyntax) -> Bool {
+        modifiers.contains { $0.name.text == "private" || $0.name.text == "fileprivate" }
     }
 
     private func record(
@@ -125,7 +151,7 @@ public final class Checker: SyntaxVisitor {
             },
             returnsValue: returnType.map { !Self.isVoid($0) } ?? false,
             throwsErrors: throwsErrors,
-            isPrivate: names.contains("private") || names.contains("fileprivate"),
+            isPrivate: Self.isPrivate(modifiers) || privateDepth > 0,
             isOverride: names.contains("override"),
             file: file,
             line: location.line,

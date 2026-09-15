@@ -3,10 +3,8 @@
 /// Every check is a pure function of (`Declaration`, `DocComment`) so the harness can be pinned by
 /// literal tests and so the CLI adds nothing but file walking.
 public enum Rules {
-    /// Runs every rule against one declaration.
-    ///
-    /// An undocumented declaration yields at most the `missing-doc` finding; the shape rules only
-    /// speak once there is a comment to shape.
+    /// Runs every rule against one declaration. An undocumented declaration yields at most the
+    /// `missing-doc` finding; the shape rules only speak once there is a comment to shape.
     /// - Parameters:
     ///   - declaration: The declaration under review.
     ///   - doc: Its doc comment, or `nil` when it has none.
@@ -49,6 +47,13 @@ public enum Rules {
 
     // MARK: Summary
 
+    /// Checks the summary paragraph: present, one or two sentences, terminated, capitalized, and not
+    /// opening with `This method`. Every finding anchors to the comment's first line.
+    /// - Parameters:
+    ///   - decl: The declaration under review.
+    ///   - doc: Its comment, for the line the findings anchor to.
+    ///   - structure: The parsed comment.
+    /// - Returns: The summary findings; one paragraph can break several rules at once.
     static func summaryRules(_ decl: Declaration, _ doc: DocComment, _ structure: DocStructure) -> [Diagnostic] {
         let line = doc.startLine
         guard !structure.summary.isEmpty else {
@@ -75,6 +80,9 @@ public enum Rules {
         return findings
     }
 
+    /// Detects a summary that opens with `This method`, `This class`, and the like.
+    /// - Parameter text: The summary paragraph.
+    /// - Returns: The two offending words as written, or `nil` when the opener is fine.
     static func forbiddenOpener(_ text: String) -> String? {
         let words = text.split(separator: " ", maxSplits: 2).map { $0.lowercased().trimmingCharacters(in: .punctuationCharacters) }
         guard words.count >= 2, ["this", "these"].contains(words[0]) else { return nil }
@@ -86,6 +94,12 @@ public enum Rules {
 
     // MARK: Markup block
 
+    /// Checks callout placement and spelling: the block must follow the summary, and keywords must be
+    /// capitalized and real.
+    /// - Parameters:
+    ///   - decl: The declaration under review.
+    ///   - structure: The parsed comment.
+    /// - Returns: One finding for a misplaced block and one per misspelled keyword.
     static func markupRules(_ decl: Declaration, _ structure: DocStructure) -> [Diagnostic] {
         var findings: [Diagnostic] = []
         if let split = structure.calloutAfterProse {
@@ -117,6 +131,12 @@ public enum Rules {
 
     // MARK: Parameters
 
+    /// Checks that every parameter has one documented entry, all in one form. A declaration without a
+    /// parameter list yields nothing.
+    /// - Parameters:
+    ///   - decl: The declaration under review.
+    ///   - structure: The parsed comment.
+    /// - Returns: Findings for missing, unknown, empty, and mixed-form entries.
     static func parameterRules(_ decl: Declaration, _ structure: DocStructure) -> [Diagnostic] {
         guard let parameters = decl.parameters else { return [] }
         var findings: [Diagnostic] = []
@@ -156,6 +176,11 @@ public enum Rules {
 
     // MARK: Returns / Throws
 
+    /// Checks that `- Returns:` is present exactly when the callable returns a value, and is not empty.
+    /// - Parameters:
+    ///   - decl: The declaration under review.
+    ///   - structure: The parsed comment.
+    /// - Returns: At most one finding; nothing for a declaration without a parameter list.
     static func returnsRules(_ decl: Declaration, _ structure: DocStructure) -> [Diagnostic] {
         guard decl.parameters != nil else { return [] }
         let returns = structure.callouts.filter { $0.normalizedKeyword == "returns" }
@@ -176,6 +201,11 @@ public enum Rules {
         return []
     }
 
+    /// Checks that `- Throws:` is present exactly when the callable throws, and is not empty.
+    /// - Parameters:
+    ///   - decl: The declaration under review.
+    ///   - structure: The parsed comment.
+    /// - Returns: At most one finding; nothing for a declaration without a parameter list.
     static func throwsRules(_ decl: Declaration, _ structure: DocStructure) -> [Diagnostic] {
         guard decl.parameters != nil else { return [] }
         let throwsEntries = structure.callouts.filter { $0.normalizedKeyword == "throws" }
@@ -198,6 +228,14 @@ public enum Rules {
 
     // MARK: Helpers
 
+    /// Builds a diagnostic in the declaration's file.
+    /// - Parameters:
+    ///   - decl: The declaration, which supplies the file.
+    ///   - line: The line to report.
+    ///   - column: The column to report; 1, the default, for a comment line.
+    ///   - rule: The rule that fired.
+    ///   - message: The fix, quoting the fragment it names.
+    /// - Returns: The diagnostic, ready to render.
     static func diagnostic(_ decl: Declaration, line: Int, column: Int = 1, _ rule: Rule, _ message: String) -> Diagnostic {
         Diagnostic(file: decl.file, line: line, column: column, rule: rule, message: message)
     }
@@ -251,16 +289,52 @@ public enum Sentences {
         return chars.last == "."
     }
 
+    /// Replaces every code span with a single backtick, so its contents cannot end or start a sentence.
+    /// A span opened by a run of N backticks closes only on a run of exactly N, as CommonMark reads it,
+    /// so a double-backtick span may contain a literal backtick.
+    /// - Parameter text: A summary paragraph.
+    /// - Returns: The paragraph with each span collapsed; an unmatched run is kept as literal text.
     static func stripCodeSpans(_ text: String) -> String {
+        let chars = Array(text)
         var out = ""
-        var inCode = false
-        for char in text {
-            if char == "`" { inCode.toggle(); out.append("`"); continue }
-            if !inCode { out.append(char) }
+        var index = 0
+        while index < chars.count {
+            guard chars[index] == "`" else { out.append(chars[index]); index += 1; continue }
+            let run = backtickRun(chars, at: index)
+            var search = index + run
+            var close: Int?
+            while search < chars.count, close == nil {
+                guard chars[search] == "`" else { search += 1; continue }
+                let candidate = backtickRun(chars, at: search)
+                if candidate == run { close = search } else { search += candidate }
+            }
+            if let close {
+                out.append("`")
+                index = close + run
+            } else {
+                out.append(String(repeating: "`", count: run))
+                index += run
+            }
         }
         return out
     }
 
+    /// Counts the consecutive backticks starting at `index`.
+    /// - Parameters:
+    ///   - chars: The paragraph as characters.
+    ///   - index: A position holding a backtick.
+    /// - Returns: The run length, at least one.
+    static func backtickRun(_ chars: [Character], at index: Int) -> Int {
+        var end = index
+        while end < chars.count, chars[end] == "`" { end += 1 }
+        return end - index
+    }
+
+    /// Whether the period at `index` closes an abbreviation such as `e.g.` rather than a sentence.
+    /// - Parameters:
+    ///   - chars: The paragraph, code spans already stripped.
+    ///   - index: The position of the period.
+    /// - Returns: `true` when the letters before the period spell a listed abbreviation.
     static func isAbbreviation(_ chars: [Character], before index: Int) -> Bool {
         var start = index
         while start > 0, chars[start - 1].isLetter || chars[start - 1] == "." { start -= 1 }

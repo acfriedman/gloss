@@ -7,6 +7,10 @@ public struct DocLine: Sendable, Equatable {
     public var text: String
     public var line: Int
 
+    /// Creates a line of comment text tagged with its source line.
+    /// - Parameters:
+    ///   - text: The line with its `///` prefix and one following space removed; deeper indentation is kept.
+    ///   - line: The 1-based source line the text came from.
     public init(text: String, line: Int) {
         self.text = text
         self.line = line
@@ -20,6 +24,10 @@ public struct DocComment: Sendable, Equatable {
     public var lines: [DocLine]
     public var isBlockComment: Bool
 
+    /// Creates a comment from lines already stripped of their `///` prefixes.
+    /// - Parameters:
+    ///   - lines: The comment text in source order; empty for a block comment.
+    ///   - isBlockComment: `true` when the source used `/** */`, which the rules refuse before reading `lines`.
     public init(lines: [DocLine], isBlockComment: Bool = false) {
         self.lines = lines
         self.isBlockComment = isBlockComment
@@ -28,9 +36,8 @@ public struct DocComment: Sendable, Equatable {
     /// The source line the comment starts on, or zero for an empty comment.
     public var startLine: Int { lines.first?.line ?? 0 }
 
-    /// Builds a comment from raw `///` text, one entry per line, for tests and tools without a syntax tree.
-    ///
-    /// Lines are numbered from `startLine` so diagnostics in tests read like real ones.
+    /// Builds a comment from raw `///` text, for tests and tools without a syntax tree. Lines are
+    /// numbered from `startLine` so diagnostics in tests read like real ones.
     /// - Parameters:
     ///   - text: The comment exactly as written, `///` prefixes included.
     ///   - startLine: The source line of the first entry; defaults to 1.
@@ -44,9 +51,8 @@ public struct DocComment: Sendable, Equatable {
         return lines.isEmpty ? nil : DocComment(lines: lines)
     }
 
-    /// Reads the doc comment immediately preceding `node`, honoring the last contiguous run only.
-    ///
-    /// A blank line or an ordinary `//` comment between the run and the declaration ends the run,
+    /// Reads the doc comment immediately preceding `node`, honoring the last contiguous run only. A
+    /// blank line or an ordinary `//` comment between the run and the declaration ends the run,
     /// because Xcode stops attributing the comment to the declaration at that point too.
     /// - Parameters:
     ///   - node: The declaration whose leading trivia holds the comment.
@@ -82,9 +88,8 @@ public struct DocComment: Sendable, Equatable {
         return run.isEmpty ? nil : DocComment(lines: run)
     }
 
-    /// Removes the `///` prefix and at most one following space, preserving deeper indentation.
-    ///
-    /// The one-space rule is what keeps nested `  - name:` entries distinguishable from top-level ones.
+    /// Removes the `///` prefix and at most one following space, preserving deeper indentation. The
+    /// one-space rule is what keeps nested `  - name:` entries distinguishable from top-level ones.
     /// - Parameter raw: One source line, leading whitespace allowed.
     /// - Returns: The comment text, or `nil` when the line is not a `///` line.
     static func strip(_ raw: String) -> String? {

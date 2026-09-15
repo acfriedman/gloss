@@ -4,7 +4,7 @@ import Foundation
 /// Command-line entry: `gloss [--include-tests] [--summary] <path>...`.
 ///
 /// Paths may be files or directories; directories are walked for `.swift` files, skipping `.build`
-/// and, unless `--include-tests` is given, any `Tests` directory.
+/// and, unless `--include-tests` is given, any directory whose name ends in `Tests`.
 let arguments = Array(CommandLine.arguments.dropFirst())
 let includeTests = arguments.contains("--include-tests")
 let summaryOnly = arguments.contains("--summary")
@@ -15,6 +15,10 @@ guard !paths.isEmpty else {
     exit(64)
 }
 
+/// Collects the `.swift` files under a path, or the path itself when it names one file. A path that
+/// does not exist exits with status 66, so a typo cannot pass as a clean run.
+/// - Parameter path: A file or directory, as given on the command line.
+/// - Returns: The files, sorted, so output order is stable across runs; empty for a non-Swift file.
 func swiftFiles(under path: String) -> [String] {
     var isDirectory: ObjCBool = false
     guard FileManager.default.fileExists(atPath: path, isDirectory: &isDirectory) else {
@@ -27,7 +31,7 @@ func swiftFiles(under path: String) -> [String] {
     for case let relative as String in enumerator {
         let components = relative.split(separator: "/")
         if components.contains(".build") || components.contains(".swiftpm") { enumerator.skipDescendants(); continue }
-        if !includeTests, components.contains("Tests") { enumerator.skipDescendants(); continue }
+        if !includeTests, components.contains(where: { $0.hasSuffix("Tests") }) { enumerator.skipDescendants(); continue }
         if relative.hasSuffix(".swift") { files.append((path as NSString).appendingPathComponent(relative)) }
     }
     return files.sorted()

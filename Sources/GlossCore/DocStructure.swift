@@ -36,10 +36,9 @@ public struct DocStructure: Sendable, Equatable {
         "tip", "todo", "version", "mutatingvariant", "nonmutatingvariant", "localizationkey", "tag"
     ]
 
-    /// Splits a comment into summary, callouts, and the point where prose interrupted markup.
-    ///
-    /// A callout line is `- Keyword:` or `- Keyword argument:` at column zero; an indented `- name:`
-    /// beneath `- Parameters:` is an entry of it; anything else is prose.
+    /// Splits a comment into summary, callouts, and the point where prose interrupted markup. A callout
+    /// line is `- Keyword:` or `- Keyword argument:` at column zero, an indented `- name:` beneath
+    /// `- Parameters:` is an entry of it, and anything else is prose.
     /// - Parameter doc: The comment to read.
     /// - Returns: The parsed structure; an empty summary means the comment opened with a blank or a callout.
     public static func parse(_ doc: DocComment) -> DocStructure {
@@ -55,6 +54,7 @@ public struct DocStructure: Sendable, Equatable {
         }
 
         var seenProseAfterSummary = false
+        var inCallout = false
         while index < lines.count {
             let line = lines[index]
             index += 1
@@ -62,9 +62,10 @@ public struct DocStructure: Sendable, Equatable {
             if let parsed = Self.callout(in: line) {
                 if seenProseAfterSummary, calloutAfterProse == nil { calloutAfterProse = parsed }
                 callouts.append(parsed)
+                inCallout = true
                 continue
             }
-            if !callouts.isEmpty, !seenProseAfterSummary {
+            if inCallout {
                 var last = callouts.removeLast()
                 defer { callouts.append(last) }
                 let indented = line.text.first == " " || line.text.first == "\t"
@@ -81,15 +82,14 @@ public struct DocStructure: Sendable, Equatable {
                     continue
                 }
             }
+            inCallout = false
             seenProseAfterSummary = true
         }
         return DocStructure(summary: summary, callouts: callouts, calloutAfterProse: calloutAfterProse)
     }
 
-    /// Reads a top-level `- Keyword:` / `- Keyword argument:` line.
-    ///
-    /// Only known keywords and the `Parameter name:` two-word form qualify, so a prose bullet such as
-    /// `- the first case` stays prose.
+    /// Reads a top-level `- Keyword:` / `- Keyword argument:` line. Only known keywords and the
+    /// `Parameter name:` two-word form qualify, so a prose bullet such as `- the first case` stays prose.
     /// - Parameter line: The line to read, unindented.
     /// - Returns: The callout, or `nil` when the line is not one.
     static func callout(in line: DocLine) -> Callout? {

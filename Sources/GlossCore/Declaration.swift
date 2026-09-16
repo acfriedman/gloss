@@ -41,7 +41,7 @@ public struct Declaration: Sendable, Equatable {
     /// three proxies: a signature every Swift author recognizes, residence in a conformance
     /// extension, or an author's marker naming the reason.
     public enum Exemption: Sendable, Equatable {
-        /// The signature is a well-known protocol requirement (`init(from:)`, `hash(into:)`, …).
+        /// The signature is a well-known protocol requirement, one of ``Declaration/knownRequirements``.
         case knownRequirement
         /// The declaration sits in an `extension T: P { }` block, which houses P's requirements.
         case conformanceExtension
@@ -121,10 +121,9 @@ public struct Declaration: Sendable, Equatable {
         }
     }
 
-    /// The signature as the harness names it: base name plus argument labels, `init(from:)` style.
-    ///
-    /// Argument labels are what distinguish `init(from:)` from `init(rawValue:)`, so this is the key
-    /// the known-requirement list is matched on.
+    /// The signature as the harness names it: the base name followed by the argument labels, each
+    /// with its colon, in parentheses. Labels are what tell two initializers of one type apart, so this
+    /// is the key the known-requirement list is matched on.
     public var signature: String {
         guard let parameters else { return name }
         return name + "(" + parameters.map { ($0.label ?? "_") + ":" }.joined() + ")"

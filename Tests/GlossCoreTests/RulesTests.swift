@@ -15,7 +15,7 @@ final class RulesTests: XCTestCase {
         ///   - probe: The probe to record; must be unique per run.
         ///   - budget: How many more probes may follow; zero ends the sweep.
         /// - Returns: The schedule position the probe was recorded at.
-        /// - Throws: `SweepError.exhausted` when `budget` is zero.
+        /// - Throws: ``SweepError/exhausted`` when `budget` is zero.
         func record(_ probe: Probe, budget: Int) throws -> Int { 0 }
         """
         XCTAssertEqual(lint(source), [])
@@ -47,7 +47,7 @@ final class RulesTests: XCTestCase {
         XCTAssertEqual(lint("/// One. Two. Three.\nfunc f() {}"), [.summarySentences])
         XCTAssertEqual(lint("/// records it.\nfunc f() {}"), [.summaryCapital])
         XCTAssertEqual(lint("/// This method records it.\nfunc f() {}"), [.summaryOpener])
-        XCTAssertEqual(lint("/// Handles e.g. `Foo.bar()` calls. Needed for parity.\nfunc f() {}"), [])
+        XCTAssertEqual(lint("/// Handles e.g. ``Foo/bar()`` calls. Needed for parity.\nfunc f() {}"), [])
         XCTAssertEqual(lint("///\n/// Records it.\nfunc f() {}"), [.summaryEmpty])
     }
 
@@ -174,5 +174,17 @@ extension RulesTests {
         let extra = "/// A pair.\nstruct S {\n    var a: Int\n    init(a: Int) { self.a = a; validate() }\n}"
         XCTAssertEqual(lint(extra), [.missingDoc])
         XCTAssertEqual(lint("/// A pair.\nstruct S {\n    init() {}\n}"), [.missingDoc])
+    }
+}
+
+extension RulesTests {
+    func testSymbolLinks() {
+        XCTAssertEqual(lint("/// Pairs with `advance(_:)` later.\nfunc f() {}"), [.symbolLink])
+        XCTAssertEqual(lint("/// Reads `TraceContext.current` first.\nfunc f() {}"), [.symbolLink])
+        XCTAssertEqual(lint("/// Reads `Spec.verify(replaying:)` first.\nfunc f() {}"), [.symbolLink])
+        XCTAssertEqual(lint("/// Pairs with ``advance(_:)`` later.\nfunc f() {}"), [])
+        XCTAssertEqual(lint("/// Reads ``TraceContext/current`` first.\nfunc f() {}"), [])
+        XCTAssertEqual(lint("/// Uses `nil`, `.strict`, `Date()`, `NotificationCenter.default`, and `\"a.b\"`.\nfunc f() {}"), [])
+        XCTAssertEqual(SymbolReference.linkForm("Spec.verify(replaying:)"), "Spec/verify(replaying:)")
     }
 }

@@ -11,6 +11,7 @@ public enum Rule: String, CaseIterable, Sendable {
     case summaryOpener = "summary-opener"
     case markupOrder = "markup-order"
     case markupSpacing = "markup-spacing"
+    case symbolLink = "symbol-link"
     case markupCase = "markup-case"
     case markupUnknown = "markup-unknown"
     case parameterMissing = "parameter-missing"

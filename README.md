@@ -34,6 +34,7 @@ Sources/Spec/Intent.swift:82:1: error: `declares` returns a value but has no `- 
 | `summary-opener` | The summary opens with `This method…`, `This class…`, and the like. |
 | `markup-order` | A callout appears after prose; the markup block must follow the summary directly. |
 | `markup-spacing` | The first callout sits on the line right after the summary; one blank `///` line separates them. |
+| `symbol-link` | A single-backticked `name(label:)` or `Type.member` names a symbol; DocC links only ``` ``name(label:)`` ``` / ``` ``Type/member`` ```. Paths under Foundation-style types (`SymbolReference.externalPrefixes`) are left alone. |
 | `markup-case` | A callout keyword is not capitalized (`- returns:`). |
 | `markup-unknown` | A near-miss keyword (`- Return:`, `- Param:`). |
 | `parameter-missing` | A parameter has no `- Parameter x:` or nested `  - x:` entry. |

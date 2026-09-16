@@ -40,6 +40,7 @@ public enum Rules {
         let structure = DocStructure.parse(doc)
         var findings: [Diagnostic] = []
         findings += summaryRules(declaration, doc, structure)
+        findings += symbolLinkRules(declaration, doc)
         findings += markupRules(declaration, structure)
         if declaration.exemption != .memberwiseInit {
             findings += parameterRules(declaration, structure)
@@ -96,6 +97,27 @@ public enum Rules {
                                   "initializer", "init", "initialiser", "actor", "value", "variable", "field", "subscript", "case"]
         guard nouns.contains(words[1]) else { return nil }
         return text.split(separator: " ", maxSplits: 2).prefix(2).joined(separator: " ")
+    }
+
+    // MARK: Symbol links
+
+    /// Checks that a span naming one of the module's own symbols is a DocC link, not plain code.
+    /// Only the two shapes a reader always means as a reference are checked, a call with its argument
+    /// labels and a type path ending in a member, so literals and prose code stay untouched.
+    ///
+    /// - Parameters:
+    ///   - decl: The declaration under review.
+    ///   - doc: Its comment; every line is scanned, notes included.
+    /// - Returns: One finding per single-backticked reference, naming the link form to write.
+    static func symbolLinkRules(_ decl: Declaration, _ doc: DocComment) -> [Diagnostic] {
+        var findings: [Diagnostic] = []
+        for line in doc.lines {
+            for span in SymbolReference.singleBacktickSpans(in: line.text) where SymbolReference.isReference(span) {
+                findings.append(diagnostic(decl, line: line.line, .symbolLink,
+                                           "`\(span)` names a symbol; write ``\(SymbolReference.linkForm(span))`` so DocC links it. Single backticks are for literals, keywords, and other modules' symbols."))
+            }
+        }
+        return findings
     }
 
     // MARK: Markup block
@@ -267,9 +289,73 @@ extension Declaration {
     }
 }
 
+/// Recognition of the code spans that DocC would only link if written with double backticks.
+///
+/// A reference is recognized by shape alone: a call-style name with argument labels, or a
+/// capitalized type path ending in a lowercase member. A bare type name is left alone, since the
+/// same spelling names Foundation's types as often as the module's own.
+public enum SymbolReference {
+    /// Types whose members no module-local DocC link can resolve, so a dotted path under them is
+    /// plain code. Extend it when a new framework's symbols start appearing in docs.
+    public static let externalPrefixes: Set<String> = [
+        "Swift", "Foundation", "Dispatch", "Combine", "XCTest", "Testing", "CoreData", "SwiftUI", "UIKit",
+        "AppKit", "NotificationCenter", "DispatchQueue", "DispatchGroup", "DispatchTime", "Thread",
+        "ProcessInfo", "FileManager", "URLSession", "URLProtocol", "URLRequest", "URL", "JSONEncoder",
+        "JSONDecoder", "Date", "Data", "Task", "MainActor", "NSObject", "Bundle", "RunLoop", "Timer",
+        "OperationQueue", "UserDefaults", "NSLock", "NSManagedObjectContext", "NSPersistentContainer",
+        "String", "Array", "Dictionary", "Set", "Optional", "Result", "Int", "Double", "Bool", "Character"
+    ]
+
+    /// Whether a span is one of the two reference shapes and not under an external type.
+    ///
+    /// - Parameter span: The text between single backticks.
+    /// - Returns: `true` for a call with argument labels, with or without a type prefix, and for a
+    ///   capitalized type path ending in a lowercase member; `false` otherwise.
+    public static func isReference(_ span: String) -> Bool {
+        let isCall = span.wholeMatch(of: /(?:[A-Z][A-Za-z0-9_]*\.)*[a-z_][A-Za-z0-9_]*\([A-Za-z0-9_:]*\)/) != nil
+        let isMember = span.wholeMatch(of: /[A-Z][A-Za-z0-9_]*(?:\.[A-Z][A-Za-z0-9_]*)*\.[a-z_][A-Za-z0-9_]*/) != nil
+        guard isCall || isMember else { return false }
+        let head = span.split(separator: ".").first.map(String.init) ?? span
+        return !externalPrefixes.contains(head)
+    }
+
+    /// The DocC spelling of a reference: dots between path segments become slashes.
+    ///
+    /// - Parameter span: A span `isReference` accepted.
+    /// - Returns: The path to place between double backticks.
+    public static func linkForm(_ span: String) -> String {
+        span.replacingOccurrences(of: ".", with: "/")
+    }
+
+    /// Extracts the contents of every single-backtick span, ignoring spans opened by longer runs.
+    ///
+    /// - Parameter text: One doc line.
+    /// - Returns: The span bodies in order, without their backticks.
+    static func singleBacktickSpans(in text: String) -> [String] {
+        let chars = Array(text)
+        var spans: [String] = []
+        var index = 0
+        while index < chars.count {
+            guard chars[index] == "`" else { index += 1; continue }
+            let run = Sentences.backtickRun(chars, at: index)
+            var search = index + run
+            var close: Int?
+            while search < chars.count, close == nil {
+                guard chars[search] == "`" else { search += 1; continue }
+                let candidate = Sentences.backtickRun(chars, at: search)
+                if candidate == run { close = search } else { search += candidate }
+            }
+            guard let close else { index += run; continue }
+            if run == 1 { spans.append(String(chars[(index + 1)..<close])) }
+            index = close + run
+        }
+        return spans
+    }
+}
+
 /// Sentence counting that ignores code spans and common abbreviations.
 ///
-/// Counting naively on `.` would split `e.g.` and `Foo.bar()`; the summary rule is only fair if it
+/// Counting naively on `.` would split `e.g.` and a dotted call; the summary rule is only fair if it
 /// counts the way a reader does.
 public enum Sentences {
     static let abbreviations: Set<String> = ["e.g", "i.e", "etc", "vs", "cf", "approx", "no", "fig"]

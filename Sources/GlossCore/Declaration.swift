@@ -15,6 +15,7 @@ public struct Declaration: Sendable, Equatable {
         public var name: String
 
         /// Creates a parameter from its two names.
+        ///
         /// - Parameters:
         ///   - label: The external argument label, or `nil` for `_`.
         ///   - name: The internal name; the same as `label` when the signature gives only one.
@@ -26,6 +27,7 @@ public struct Declaration: Sendable, Equatable {
         /// Whether a `- Parameter x:` entry naming `x` refers to this parameter. DocC matches the internal
         /// name and Xcode tolerates the external label, so both are accepted and a label-only change
         /// never forces a doc rewrite.
+        ///
         /// - Parameter written: The name as it appears in the doc comment.
         /// - Returns: `true` when `written` is the internal name or the external label.
         public func matches(_ written: String) -> Bool {
@@ -63,6 +65,7 @@ public struct Declaration: Sendable, Equatable {
     public var column: Int
 
     /// Creates a declaration by hand, for tests and tools that have no syntax tree.
+    ///
     /// - Parameters:
     ///   - kind: The syntactic category; decides which rules apply.
     ///   - name: The base name as diagnostics report it (`init` for initializers, `subscript` for subscripts).

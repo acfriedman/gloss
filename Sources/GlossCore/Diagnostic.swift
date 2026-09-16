@@ -10,6 +10,7 @@ public enum Rule: String, CaseIterable, Sendable {
     case summaryCapital = "summary-capital"
     case summaryOpener = "summary-opener"
     case markupOrder = "markup-order"
+    case markupSpacing = "markup-spacing"
     case markupCase = "markup-case"
     case markupUnknown = "markup-unknown"
     case parameterMissing = "parameter-missing"
@@ -37,6 +38,7 @@ public struct Diagnostic: Sendable, Equatable {
     public var message: String
 
     /// Creates a diagnostic at a source position.
+    ///
     /// - Parameters:
     ///   - file: The path as given on the command line.
     ///   - line: The 1-based line: the offending comment line for a doc rule, the declaration for `missing-doc`.
@@ -53,6 +55,7 @@ public struct Diagnostic: Sendable, Equatable {
 
     /// Renders the diagnostic on one line in compiler format. The bracketed rule code at the end keeps
     /// the message human-first while staying greppable.
+    ///
     /// - Returns: `file:line:column: error: message [rule]`.
     public var rendered: String {
         "\(file):\(line):\(column): error: \(message) [\(rule.rawValue)]"

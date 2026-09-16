@@ -39,6 +39,7 @@ public struct DocStructure: Sendable, Equatable {
     /// Splits a comment into summary, callouts, and the point where prose interrupted markup. A callout
     /// line is `- Keyword:` or `- Keyword argument:` at column zero, an indented `- name:` beneath
     /// `- Parameters:` is an entry of it, and anything else is prose.
+    ///
     /// - Parameter doc: The comment to read.
     /// - Returns: The parsed structure; an empty summary means the comment opened with a blank or a callout.
     public static func parse(_ doc: DocComment) -> DocStructure {
@@ -90,6 +91,7 @@ public struct DocStructure: Sendable, Equatable {
 
     /// Reads a top-level `- Keyword:` / `- Keyword argument:` line. Only known keywords and the
     /// `Parameter name:` two-word form qualify, so a prose bullet such as `- the first case` stays prose.
+    ///
     /// - Parameter line: The line to read, unindented.
     /// - Returns: The callout, or `nil` when the line is not one.
     static func callout(in line: DocLine) -> Callout? {
@@ -109,6 +111,7 @@ public struct DocStructure: Sendable, Equatable {
     }
 
     /// Reads an indented `- name: text` entry beneath `- Parameters:`.
+    ///
     /// - Parameter line: The line to read; leading indentation is ignored.
     /// - Returns: The entry, or `nil` when the line is not shaped like one.
     static func entry(in line: DocLine) -> Callout.Entry? {

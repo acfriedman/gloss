@@ -6,6 +6,7 @@ public enum Rules {
     /// Runs every rule against one declaration. An undocumented declaration yields at most the
     /// `missing-doc` finding; the shape rules only speak once there is a comment to shape, and a
     /// memberwise initializer gets only the summary and markup rules, never the parameter ones.
+    ///
     /// - Parameters:
     ///   - declaration: The declaration under review.
     ///   - doc: Its doc comment, or `nil` when it has none.
@@ -52,6 +53,7 @@ public enum Rules {
 
     /// Checks the summary paragraph: present, one or two sentences, terminated, capitalized, and not
     /// opening with `This method`. Every finding anchors to the comment's first line.
+    ///
     /// - Parameters:
     ///   - decl: The declaration under review.
     ///   - doc: Its comment, for the line the findings anchor to.
@@ -84,6 +86,7 @@ public enum Rules {
     }
 
     /// Detects a summary that opens with `This method`, `This class`, and the like.
+    ///
     /// - Parameter text: The summary paragraph.
     /// - Returns: The two offending words as written, or `nil` when the opener is fine.
     static func forbiddenOpener(_ text: String) -> String? {
@@ -97,14 +100,20 @@ public enum Rules {
 
     // MARK: Markup block
 
-    /// Checks callout placement and spelling: the block must follow the summary, and keywords must be
-    /// capitalized and real.
+    /// Checks callout placement and spelling: the block must follow the summary after one blank line,
+    /// and keywords must be capitalized and real.
+    ///
     /// - Parameters:
     ///   - decl: The declaration under review.
     ///   - structure: The parsed comment.
     /// - Returns: One finding for a misplaced block and one per misspelled keyword.
     static func markupRules(_ decl: Declaration, _ structure: DocStructure) -> [Diagnostic] {
         var findings: [Diagnostic] = []
+        if let first = structure.callouts.first, let summaryEnd = structure.summary.last,
+           first.line == summaryEnd.line + 1 {
+            findings.append(diagnostic(decl, line: first.line, .markupSpacing,
+                                       "Leave one blank `///` line between the summary and `- \(first.keyword):`."))
+        }
         if let split = structure.calloutAfterProse {
             findings.append(diagnostic(decl, line: split.line, .markupOrder,
                                        "`- \(split.keyword):` appears after prose. The markup block (`- Parameters:`/`- Returns:`/`- Throws:`…) comes right after the summary; notes go below it."))
@@ -136,6 +145,7 @@ public enum Rules {
 
     /// Checks that every parameter has one documented entry, all in one form. A declaration without a
     /// parameter list yields nothing.
+    ///
     /// - Parameters:
     ///   - decl: The declaration under review.
     ///   - structure: The parsed comment.
@@ -180,6 +190,7 @@ public enum Rules {
     // MARK: Returns / Throws
 
     /// Checks that `- Returns:` is present exactly when the callable returns a value, and is not empty.
+    ///
     /// - Parameters:
     ///   - decl: The declaration under review.
     ///   - structure: The parsed comment.
@@ -205,6 +216,7 @@ public enum Rules {
     }
 
     /// Checks that `- Throws:` is present exactly when the callable throws, and is not empty.
+    ///
     /// - Parameters:
     ///   - decl: The declaration under review.
     ///   - structure: The parsed comment.
@@ -232,6 +244,7 @@ public enum Rules {
     // MARK: Helpers
 
     /// Builds a diagnostic in the declaration's file.
+    ///
     /// - Parameters:
     ///   - decl: The declaration, which supplies the file.
     ///   - line: The line to report.
@@ -246,6 +259,7 @@ public enum Rules {
 
 extension Declaration {
     /// The line a missing markup entry should be reported on: after the last callout, else the summary.
+    ///
     /// - Parameter structure: The parsed comment.
     /// - Returns: A line inside the comment, never the declaration itself.
     func docLineForParameters(_ structure: DocStructure) -> Int {
@@ -261,6 +275,7 @@ public enum Sentences {
     static let abbreviations: Set<String> = ["e.g", "i.e", "etc", "vs", "cf", "approx", "no", "fig"]
 
     /// Counts sentences in `text`, treating `.`, `!`, and `?` followed by whitespace or the end as terminators.
+    ///
     /// - Parameter text: A summary paragraph; backticked spans are ignored wholesale.
     /// - Returns: The number of terminated sentences, which is zero for a bare fragment.
     public static func count(in text: String) -> Int {
@@ -283,6 +298,7 @@ public enum Sentences {
     }
 
     /// Whether `text` ends with a period, after dropping a trailing code span or closing quote.
+    ///
     /// - Parameter text: A summary paragraph.
     /// - Returns: `true` when the last visible character is `.`.
     public static func endsWithPeriod(_ text: String) -> Bool {
@@ -295,6 +311,7 @@ public enum Sentences {
     /// Replaces every code span with a single backtick, so its contents cannot end or start a sentence.
     /// A span opened by a run of N backticks closes only on a run of exactly N, as CommonMark reads it,
     /// so a double-backtick span may contain a literal backtick.
+    ///
     /// - Parameter text: A summary paragraph.
     /// - Returns: The paragraph with each span collapsed; an unmatched run is kept as literal text.
     static func stripCodeSpans(_ text: String) -> String {
@@ -323,6 +340,7 @@ public enum Sentences {
     }
 
     /// Counts the consecutive backticks starting at `index`.
+    ///
     /// - Parameters:
     ///   - chars: The paragraph as characters.
     ///   - index: A position holding a backtick.
@@ -334,6 +352,7 @@ public enum Sentences {
     }
 
     /// Whether the period at `index` closes an abbreviation such as `e.g.` rather than a sentence.
+    ///
     /// - Parameters:
     ///   - chars: The paragraph, code spans already stripped.
     ///   - index: The position of the period.

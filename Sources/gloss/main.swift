@@ -17,6 +17,7 @@ guard !paths.isEmpty else {
 
 /// Collects the `.swift` files under a path, or the path itself when it names one file. A path that
 /// does not exist exits with status 66, so a typo cannot pass as a clean run.
+///
 /// - Parameter path: A file or directory, as given on the command line.
 /// - Returns: The files, sorted, so output order is stable across runs; empty for a non-Swift file.
 func swiftFiles(under path: String) -> [String] {

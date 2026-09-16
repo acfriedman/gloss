@@ -14,6 +14,7 @@ public final class Checker: SyntaxVisitor {
     private var privateDepth = 0
 
     /// Lints the source text of one file. Parsing happens here so callers hand over text, not trees.
+    ///
     /// - Parameters:
     ///   - source: The file's contents.
     ///   - file: The path reported in diagnostics.
@@ -85,6 +86,7 @@ public final class Checker: SyntaxVisitor {
     /// Whether an initializer's body is nothing but `self.x = x` for its own parameters, the shape the
     /// compiler would have synthesized. Any other statement, default, or expression makes it a real
     /// initializer with a contract of its own.
+    ///
     /// - Parameter node: The initializer.
     /// - Returns: `true` for a non-empty body of bare parameter-to-property assignments.
     static func isMemberwise(_ node: InitializerDeclSyntax) -> Bool {
@@ -100,6 +102,7 @@ public final class Checker: SyntaxVisitor {
 
     /// Reads `lhs = rhs` from a statement, whether the parser left it as an unfolded sequence (its
     /// default) or an operator table already folded it.
+    ///
     /// - Parameter item: The statement.
     /// - Returns: The member being assigned and the bare name assigned to it, or `nil` for any other shape.
     private static func assignment(_ item: CodeBlockItemSyntax.Item) -> (MemberAccessExprSyntax, DeclReferenceExprSyntax)? {
@@ -208,6 +211,7 @@ public final class Checker: SyntaxVisitor {
     }
 
     /// Reads a `// gloss:exempt <reason>` line from the trivia directly above a declaration.
+    ///
     /// - Parameter trivia: The declaration's leading trivia.
     /// - Returns: The reason text (possibly empty, which the rules refuse), or `nil` with no marker.
     static func exemptMarker(in trivia: Trivia) -> String? {

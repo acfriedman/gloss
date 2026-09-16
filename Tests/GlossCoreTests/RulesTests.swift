@@ -10,6 +10,7 @@ final class RulesTests: XCTestCase {
     func testConformingFunctionIsClean() {
         let source = """
         /// Records the probe and advances the schedule. Recording first keeps replay deterministic.
+        ///
         /// - Parameters:
         ///   - probe: The probe to record; must be unique per run.
         ///   - budget: How many more probes may follow; zero ends the sweep.
@@ -23,6 +24,7 @@ final class RulesTests: XCTestCase {
     func testSingleParameterFormIsAccepted() {
         let source = """
         /// Returns the canonical name.
+        ///
         /// - Parameter raw: The name as typed, any case.
         /// - Returns: The lowercased name.
         func canonical(raw: String) -> String { raw }
@@ -49,9 +51,14 @@ final class RulesTests: XCTestCase {
         XCTAssertEqual(lint("///\n/// Records it.\nfunc f() {}"), [.summaryEmpty])
     }
 
+    func testMarkupSpacing() {
+        XCTAssertEqual(lint("/// Records it.\n/// - Returns: It.\nfunc f() -> Int { 0 }"), [.markupSpacing])
+        XCTAssertEqual(lint("/// Records it.\n///\n/// - Returns: It.\nfunc f() -> Int { 0 }"), [])
+    }
+
     func testMarkupRules() {
-        XCTAssertEqual(lint("/// Records it.\n/// - returns: Nothing.\nfunc f() -> Int { 0 }"), [.markupCase])
-        XCTAssertEqual(lint("/// Records it.\n/// - Return: It.\nfunc f() -> Int { 0 }"), [.markupUnknown, .returnsMissing])
+        XCTAssertEqual(lint("/// Records it.\n///\n/// - returns: Nothing.\nfunc f() -> Int { 0 }"), [.markupCase])
+        XCTAssertEqual(lint("/// Records it.\n///\n/// - Return: It.\nfunc f() -> Int { 0 }"), [.markupUnknown, .returnsMissing])
         let split = """
         /// Records it.
         ///
@@ -64,11 +71,12 @@ final class RulesTests: XCTestCase {
 
     func testParameterCoverage() {
         XCTAssertEqual(lint("/// Records it.\nfunc f(a: Int, at b: Int) {}"), [.parameterMissing, .parameterMissing])
-        XCTAssertEqual(lint("/// Records it.\n/// - Parameter a: A.\n/// - Parameter c: C.\nfunc f(a: Int) {}"), [.parameterUnknown])
-        XCTAssertEqual(lint("/// Records it.\n/// - Parameter a:\nfunc f(a: Int) {}"), [.parameterEmpty])
-        XCTAssertEqual(lint("/// Records it.\n/// - Parameter at: The index.\nfunc f(at index: Int) {}"), [])
+        XCTAssertEqual(lint("/// Records it.\n///\n/// - Parameter a: A.\n///\n/// - Parameter c: C.\nfunc f(a: Int) {}"), [.parameterUnknown])
+        XCTAssertEqual(lint("/// Records it.\n///\n/// - Parameter a:\nfunc f(a: Int) {}"), [.parameterEmpty])
+        XCTAssertEqual(lint("/// Records it.\n///\n/// - Parameter at: The index.\nfunc f(at index: Int) {}"), [])
         let mixed = """
         /// Records it.
+        ///
         /// - Parameters:
         ///   - a: A.
         /// - Parameter b: B.
@@ -79,9 +87,9 @@ final class RulesTests: XCTestCase {
 
     func testReturnsAndThrows() {
         XCTAssertEqual(lint("/// Records it.\nfunc f() -> Int { 0 }"), [.returnsMissing])
-        XCTAssertEqual(lint("/// Records it.\n/// - Returns: Nothing.\nfunc f() {}"), [.returnsUnexpected])
+        XCTAssertEqual(lint("/// Records it.\n///\n/// - Returns: Nothing.\nfunc f() {}"), [.returnsUnexpected])
         XCTAssertEqual(lint("/// Records it.\nfunc f() throws {}"), [.throwsMissing])
-        XCTAssertEqual(lint("/// Records it.\n/// - Throws: Never.\nfunc f() {}"), [.throwsUnexpected])
+        XCTAssertEqual(lint("/// Records it.\n///\n/// - Throws: Never.\nfunc f() {}"), [.throwsUnexpected])
         XCTAssertEqual(lint("/// Records it.\nfunc f() -> Void {}"), [])
     }
 
@@ -146,7 +154,7 @@ extension RulesTests {
     func testMacroDeclarationsAreCallables() {
         XCTAssertEqual(lint("@attached(member) public macro Traced(label: String) = #externalMacro(module: \"M\", type: \"T\")"),
                        [.missingDoc])
-        XCTAssertEqual(lint("/// Instruments the type. Needed for capture.\n/// - Parameter label: The trace label.\n@attached(member) public macro Traced(label: String) = #externalMacro(module: \"M\", type: \"T\")"),
+        XCTAssertEqual(lint("/// Instruments the type. Needed for capture.\n///\n/// - Parameter label: The trace label.\n@attached(member) public macro Traced(label: String) = #externalMacro(module: \"M\", type: \"T\")"),
                        [])
     }
 

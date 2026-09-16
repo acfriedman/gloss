@@ -2,8 +2,8 @@
 
 A doc-comment harness for Swift. It parses each file with swift-syntax and reports, as errors, every
 declaration whose `///` comment does not match the org's shape: a one-or-two-sentence summary
-(what, then why), then a markup block that explains every parameter, the return value, and each
-thrown error, then notes. The shape itself is specified in `.claude/skills/doc-comments/SKILL.md`.
+(what, then why), a blank line, then a markup block that explains every parameter, the return
+value, and each thrown error, then notes. The shape itself is specified in `.claude/skills/doc-comments/SKILL.md`.
 
 ## Usage
 
@@ -33,6 +33,7 @@ Sources/Spec/Intent.swift:82:1: error: `declares` returns a value but has no `- 
 | `summary-capital` | The summary starts with a lowercase letter. |
 | `summary-opener` | The summary opens with `This method…`, `This class…`, and the like. |
 | `markup-order` | A callout appears after prose; the markup block must follow the summary directly. |
+| `markup-spacing` | The first callout sits on the line right after the summary; one blank `///` line separates them. |
 | `markup-case` | A callout keyword is not capitalized (`- returns:`). |
 | `markup-unknown` | A near-miss keyword (`- Return:`, `- Param:`). |
 | `parameter-missing` | A parameter has no `- Parameter x:` or nested `  - x:` entry. |

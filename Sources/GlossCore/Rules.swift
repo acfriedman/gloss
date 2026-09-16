@@ -306,6 +306,9 @@ public enum SymbolReference {
         "String", "Array", "Dictionary", "Set", "Optional", "Result", "Int", "Double", "Bool", "Character"
     ]
 
+    /// Extensions that make a dotted span a file name rather than a type path.
+    public static let fileExtensions: Set<String> = ["swift", "json", "md", "yml", "yaml", "gz", "txt", "plist", "html", "xcodeproj", "h", "m"]
+
     /// Whether a span is one of the two reference shapes and not under an external type.
     ///
     /// - Parameter span: The text between single backticks.
@@ -315,8 +318,9 @@ public enum SymbolReference {
         let isCall = span.wholeMatch(of: /(?:[A-Z][A-Za-z0-9_]*\.)*[a-z_][A-Za-z0-9_]*\([A-Za-z0-9_:]*\)/) != nil
         let isMember = span.wholeMatch(of: /[A-Z][A-Za-z0-9_]*(?:\.[A-Z][A-Za-z0-9_]*)*\.[a-z_][A-Za-z0-9_]*/) != nil
         guard isCall || isMember else { return false }
-        let head = span.split(separator: ".").first.map(String.init) ?? span
-        return !externalPrefixes.contains(head)
+        let segments = span.split(separator: ".").map(String.init)
+        if let last = segments.last, fileExtensions.contains(last) { return false }
+        return !externalPrefixes.contains(segments[0])
     }
 
     /// The DocC spelling of a reference: dots between path segments become slashes.

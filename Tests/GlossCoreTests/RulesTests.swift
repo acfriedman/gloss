@@ -186,5 +186,6 @@ extension RulesTests {
         XCTAssertEqual(lint("/// Reads ``TraceContext/current`` first.\nfunc f() {}"), [])
         XCTAssertEqual(lint("/// Uses `nil`, `.strict`, `Date()`, `NotificationCenter.default`, and `\"a.b\"`.\nfunc f() {}"), [])
         XCTAssertEqual(SymbolReference.linkForm("Spec.verify(replaying:)"), "Spec/verify(replaying:)")
+        XCTAssertEqual(lint("/// See `DiffSpawnEdges.swift` and `plan.json.gz`.\nfunc f() {}"), [])
     }
 }

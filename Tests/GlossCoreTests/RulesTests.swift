@@ -9,14 +9,14 @@ final class RulesTests: XCTestCase {
 
     func testConformingFunctionIsClean() {
         let source = """
-        /// Records the probe and advances the schedule. Recording first keeps replay deterministic.
+        /// Stores the item and advances the cursor. Storing first keeps retries idempotent.
         ///
         /// - Parameters:
-        ///   - probe: The probe to record; must be unique per run.
-        ///   - budget: How many more probes may follow; zero ends the sweep.
-        /// - Returns: The schedule position the probe was recorded at.
-        /// - Throws: ``SweepError/exhausted`` when `budget` is zero.
-        func record(_ probe: Probe, budget: Int) throws -> Int { 0 }
+        ///   - item: The item to store; must be unique per batch.
+        ///   - budget: How many more items may follow; zero ends the batch.
+        /// - Returns: The cursor position the item was stored at.
+        /// - Throws: ``QueueError/exhausted`` when `budget` is zero.
+        func store(_ item: Item, budget: Int) throws -> Int { 0 }
         """
         XCTAssertEqual(lint(source), [])
     }
@@ -43,7 +43,7 @@ final class RulesTests: XCTestCase {
     }
 
     func testSummaryShape() {
-        XCTAssertEqual(lint("/// Records the probe\nfunc f() {}"), [.summarySentences, .summaryTerminator])
+        XCTAssertEqual(lint("/// Stores the item\nfunc f() {}"), [.summarySentences, .summaryTerminator])
         XCTAssertEqual(lint("/// One. Two. Three.\nfunc f() {}"), [.summarySentences])
         XCTAssertEqual(lint("/// records it.\nfunc f() {}"), [.summaryCapital])
         XCTAssertEqual(lint("/// This method records it.\nfunc f() {}"), [.summaryOpener])
@@ -95,8 +95,8 @@ final class RulesTests: XCTestCase {
 
     func testTypesAndPropertiesOnlyGetSummaryRules() {
         XCTAssertEqual(lint("struct S {}"), [.missingDoc])
-        XCTAssertEqual(lint("/// A bag of probes.\nstruct S { var count: Int }"), [])
-        XCTAssertEqual(lint("/// A bag of probes.\nstruct S {\n    /// how many\n    var count: Int\n}"), [.summaryCapital, .summarySentences, .summaryTerminator])
+        XCTAssertEqual(lint("/// A bag of items.\nstruct S { var count: Int }"), [])
+        XCTAssertEqual(lint("/// A bag of items.\nstruct S {\n    /// how many\n    var count: Int\n}"), [.summaryCapital, .summarySentences, .summaryTerminator])
     }
 
     func testKnownRequirementsAreExempt() {
@@ -180,12 +180,12 @@ extension RulesTests {
 extension RulesTests {
     func testSymbolLinks() {
         XCTAssertEqual(lint("/// Pairs with `advance(_:)` later.\nfunc f() {}"), [.symbolLink])
-        XCTAssertEqual(lint("/// Reads `TraceContext.current` first.\nfunc f() {}"), [.symbolLink])
-        XCTAssertEqual(lint("/// Reads `Spec.verify(replaying:)` first.\nfunc f() {}"), [.symbolLink])
+        XCTAssertEqual(lint("/// Reads `Session.current` first.\nfunc f() {}"), [.symbolLink])
+        XCTAssertEqual(lint("/// Reads `Cache.load(from:)` first.\nfunc f() {}"), [.symbolLink])
         XCTAssertEqual(lint("/// Pairs with ``advance(_:)`` later.\nfunc f() {}"), [])
-        XCTAssertEqual(lint("/// Reads ``TraceContext/current`` first.\nfunc f() {}"), [])
+        XCTAssertEqual(lint("/// Reads ``Session/current`` first.\nfunc f() {}"), [])
         XCTAssertEqual(lint("/// Uses `nil`, `.strict`, `Date()`, `NotificationCenter.default`, and `\"a.b\"`.\nfunc f() {}"), [])
-        XCTAssertEqual(SymbolReference.linkForm("Spec.verify(replaying:)"), "Spec/verify(replaying:)")
-        XCTAssertEqual(lint("/// See `DiffSpawnEdges.swift` and `plan.json.gz`.\nfunc f() {}"), [])
+        XCTAssertEqual(SymbolReference.linkForm("Cache.load(from:)"), "Cache/load(from:)")
+        XCTAssertEqual(lint("/// See `OrderStore.swift` and `plan.json.gz`.\nfunc f() {}"), [])
     }
 }

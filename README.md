@@ -1,14 +1,22 @@
 # gloss
 
 A doc-comment harness for Swift. It parses each file with swift-syntax and reports, as errors, every
-declaration whose `///` comment does not match the org's shape: a one-or-two-sentence summary
+declaration whose `///` comment does not match one consistent shape: a one-or-two-sentence summary
 (what, then why), a blank line, then a markup block that explains every parameter, the return
-value, and each thrown error, then notes. The shape itself is specified in `.claude/skills/doc-comments/SKILL.md`.
+value, and each thrown error, then notes. The rules below define that shape.
+
+## Installation
+
+Add gloss as a SwiftPM dependency, or clone it and build the executable:
+
+```bash
+swift build -c release
+```
 
 ## Usage
 
 ```bash
-swift run -c release gloss ../haruspec/Sources
+swift run -c release gloss path/to/YourPackage/Sources
 ```
 
 Paths may be files or directories. Directories are walked for `.swift` files, skipping `.build`
@@ -18,7 +26,7 @@ counts. Exit status is 1 when anything was reported, so the same command gates C
 Each finding is one line in compiler format, so Xcode and GitHub Actions render it unchanged:
 
 ```
-Sources/Spec/Intent.swift:82:1: error: `declares` returns a value but has no `- Returns:` entry; ... [returns-missing]
+Sources/App/Cart.swift:82:1: error: `total` returns a value but has no `- Returns:` entry; ... [returns-missing]
 ```
 
 ## Rules
@@ -68,8 +76,8 @@ the harness accepts three proxies:
 3. **An explicit marker** on the line above the declaration, reason required:
 
    ```swift
-   // gloss:exempt implements Tracer.record, documented on the protocol
-   func record(_ event: Event) {}
+   // gloss:exempt implements Store.save, documented on the protocol
+   func save(_ item: Item) {}
    ```
 
    The marker and a `///` doc on the same declaration is an error; keep one.
@@ -77,3 +85,7 @@ the harness accepts three proxies:
    are exempt from `missing-doc` and the parameter rules: an entry there could only restate the
    property's doc. A summary they do carry is still shape-checked. Any other statement, default
    value, or expression in the body makes it a real initializer with a contract of its own.
+
+## License
+
+MIT. See [LICENSE](LICENSE).

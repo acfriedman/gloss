@@ -81,7 +81,7 @@ public enum Rules {
         }
         if let opener = Self.forbiddenOpener(text) {
             findings.append(diagnostic(decl, line: line, .summaryOpener,
-                                       "Do not open with \"\(opener)\"; name the behavior directly (`Records the probe…`, `The domain an event…`)."))
+                                       "Do not open with \"\(opener)\"; name the behavior directly (`Stores the item…`, `The queue an item…`)."))
         }
         return findings
     }

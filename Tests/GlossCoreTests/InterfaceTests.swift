@@ -305,6 +305,19 @@ final class InterfaceTests: XCTestCase {
         XCTAssertEqual(Highlight.runs("public var rendered: String { get }").first { $0.kind == .declaration }?.text, "rendered")
     }
 
+    func testPropertyWrapperArgumentsCountAsWhatThePropertyHolds() {
+        let interface = Interface.build(sources: [("Sources/App/Screen.swift", """
+        final class Store {}
+        struct Screen {
+            @Environment(Store.self) private var store
+            @State private var count = 0
+        }
+        """)])
+        let edges = interface.graph.edges.map { "\($0.from) -> \($0.to) \($0.roles)" }
+        XCTAssertEqual(edges, ["App/Screen -> App/Store [GlossCore.Mention.Role.property]"],
+                       "A wrapper's argument is a dependency even with no type annotation; a wrapper no scanned source declares is not.")
+    }
+
     func testOutlineFilesTypesUnderFoldersAndNestedTypesUnderTheirParents() throws {
         let atlas = Atlas(Interface.build(sources: [
             ("Sources/Big/Models/Cart.swift", "struct Cart { struct Line {} }"),

@@ -9,7 +9,8 @@ public struct Mention: Sendable, Equatable, Codable {
     public enum Role: String, Sendable, Codable, CaseIterable {
         /// In an inheritance clause: the type conforms to it or inherits from it.
         case conformance
-        /// In a property's type, or in an unannotated property's initial value.
+        /// In a property's type, in an unannotated property's initial value, or in its attributes, such
+        /// as the type a property wrapper reads in `@Environment(Store.self)`.
         case property
         /// In a parameter's type.
         case parameter
@@ -60,6 +61,7 @@ enum Mentions {
         add(returnType, .returns)
         add(effects?.throwsClause?.type, .throws)
         if let variable = syntax.as(VariableDeclSyntax.self) {
+            add(variable.attributes, .property)
             for binding in variable.bindings {
                 add(binding.typeAnnotation?.type, .property)
                 add(binding.initializer, binding.typeAnnotation == nil ? .property : .body)

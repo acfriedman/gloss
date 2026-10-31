@@ -130,7 +130,6 @@ struct MagnifierView: View {
 /// neighbors standing out and the rest dimmed. Everything is drawn at the scale rather than stretched,
 /// so text stays sharp at any magnification.
 struct MapCanvasView: View {
-    @Environment(Workspace.self) private var workspace
     var layout: GraphLayout
     var lit: String?
     var scale: CGFloat

@@ -41,6 +41,8 @@ struct GraphLayout {
     var height = 0.0
 
     static let boxHeight = 38.0
+    /// The widest a row of the map may grow before a layer wraps.
+    static let maxRowWidth = 960.0
     static let margin = 6.0
 
     /// The width a box needs for its text, from the monospace label and the smaller detail line.
@@ -168,31 +170,52 @@ struct GraphLayout {
             if case .node(let node) = slot { return width(of: items[node]) }
             return dummyWidth
         }
-        let rowWidths = slots.map { row in
+        // A crowded layer wraps onto extra rows, so the figure stays narrow enough to read at its own size.
+        let wrapGap = 14.0
+        var rows: [[[Slot]]] = []
+        for layer in slots {
+            var wrapped: [[Slot]] = [[]]
+            var used = 0.0
+            for slot in layer {
+                let needed = slotWidth(slot) + (wrapped[wrapped.count - 1].isEmpty ? 0 : slotGap)
+                if used + needed > maxRowWidth, !wrapped[wrapped.count - 1].isEmpty {
+                    wrapped.append([])
+                    used = 0
+                }
+                used += wrapped[wrapped.count - 1].isEmpty ? slotWidth(slot) : needed
+                wrapped[wrapped.count - 1].append(slot)
+            }
+            rows.append(wrapped)
+        }
+        func rowWidth(_ row: [Slot]) -> Double {
             row.map(slotWidth).reduce(0, +) + slotGap * Double(max(row.count - 1, 0))
         }
-        let widest = rowWidths.max() ?? 0
+        let widest = rows.flatMap { $0 }.map(rowWidth).max() ?? 0
 
         var layout = GraphLayout()
         var anchors: [Slot: (x: Double, top: Double, bottom: Double)] = [:]
-        for index in 0..<layerCount {
-            let top = margin + Double(index) * (boxHeight + layerGap)
-            var x = margin + (widest - rowWidths[index]) / 2
-            for slot in slots[index] {
-                let slotWidth = slotWidth(slot)
-                if case .node(let node) = slot {
-                    layout.boxes.append(Box(item: items[node], x: x, y: top, width: slotWidth))
+        var top = margin
+        for layer in rows {
+            for row in layer {
+                var x = margin + (widest - rowWidth(row)) / 2
+                for slot in row {
+                    let slotWidth = slotWidth(slot)
+                    if case .node(let node) = slot {
+                        layout.boxes.append(Box(item: items[node], x: x, y: top, width: slotWidth))
+                    }
+                    anchors[slot] = (x + slotWidth / 2, top, top + boxHeight)
+                    x += slotWidth + slotGap
                 }
-                anchors[slot] = (x + slotWidth / 2, top, top + boxHeight)
-                x += slotWidth + slotGap
+                top += boxHeight + wrapGap
             }
+            top += layerGap - wrapGap
         }
         for (index, chain) in chains.enumerated() {
             let points = chain.compactMap { anchors[$0] }
             layout.curves.append(Curve(link: edges[index].link, path: downward(through: points), reversed: flow[index].reversed))
         }
         layout.width = widest + margin * 2
-        layout.height = Double(layerCount) * boxHeight + Double(layerCount - 1) * layerGap + margin * 2
+        layout.height = top - layerGap + margin
         return layout
     }
 

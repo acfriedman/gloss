@@ -101,9 +101,9 @@ final class InterfaceTests: XCTestCase {
         XCTAssertEqual(site.nodes.map(site.label), ["Cart", "extension String"])
         XCTAssertEqual(site.groups["Shop/Cart"]?.members.map(\.name), ["total"])
         let html = InterfacePage.render(interface, title: "Shop")
-        XCTAssertTrue(html.contains("<code>&lt;lines&gt;</code>"))
-        XCTAssertTrue(html.contains("id=\"g-Shop-Cart\""))
+        XCTAssertTrue(html.contains("href=\"#g-Shop-Cart\""))
         XCTAssertTrue(html.contains("id=\"map\""))
+        XCTAssertFalse(html.contains("<lines>"), "Doc text reaches the page only escaped, inside the page data.")
         XCTAssertEqual(html, InterfacePage.render(interface, title: "Shop"), "Rendering must be deterministic.")
     }
 
@@ -173,8 +173,11 @@ final class InterfaceTests: XCTestCase {
         }
         """)
         let add = try XCTUnwrap(contracts.first { $0.name == "add" })
-        XCTAssertEqual(InterfacePage.signatureFlow(add),
-                       "<span class=\"flow-line\">(<span class=\"ty\">Item</span>, <span class=\"param\">count:</span> <span class=\"ty\">Int</span>) <span class=\"kw\">async</span> <span class=\"kw\">throws</span> → <span class=\"ty\">Receipt</span></span>")
+        XCTAssertEqual(add.parameters.map(\.label), [nil, "count"])
+        XCTAssertEqual(add.parameters.map(\.type), ["Item", "Int"])
+        XCTAssertTrue(add.isAsync)
+        XCTAssertEqual(add.throwsClause, "throws")
+        XCTAssertEqual(add.returnType, "Receipt")
         XCTAssertEqual(contracts.first { $0.name == "total" }?.valueType, "Int")
         XCTAssertEqual(contracts.first { $0.name == "reset" }?.isOverride, true)
     }
@@ -187,9 +190,41 @@ final class InterfaceTests: XCTestCase {
         XCTAssertTrue(html.contains("<section class=\"stage\" id=\"map\""))
         XCTAssertTrue(html.contains("<aside class=\"panel\""))
         XCTAssertTrue(html.contains("id=\"start\" data-view data-root=\"\""))
-        XCTAssertTrue(html.contains("id=\"g-Shop-Cart-Line\" data-view data-root=\"Shop/Cart\""),
-                      "A nested type's view lights its root on the map.")
+        XCTAssertTrue(html.contains("<section class=\"view\" id=\"type\" data-view"), "Type views are built in the page from its data.")
         XCTAssertTrue(html.contains("[hidden] { display: none !important; }"), "Author styles must not reveal hidden elements.")
+    }
+
+    func testPageDataCarriesFlowUsesAndBriefs() throws {
+        let interface = Interface.build(sources: [
+            ("Sources/Shop/Cart.swift", """
+            /// Holds lines until checkout. Kept apart from pricing so totals stay pure.
+            public struct Cart {
+                /// Adds a line. Lines keep their order, see `Line.id`.
+                public func add(_ line: Line) -> Receipt { Pricing.total(line) }
+                struct Note {}
+            }
+            public struct Line {}
+            public struct Receipt {}
+            enum Pricing {}
+            """)
+        ])
+        let site = InterfacePage.Site(interface)
+        let data = InterfacePage.pageData(site, scopesOf: ["Shop/Cart": ["s-types"]])
+        let index = Dictionary(uniqueKeysWithValues: data.nodes.enumerated().map { ($1.id, $0) })
+        let cart = data.nodes[try XCTUnwrap(index["Shop/Cart"])]
+        XCTAssertEqual(cart.a, "g-Shop-Cart")
+        XCTAssertEqual(cart.sc, ["s-types"])
+        XCTAssertEqual(cart.n, [try XCTUnwrap(index["Shop/Cart.Note"])])
+        let roles = Dictionary(uniqueKeysWithValues: (cart.o ?? []).map { (data.nodes[$0[0]].id, $0[1]) })
+        XCTAssertEqual(roles["Shop/Line"], InterfacePage.roleMask([.parameter]))
+        XCTAssertEqual(roles["Shop/Receipt"], InterfacePage.roleMask([.returns]))
+        XCTAssertEqual(roles["Shop/Pricing"], InterfacePage.roleMask([.body]))
+        let add = data.contracts[try XCTUnwrap(cart.c?.first)]
+        XCTAssertEqual(add.b, "Adds a line.".utf16.count, "The brief ends at the first sentence.")
+        XCTAssertEqual(add.u?.map { data.nodes[$0[0]].id }, ["Shop/Line", "Shop/Receipt", "Shop/Pricing"])
+        XCTAssertEqual(add.u?.map { $0[1] }, [0, 0, 1], "Only Pricing is used in the body alone.")
+        let json = InterfacePage.encode(data)
+        XCTAssertFalse(json.contains("</"), "No string in the data can close the script element holding it.")
     }
 
     func testSmallInterfacesOpenOnAllTypes() {

@@ -71,8 +71,13 @@ in the browser, and double-clicking a divider restores its default.
 - **A type** reads top to bottom: what uses it, the type, what it conforms to, holds, takes,
   returns, and throws through its signatures, the types it nests, and, folded, what its bodies use.
 - **A member** is one line (`(source: String) → [Diagnostic]` plus the first sentence of its
-  summary) that opens to its full contract and the types it uses. Overrides start folded, and
-  members with findings start open.
+  summary) that opens to its full contract and the types it uses. Overrides start folded. Members
+  with findings start open when the whole interface has 100 findings or fewer, and more than two
+  findings on one declaration fold behind their count.
+
+Type views are built in the page from compact JSON that gloss embeds, so a large codebase's page
+stays small (swift-syntax, at 19,000 declarations, is about 13 MB). gloss decides everything the
+views show; the page's script only fills templates from that data.
 
 Access filtering defaults to public when the sources declare anything public, and to internal
 otherwise.

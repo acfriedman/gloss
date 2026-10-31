@@ -1,4 +1,5 @@
 import GlossCore
+import GlossPage
 import Foundation
 
 /// Command-line entry: `gloss [--include-tests] [--summary] <path>...` lints;
@@ -38,27 +39,18 @@ guard !paths.isEmpty else {
     exit(64)
 }
 
-/// Collects the `.swift` files under a path, or the path itself when it names one file. A path that
-/// does not exist exits with status 66, so a typo cannot pass as a clean run.
+/// Collects the `.swift` files under a path. A path that does not exist exits with status 66, so a
+/// typo cannot pass as a clean run.
 ///
 /// - Parameter path: A file or directory, as given on the command line.
 /// - Returns: The files, sorted, so output order is stable across runs; empty for a non-Swift file.
 func swiftFiles(under path: String) -> [String] {
-    var isDirectory: ObjCBool = false
-    guard FileManager.default.fileExists(atPath: path, isDirectory: &isDirectory) else {
+    do {
+        return try SourceFiles.swiftFiles(under: path, includeTests: includeTests)
+    } catch {
         FileHandle.standardError.write(Data("gloss: no such path: \(path)\n".utf8))
         exit(66)
     }
-    guard isDirectory.boolValue else { return path.hasSuffix(".swift") ? [path] : [] }
-    guard let enumerator = FileManager.default.enumerator(atPath: path) else { return [] }
-    var files: [String] = []
-    for case let relative as String in enumerator {
-        let components = relative.split(separator: "/")
-        if components.contains(".build") || components.contains(".swiftpm") { enumerator.skipDescendants(); continue }
-        if !includeTests, components.contains(where: { $0.hasSuffix("Tests") }) { enumerator.skipDescendants(); continue }
-        if relative.hasSuffix(".swift") { files.append((path as NSString).appendingPathComponent(relative)) }
-    }
-    return files.sorted()
 }
 
 let sources: [(file: String, source: String)] = paths.flatMap(swiftFiles(under:)).compactMap { file in

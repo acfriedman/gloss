@@ -1,4 +1,6 @@
 import Foundation
+import GlossCore
+import GlossMap
 
 /// The data the page renders each type's view from, embedded once as compact JSON.
 ///
@@ -113,21 +115,21 @@ extension InterfacePage {
     /// Builds the page data for every node.
     ///
     /// - Parameters:
-    ///   - site: The arranged interface.
+    ///   - atlas: The arranged interface.
     ///   - scopesOf: The map levels that draw each root, widest first, keyed by root id.
     /// - Returns: The data, with nodes in sidebar order and contracts in node order.
-    static func pageData(_ site: Site, scopesOf: [String: [String]]) -> PageData {
+    static func pageData(_ atlas: Atlas, scopesOf: [String: [String]]) -> PageData {
         var data = PageData()
         var fileIndex: [String: Int] = [:]
         var nodeIndex: [String: Int] = [:]
-        for (index, node) in site.nodes.enumerated() { nodeIndex[node.id] = index }
+        for (index, node) in atlas.nodes.enumerated() { nodeIndex[node.id] = index }
         func file(_ path: String) -> Int {
             if let index = fileIndex[path] { return index }
             fileIndex[path] = data.files.count
             data.files.append(path)
             return data.files.count - 1
         }
-        func contract(_ contract: Site.Reviewed, owner: String) -> Int {
+        func contract(_ contract: Atlas.Reviewed, owner: String) -> Int {
             var uses: [[Int]] = []
             var position: [String: Int] = [:]
             for mention in contract.mentions {
@@ -140,7 +142,7 @@ extension InterfacePage {
                     uses.append([index, bodyOnly])
                 }
             }
-            let brief = contract.summary.map(firstSentence)
+            let brief = contract.summary.map(Wording.firstSentence)
             data.contracts.append(PageData.Contract(
                 n: contract.name, k: contract.keyword, x: contract.access, d: contract.declaration,
                 s: contract.summary, b: brief.flatMap { $0.utf16.count < (contract.summary?.utf16.count ?? 0) ? $0.utf16.count : nil },
@@ -158,9 +160,9 @@ extension InterfacePage {
             ))
             return data.contracts.count - 1
         }
-        for node in site.nodes {
-            let group = site.groups[node.id] ?? Site.Group()
-            let (incoming, outgoing, nested) = site.neighbors(of: node)
+        for node in atlas.nodes {
+            let group = atlas.group(node.id)
+            let (incoming, outgoing, nested) = atlas.neighbors(of: node)
             let head = group.head.map { contract($0, owner: node.id) }
             let members = group.members.map { contract($0, owner: node.id) }
             let pairs = { (edges: [Graph.Edge], end: KeyPath<Graph.Edge, String>) -> [[Int]] in
@@ -171,10 +173,10 @@ extension InterfacePage {
             let children = nested.compactMap { nodeIndex[$0.id] }
             let scopes = scopesOf[node.root] ?? []
             data.nodes.append(PageData.Node(
-                id: node.id, a: site.anchor(node.id), l: site.label(node),
-                k: node.keyword == "file" ? "file scope" : node.keyword, m: node.module,
+                id: node.id, a: anchor(node.id, in: atlas), l: atlas.label(node),
+                k: Wording.kind(of: node), m: node.module,
                 x: node.keyword == "file" ? "public" : node.access, r: node.root,
-                rl: node.root == node.id ? nil : site.byID[node.root].map(site.label),
+                rl: node.root == node.id ? nil : atlas.byID[node.root].map(atlas.label),
                 sc: scopes.isEmpty ? nil : scopes, h: head, c: members.isEmpty ? nil : members,
                 i: into.isEmpty ? nil : into, o: out.isEmpty ? nil : out, n: children.isEmpty ? nil : children,
                 f: group.findingCount == 0 ? nil : group.findingCount

@@ -1,4 +1,6 @@
 @testable import GlossCore
+@testable import GlossMap
+@testable import GlossPage
 import XCTest
 
 /// Pins the contract model and the page against literal sources, so what the view can show is a visible diff.
@@ -105,9 +107,9 @@ final class InterfaceTests: XCTestCase {
             ("Sources/Shop/Cart.swift", "/// A cart. It holds `<lines>`.\nstruct Cart {}\nextension String { func shout() {} }"),
             ("Sources/Shop/Cart+Total.swift", "extension Cart { func total() -> Int { 0 } }")
         ])
-        let site = InterfacePage.Site(interface)
-        XCTAssertEqual(site.nodes.map(site.label), ["Cart", "extension String"])
-        XCTAssertEqual(site.groups["Shop/Cart"]?.members.map(\.name), ["total"])
+        let atlas = Atlas(interface)
+        XCTAssertEqual(atlas.nodes.map(atlas.label), ["Cart", "extension String"])
+        XCTAssertEqual(atlas.groups["Shop/Cart"]?.members.map(\.name), ["total"])
         let html = InterfacePage.render(interface, title: "Shop")
         XCTAssertTrue(html.contains("href=\"#g-Shop-Cart\""))
         XCTAssertTrue(html.contains("id=\"map\""))
@@ -151,7 +153,7 @@ final class InterfaceTests: XCTestCase {
     }
 
     func testLayoutFlowsDownwardAndHandlesCycles() {
-        let items = ["A", "B", "C"].map { GraphLayout.Item(id: $0, label: $0, detail: "", link: $0) }
+        let items = ["A", "B", "C"].map { GraphLayout.Item(unit: .type($0), label: $0, detail: "") }
         let links = [("A", "B"), ("B", "C"), ("C", "A"), ("A", "C")].map { GraphLayout.Link(from: $0.0, to: $0.1, dashed: false, title: "") }
         let layout = GraphLayout.layered(items, links)
         let y = Dictionary(uniqueKeysWithValues: layout.boxes.map { ($0.item.id, $0.y) })
@@ -167,9 +169,9 @@ final class InterfaceTests: XCTestCase {
             ("Sources/Core/Plan.swift", "public struct Plan {}\npublic struct Report {}\nstruct Orphan {}"),
             ("Sources/Tool/main.swift", "print(Report())")
         ])
-        let site = InterfacePage.Site(interface)
-        XCTAssertEqual(site.entryPoints(in: "Core").map(\.name), ["Engine", "Report"])
-        XCTAssertEqual(site.entryPoints(in: "Tool").map(\.keyword), ["file"])
+        let atlas = Atlas(interface)
+        XCTAssertEqual(atlas.entryPoints(in: "Core").map(\.name), ["Engine", "Report"])
+        XCTAssertEqual(atlas.entryPoints(in: "Tool").map(\.keyword), ["file"])
     }
 
     func testMemberLinesShowWhatFlowsInAndOut() throws {
@@ -216,8 +218,8 @@ final class InterfaceTests: XCTestCase {
             enum Pricing {}
             """)
         ])
-        let site = InterfacePage.Site(interface)
-        let data = InterfacePage.pageData(site, scopesOf: ["Shop/Cart": ["s-types"]])
+        let atlas = Atlas(interface)
+        let data = InterfacePage.pageData(atlas, scopesOf: ["Shop/Cart": ["s-types"]])
         let index = Dictionary(uniqueKeysWithValues: data.nodes.enumerated().map { ($1.id, $0) })
         let cart = data.nodes[try XCTUnwrap(index["Shop/Cart"])]
         XCTAssertEqual(cart.a, "g-Shop-Cart")
@@ -236,61 +238,88 @@ final class InterfaceTests: XCTestCase {
     }
 
     func testSmallInterfacesOpenOnAllTypes() {
-        let one = InterfacePage.Site(Interface.build(sources: [("Sources/Shop/Cart.swift", "struct Cart { var line: Line }\nstruct Line {}")]))
-        XCTAssertEqual(InterfacePage.mapScopes(one).map(\.id), ["s-types"])
-        let two = InterfacePage.Site(Interface.build(sources: [
+        let one = Atlas(Interface.build(sources: [("Sources/Shop/Cart.swift", "struct Cart { var line: Line }\nstruct Line {}")]))
+        XCTAssertEqual(one.mapScopes().map(\.id), ["s-types"])
+        let two = Atlas(Interface.build(sources: [
             ("Sources/Shop/Cart.swift", "public struct Cart {}"),
             ("Sources/App/main.swift", "print(Cart())")
         ]))
-        XCTAssertEqual(InterfacePage.mapScopes(two).map(\.id), ["s-types", "s-modules", "s-m-Shop", "s-m-App"])
+        XCTAssertEqual(two.mapScopes().map(\.id), ["s-types", "s-modules", "s-m-Shop", "s-m-App"])
     }
 
     func testLargeModulesZoomThroughFolders() throws {
         let models = (0..<20).map { ("Sources/Big/Models/M\($0).swift", "struct M\($0) {}") }
         let views = (0..<20).map { ("Sources/Big/Views/V\($0).swift", "struct V\($0) { var model: M\($0) }") }
-        let site = InterfacePage.Site(Interface.build(sources: models + views))
-        let scopes = InterfacePage.mapScopes(site)
+        let atlas = Atlas(Interface.build(sources: models + views))
+        let scopes = atlas.mapScopes()
         XCTAssertEqual(scopes.map(\.id), ["s-m-Big", "s-f-Big-Models", "s-f-Big-Views"])
-        let module = InterfacePage.figure(scopes[0], site: site, includeBody: true)
+        let module = atlas.figure(scopes[0], includeBody: true)
         XCTAssertEqual(module.items.map(\.label), ["Models/", "Views/"], "Over the budget, a module draws its folders.")
         XCTAssertEqual(module.links.count, 1)
-        let folder = InterfacePage.figure(scopes[2], site: site, includeBody: true)
+        let folder = atlas.figure(scopes[2], includeBody: true)
         XCTAssertEqual(folder.shown.count, 20)
-        XCTAssertTrue(folder.items.contains { $0.label == "Models/" && $0.classes.contains("boundary") },
+        XCTAssertTrue(folder.items.contains { $0.label == "Models/" && $0.flags.contains(.boundary) },
                       "What a folder depends on outside it is drawn as a boundary box.")
     }
 
+    func testFocusDrawsUsersAboveAndDependenciesBelow() throws {
+        let source = """
+        public struct Cart { public var lines: [Line] }
+        public struct Line { public var price: Price }
+        public struct Price {}
+        public struct Checkout { public func run(_ cart: Cart) {} }
+        """
+        let atlas = Atlas(Interface.build(sources: [("Sources/Shop/Cart.swift", source)]))
+        let focus = try XCTUnwrap(atlas.focus(on: "Shop/Cart", includeBody: false, minimumRank: 3))
+        let y = Dictionary(uniqueKeysWithValues: focus.layout.boxes.map { ($0.item.id, $0.y) })
+        XCTAssertEqual(Set(y.keys), ["Shop/Checkout", "Shop/Cart", "Shop/Line"], "Only direct neighbors are drawn.")
+        XCTAssertLessThan(try XCTUnwrap(y["Shop/Checkout"]), try XCTUnwrap(y["Shop/Cart"]))
+        XCTAssertLessThan(try XCTUnwrap(y["Shop/Cart"]), try XCTUnwrap(y["Shop/Line"]))
+        XCTAssertEqual(focus.layout.curves.map(\.link.title), ["Checkout takes Cart", "Cart holds Line"])
+        XCTAssertEqual([focus.incoming, focus.outgoing, focus.hidden], [1, 1, 0])
+    }
+
+    func testLevelPathsNameTheWayBackFromTheWidestLevel() {
+        let atlas = Atlas(Interface.build(sources: [
+            ("Sources/Shop/Cart.swift", "struct Cart {}"),
+            ("Sources/App/Main.swift", "struct Main { var cart: Cart }")
+        ]))
+        let paths = Dictionary(uniqueKeysWithValues: atlas.mapScopes().map { ($0.id, $0.path) })
+        XCTAssertEqual(paths["s-modules"], ["s-types", "s-modules"])
+        XCTAssertEqual(paths["s-m-App"], ["s-types", "s-modules", "s-m-App"])
+    }
+
     func testZoomingOutClimbsFolderModuleAndOverview() {
-        let small = InterfacePage.Site(Interface.build(sources: [
+        let small = Atlas(Interface.build(sources: [
             ("Sources/Shop/Cart.swift", "public struct Cart {}"),
             ("Sources/App/main.swift", "print(Cart())")
         ]))
-        let scopes = InterfacePage.mapScopes(small)
-        let parents = Dictionary(uniqueKeysWithValues: scopes.map { ($0.id, InterfacePage.parentScope($0, in: scopes)) })
+        let scopes = small.mapScopes()
+        let parents = Dictionary(uniqueKeysWithValues: scopes.map { ($0.id, $0.parent) })
         XCTAssertEqual(parents["s-types"], "s-modules")
         XCTAssertEqual(parents["s-m-Shop"], "s-modules")
         XCTAssertEqual(parents["s-modules"], .some(nil), "The module overview is the widest level.")
-        let big = InterfacePage.Site(Interface.build(sources: (0..<20).flatMap { [
+        let big = Atlas(Interface.build(sources: (0..<20).flatMap { [
             ("Sources/Big/Models/M\($0).swift", "struct M\($0) {}"),
             ("Sources/Big/Views/V\($0).swift", "struct V\($0) { var model: M\($0) }")
         ] }))
-        let levels = InterfacePage.mapScopes(big)
-        XCTAssertEqual(levels.map { InterfacePage.parentScope($0, in: levels) }, [nil, "s-m-Big", "s-m-Big"])
+        let levels = big.mapScopes()
+        XCTAssertEqual(levels.map(\.parent), [nil, "s-m-Big", "s-m-Big"])
     }
 
     func testLevelsOverTheBudgetListTheLeastConnected() {
         let types = (0..<35).map { ("Sources/Flat/T\($0).swift", $0 < 10 ? "struct T\($0) { var next: T\($0 + 1) }" : "struct T\($0) {}") }
-        let site = InterfacePage.Site(Interface.build(sources: types))
-        let scope = InterfacePage.mapScopes(site)[0]
-        let figure = InterfacePage.figure(scope, site: site, includeBody: true)
-        XCTAssertEqual(figure.shown.count, InterfacePage.mapBudget)
+        let atlas = Atlas(Interface.build(sources: types))
+        let scope = atlas.mapScopes()[0]
+        let figure = atlas.figure(scope, includeBody: true)
+        XCTAssertEqual(figure.shown.count, Atlas.mapBudget)
         XCTAssertEqual(figure.overflow.count, 5)
         XCTAssertTrue(figure.shown.contains("Flat/T0"), "Connected types are kept over unconnected ones.")
     }
 
     func testFirstSentenceIgnoresPeriodsInCode() {
-        XCTAssertEqual(InterfacePage.firstSentence("Reads `a.b` first. Then more."), "Reads `a.b` first.")
-        XCTAssertEqual(InterfacePage.firstSentence("No period"), "No period")
+        XCTAssertEqual(Wording.firstSentence("Reads `a.b` first. Then more."), "Reads `a.b` first.")
+        XCTAssertEqual(Wording.firstSentence("No period"), "No period")
     }
 
     func testInlineCodeSpans() {

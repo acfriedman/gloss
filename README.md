@@ -31,11 +31,38 @@ Sources/App/Cart.swift:82:1: error: `total` returns a value but has no `- Return
 
 ## Design
 
+The package is four layers, each a target that depends only on the ones before it, so the compiler
+keeps them apart:
+
+| Target | Holds |
+|---|---|
+| `GlossCore` | Reading, the contract model and its graph, and the lint. |
+| `GlossMap` | The model arranged for reading (`Atlas`): front doors, map levels, the focus, and their layout. |
+| `GlossPage` | The HTML page, rendered from that arrangement. |
+| `GlossApp` | The macOS app, drawn from the same arrangement. |
+
 One pass reads the source; two consumers use what it reads and never meet each other.
 `DeclarationReader` walks each file once and produces, per declaration, what the rules need, its doc
 comment, and the details the interface model needs. `Linter` runs `Rules` over those to produce
 diagnostics, and `Contract` and `Graph` build the model from them. `Interface` sets contracts and
-assessments side by side, and `InterfacePage` joins them only to render.
+assessments side by side, and `Atlas` joins them only to arrange them for a reader. Every decision
+about what to show is made there, so the page and the app cannot disagree.
+
+## App
+
+```bash
+swift run GlossApp --root path/to/YourPackage
+```
+
+The same three panes as the page, in a native window: the list, one type's text, and the map, with
+the access level, zoom, and body dependencies in the toolbar (zoom is also ⌘= and ⌘-). It reads the
+folder's `Sources` directory when it has one, ⌘R reads it again, and the next launch reopens the
+last folder. A member's file and line open in Xcode. The folder takes a flag because AppKit reads a
+bare path argument as a document to open and then opens no window.
+
+For reviews from a script, `GLOSS_SNAPSHOT=out.png` writes the window to a PNG once the sources are
+read and quits; `GLOSS_SELECT` selects a node id (or `module:Name`) first, and `GLOSS_ZOOM` zooms in
+that many times.
 
 ## Interface
 

@@ -3,9 +3,9 @@
 /// Layout runs once, in Swift, for every front end: the page draws it as fixed SVG that renders
 /// without script, the app draws the same boxes and curves, and the same graph always yields the same
 /// drawing.
-public struct GraphLayout: Sendable {
+public struct GraphLayout: Sendable, Equatable {
     /// How a box is drawn, beyond its text.
-    public struct Flags: OptionSet, Sendable {
+    public struct Flags: OptionSet, Sendable, Equatable {
         public let rawValue: Int
 
         /// Wraps a raw value.
@@ -24,7 +24,7 @@ public struct GraphLayout: Sendable {
     }
 
     /// A box to place: what it stands for, its text, and how it is drawn.
-    public struct Item: Sendable {
+    public struct Item: Sendable, Equatable {
         public var unit: MapScope.Unit
         public var label: String
         public var detail: String
@@ -48,7 +48,7 @@ public struct GraphLayout: Sendable {
     }
 
     /// A dependency to draw from one item to another.
-    public struct Link: Sendable {
+    public struct Link: Sendable, Equatable {
         public var from: String
         public var to: String
         public var dashed: Bool
@@ -70,7 +70,7 @@ public struct GraphLayout: Sendable {
     }
 
     /// A placed box, in points from the figure's top left.
-    public struct Box: Sendable {
+    public struct Box: Sendable, Equatable {
         public var item: Item
         public var x: Double
         public var y: Double
@@ -78,7 +78,7 @@ public struct GraphLayout: Sendable {
     }
 
     /// Where an edge passes a row: the column it runs in, and the top and bottom it enters and leaves by.
-    public struct Anchor: Sendable {
+    public struct Anchor: Sendable, Equatable {
         public var x: Double
         public var top: Double
         public var bottom: Double
@@ -86,7 +86,7 @@ public struct GraphLayout: Sendable {
 
     /// A drawn edge through its anchors in flow order; `reversed` puts the arrowhead at the start, for
     /// an edge drawn against the flow.
-    public struct Curve: Sendable {
+    public struct Curve: Sendable, Equatable {
         public var link: Link
         public var points: [Anchor]
         public var reversed: Bool

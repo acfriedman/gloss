@@ -47,7 +47,7 @@ public struct Atlas: Sendable {
     private var edgesTo: [String: [Graph.Edge]] = [:]
     private var children: [String: [Graph.Node]] = [:]
     private var findingsUnder: [String: Int] = [:]
-    private var folders: [String: String] = [:]
+    private var directories: [String: [String]] = [:]
     private var rolledWithBody: [Rolled] = []
     private var rolledSignature: [Rolled] = []
 
@@ -85,7 +85,9 @@ public struct Atlas: Sendable {
         for node in nodes {
             guard let file = groups[node.id]?.head?.file ?? groups[node.id]?.members.first?.file else { continue }
             let parts = file.split(separator: "/").map(String.init)
-            if let index = parts.lastIndex(of: node.module), index + 2 < parts.count { folders[node.id] = parts[index + 1] }
+            if let index = parts.lastIndex(of: node.module), index + 2 < parts.count {
+                directories[node.id] = Array(parts[(index + 1)..<(parts.count - 1)])
+            }
         }
         rolledWithBody = Self.roll(edges, byID: byID, includeBody: true)
         rolledSignature = Self.roll(edges, byID: byID, includeBody: false)
@@ -114,7 +116,15 @@ public struct Atlas: Sendable {
     /// - Parameter node: A node; its declaration's file decides, or its first member's.
     /// - Returns: The folder name, or empty for a file directly in the module's directory.
     public func folder(of node: Graph.Node) -> String {
-        folders[node.id] ?? ""
+        directories[node.id]?.first ?? ""
+    }
+
+    /// Every directory between a node's module and its file, outermost first.
+    ///
+    /// - Parameter node: A node; its declaration's file decides, or its first member's.
+    /// - Returns: The directory names, or empty for a file directly in the module's directory.
+    public func directories(of node: Graph.Node) -> [String] {
+        directories[node.id] ?? []
     }
 
     /// How deep a node sits under its root type, for indenting a list.

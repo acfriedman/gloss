@@ -55,15 +55,19 @@ swift run GlossApp --root path/to/YourPackage
 ```
 
 The same three panes as the page, in a native window: the list, one type's text, and the map, with
-the access level, zoom, and body dependencies in the toolbar (zoom is also ⌘= and ⌘-). Hovering a box
-on the map or a row in the list previews it in the details pane over the selection, and lights it on
-the map; moving into the pane keeps the preview to read, and moving away returns to the selection.
-Hovering a chip in the pane lights its box. Declarations are colored as Xcode's default themes color
-them, from swift-syntax's own classification (`Highlight` in `GlossMap`), with the types the scanned
-sources declare told apart from the types they only use. It reads the
-folder's `Sources` directory when it has one, ⌘R reads it again, and the next launch reopens the
-last folder. A member's file and line open in Xcode. The folder takes a flag because AppKit reads a
-bare path argument as a document to open and then opens no window.
+the access level, zoom, and body dependencies in the toolbar (zoom is also ⌘= and ⌘-). The list is
+an outline: each module as its source folders hold it, at full depth, with nested types under the
+type that declares them. Modules start open and folders and nested types closed, so a large module
+opens as its top folders; searching or filtering opens whatever holds a match, and selecting a type
+from the map or a chip opens the rows around it. Hovering a box on the map or a row in the list
+previews it in the details pane over the selection, and lights it on the map; moving into the pane
+keeps the preview to read, and moving away returns to the selection. Hovering a chip in the pane
+lights its box. Declarations are colored as Xcode's default themes color them, from swift-syntax's
+own classification (`Highlight` in `GlossMap`), with the types the scanned sources declare told
+apart from the types they only use. It reads the folder's `Sources` directory when it has one, ⌘R
+reads it again, and the next launch reopens the last folder. A member's file and line open in Xcode.
+The folder takes a flag because AppKit reads a bare path argument as a document to open and then
+opens no window.
 
 For reviews from a script, `GLOSS_SNAPSHOT=out.png` writes the window to a PNG once the sources are
 read and quits; `GLOSS_SELECT` selects a node id (or `module:Name`) first, `GLOSS_ZOOM` zooms in

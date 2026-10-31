@@ -305,6 +305,30 @@ final class InterfaceTests: XCTestCase {
         XCTAssertEqual(Highlight.runs("public var rendered: String { get }").first { $0.kind == .declaration }?.text, "rendered")
     }
 
+    func testOutlineFilesTypesUnderFoldersAndNestedTypesUnderTheirParents() throws {
+        let atlas = Atlas(Interface.build(sources: [
+            ("Sources/Big/Models/Cart.swift", "struct Cart { struct Line {} }"),
+            ("Sources/Big/Models/Deep/Price.swift", "struct Price {}"),
+            ("Sources/Big/App.swift", "struct App {}")
+        ]))
+        func shape(_ items: [OutlineItem]) -> [String] {
+            items.map { item in
+                let name: String = switch item.kind {
+                case .folder(let name): name + "/"
+                case .type(let node): atlas.shortLabel(node)
+                }
+                return item.children.isEmpty ? name : name + "(" + shape(item.children).joined(separator: " ") + ")"
+            }
+        }
+        let all = atlas.outline(of: "Big", showing: { _ in true })
+        XCTAssertEqual(shape(all), ["Models/(Deep/(Price) Cart(Line))", "App"])
+        XCTAssertEqual(all.first?.typeCount, 3)
+        let line = try XCTUnwrap(atlas.byID["Big/Cart.Line"])
+        XCTAssertEqual(atlas.outlineAncestors(of: line), ["folder:Big/Models", "Big/Cart"])
+        let found = atlas.outline(of: "Big", showing: { $0.id == "Big/Cart.Line" })
+        XCTAssertEqual(shape(found), ["Models/(Cart(Line))"], "A match keeps the folders and types around it, and nothing else.")
+    }
+
     func testZoomingOutClimbsFolderModuleAndOverview() {
         let small = Atlas(Interface.build(sources: [
             ("Sources/Shop/Cart.swift", "public struct Cart {}"),

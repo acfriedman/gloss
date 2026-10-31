@@ -2,6 +2,7 @@ import AppKit
 import GlossCore
 import GlossMap
 import Observation
+import SwiftUI
 
 /// One open package: its interface, what is selected, and which level of the map is drawn.
 ///
@@ -178,6 +179,7 @@ final class Workspace {
         hiding?.cancel()
         preview = nil
         selection = target
+        if case .type(let id) = target { reveal(id) }
         scopeID = scope(for: target)
         redraw()
     }
@@ -386,20 +388,69 @@ final class Workspace {
         (atlas?.rank(of: node) ?? 0) >= minimumRank
     }
 
-    /// The nodes the list shows for one module, after the access filter, the findings filter, and the search.
+    /// One module's rows in the list, after the access filter, the findings filter, and the search.
     ///
     /// - Parameter module: The module name.
-    /// - Returns: Nodes in graph order.
-    func listed(in module: String) -> [Graph.Node] {
+    /// - Returns: Folders and types as ``GlossMap/Atlas/outline(of:showing:)`` arranges them.
+    func outline(of module: String) -> [OutlineItem] {
         guard let atlas else { return [] }
         let query = search.trimmingCharacters(in: .whitespaces).lowercased()
-        return atlas.nodes.filter { node in
-            guard node.module == module, isShown(node) else { return false }
+        return atlas.outline(of: module) { node in
+            guard isShown(node) else { return false }
             let group = atlas.group(node.id)
             if findingsOnly, group.findingCount == 0 { return false }
             guard !query.isEmpty else { return true }
             return ([node.name] + group.members.map(\.name)).contains { $0.lowercased().contains(query) }
         }
+    }
+
+    // MARK: Expanding
+
+    /// The folders and types open in the list. Both start closed, so a large module opens as its
+    /// top folders.
+    private var expanded: Set<String> = []
+    /// The modules closed in the list. Modules start open.
+    private var closedModules: Set<String> = []
+
+    /// Whether the search or the findings filter is narrowing the list, which then opens every row
+    /// that holds a match.
+    var isFiltering: Bool {
+        findingsOnly || !search.trimmingCharacters(in: .whitespaces).isEmpty
+    }
+
+    /// Whether a folder or type row is open, for its disclosure triangle.
+    ///
+    /// - Parameter id: A row id from an outline.
+    /// - Returns: A binding that reads open while filtering, and records the reader's choice otherwise.
+    func expansion(of id: String) -> Binding<Bool> {
+        Binding(
+            get: { self.isFiltering || self.expanded.contains(id) },
+            set: { open in
+                if open { self.expanded.insert(id) } else { self.expanded.remove(id) }
+            }
+        )
+    }
+
+    /// Whether a module's section is open.
+    ///
+    /// - Parameter module: The module name.
+    /// - Returns: A binding over the closed modules.
+    func expansion(ofModule module: String) -> Binding<Bool> {
+        Binding(
+            get: { !self.closedModules.contains(module) },
+            set: { open in
+                if open { self.closedModules.remove(module) } else { self.closedModules.insert(module) }
+            }
+        )
+    }
+
+    /// Opens the rows that hold a type, so selecting it from the map or a chip shows it in the list.
+    ///
+    /// - Parameter id: A node id.
+    private func reveal(_ id: String) {
+        guard let atlas, let node = atlas.byID[id] else { return }
+        closedModules.remove(node.module)
+        expanded.formUnion(atlas.outlineAncestors(of: node))
     }
 
     /// Opens a declaration's file at its line in Xcode, or in the default editor without Xcode.

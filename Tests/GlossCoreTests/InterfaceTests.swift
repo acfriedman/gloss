@@ -179,6 +179,54 @@ final class InterfaceTests: XCTestCase {
         XCTAssertEqual(contracts.first { $0.name == "reset" }?.isOverride, true)
     }
 
+    func testPageKeepsMapAndPanelSideBySide() {
+        let interface = Interface.build(sources: [
+            ("Sources/Shop/Cart.swift", "/// Holds lines. Kept apart from pricing.\npublic struct Cart { struct Line {} }")
+        ])
+        let html = InterfacePage.render(interface, title: "Shop")
+        XCTAssertTrue(html.contains("<section class=\"stage\" id=\"map\""))
+        XCTAssertTrue(html.contains("<aside class=\"panel\""))
+        XCTAssertTrue(html.contains("id=\"start\" data-view data-root=\"\""))
+        XCTAssertTrue(html.contains("id=\"g-Shop-Cart-Line\" data-view data-root=\"Shop/Cart\""),
+                      "A nested type's view lights its root on the map.")
+        XCTAssertTrue(html.contains("[hidden] { display: none !important; }"), "Author styles must not reveal hidden elements.")
+    }
+
+    func testSmallInterfacesOpenOnAllTypes() {
+        let one = InterfacePage.Site(Interface.build(sources: [("Sources/Shop/Cart.swift", "struct Cart { var line: Line }\nstruct Line {}")]))
+        XCTAssertEqual(InterfacePage.mapScopes(one).map(\.id), ["s-types"])
+        let two = InterfacePage.Site(Interface.build(sources: [
+            ("Sources/Shop/Cart.swift", "public struct Cart {}"),
+            ("Sources/App/main.swift", "print(Cart())")
+        ]))
+        XCTAssertEqual(InterfacePage.mapScopes(two).map(\.id), ["s-types", "s-modules", "s-m-Shop", "s-m-App"])
+    }
+
+    func testLargeModulesZoomThroughFolders() throws {
+        let models = (0..<20).map { ("Sources/Big/Models/M\($0).swift", "struct M\($0) {}") }
+        let views = (0..<20).map { ("Sources/Big/Views/V\($0).swift", "struct V\($0) { var model: M\($0) }") }
+        let site = InterfacePage.Site(Interface.build(sources: models + views))
+        let scopes = InterfacePage.mapScopes(site)
+        XCTAssertEqual(scopes.map(\.id), ["s-m-Big", "s-f-Big-Models", "s-f-Big-Views"])
+        let module = InterfacePage.figure(scopes[0], site: site, includeBody: true)
+        XCTAssertEqual(module.items.map(\.label), ["Models/", "Views/"], "Over the budget, a module draws its folders.")
+        XCTAssertEqual(module.links.count, 1)
+        let folder = InterfacePage.figure(scopes[2], site: site, includeBody: true)
+        XCTAssertEqual(folder.shown.count, 20)
+        XCTAssertTrue(folder.items.contains { $0.label == "Models/" && $0.classes.contains("boundary") },
+                      "What a folder depends on outside it is drawn as a boundary box.")
+    }
+
+    func testLevelsOverTheBudgetListTheLeastConnected() {
+        let types = (0..<35).map { ("Sources/Flat/T\($0).swift", $0 < 10 ? "struct T\($0) { var next: T\($0 + 1) }" : "struct T\($0) {}") }
+        let site = InterfacePage.Site(Interface.build(sources: types))
+        let scope = InterfacePage.mapScopes(site)[0]
+        let figure = InterfacePage.figure(scope, site: site, includeBody: true)
+        XCTAssertEqual(figure.shown.count, InterfacePage.mapBudget)
+        XCTAssertEqual(figure.overflow.count, 5)
+        XCTAssertTrue(figure.shown.contains("Flat/T0"), "Connected types are kept over unconnected ones.")
+    }
+
     func testFirstSentenceIgnoresPeriodsInCode() {
         XCTAssertEqual(InterfacePage.firstSentence("Reads `a.b` first. Then more."), "Reads `a.b` first.")
         XCTAssertEqual(InterfacePage.firstSentence("No period"), "No period")

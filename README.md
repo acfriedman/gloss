@@ -49,17 +49,30 @@ a dependency graph of types. A module's top-level statements count as one `top-l
 an executable's entry point appears in the graph. Names no scanned source declares are kept on the
 mention but are not graph nodes.
 
-The page discloses the system a level at a time, with a sidebar that lists every type:
+The page is three panes on one screen: every type listed on the left, the dependency map in the
+middle, and the text of one type on the right. Nothing navigates away, so the map stays in view.
+The list collapses, and both dividers drag (or step with the arrow keys) to resize; sizes are kept
+in the browser, and double-clicking a divider restores its default.
 
-1. **Start here** shows each module's front door: root types used from another module, and root
-   types nothing else in their module uses.
-2. **Dependency map** shows every root type, nested types folded in, with signature dependencies
-   by default and body-only dependencies behind a toggle. Layout happens in Swift, so it is plain SVG.
-3. **A type** reads top to bottom: what uses it, the type, what it conforms to, holds, takes,
-   returns, and throws through its signatures, the types it nests, and, folded, what its bodies use.
-4. **A member** is one line (`(source: String) → [Diagnostic]` plus the first sentence of its
-   summary) that opens to its full contract and the types it uses. Overrides start folded, and
-   members with findings start open.
+- **Start here** is what the right pane shows first: each module's front door, meaning root types
+  used from another module and root types nothing else in their module uses.
+- **The map** shows root types, nested types folded in, with signature dependencies by default and
+  body-only dependencies behind a toggle. Layout happens in Swift, so it is plain SVG. It reads at
+  levels: all types, all modules, one module, and one folder. It opens on all types when they fit
+  30 boxes, and otherwise on the module overview. A module over 30 types that spans several
+  folders is drawn as its folders, each a level of its own. A level draws what lies outside it as
+  dashed boxes that step into their own level, and one still over 30 draws its most connected
+  boxes and lists the rest. Selecting a module or folder moves the map to it; selecting a type keeps
+  the current level when it draws that type, and otherwise moves to the widest level that does.
+- **Hovering** a box on the map or a name in the list previews that type in the right pane and lights
+  it and its neighbors on the map; moving away returns to the selection, and moving into the pane
+  keeps the preview while you read. **Selecting** keeps it, and updates the address so back,
+  forward, and refresh work. Hovering a type chip in the pane lights that type on the map.
+- **A type** reads top to bottom: what uses it, the type, what it conforms to, holds, takes,
+  returns, and throws through its signatures, the types it nests, and, folded, what its bodies use.
+- **A member** is one line (`(source: String) → [Diagnostic]` plus the first sentence of its
+  summary) that opens to its full contract and the types it uses. Overrides start folded, and
+  members with findings start open.
 
 Access filtering defaults to public when the sources declare anything public, and to internal
 otherwise.

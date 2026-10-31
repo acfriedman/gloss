@@ -3,7 +3,7 @@ import GlossCore
 /// The interface arranged for reading: nodes, the contracts each one shows, and lookups between them.
 ///
 /// Every front end reads the same arrangement, so the page and the app never decide differently which
-/// types are a module's front door, how nested types fold into their roots, or what a map level draws.
+/// types are a module's entry points, how nested types fold into their roots, or what a map level draws.
 public struct Atlas: Sendable {
     /// A contract with the linter's assessment of it. The model and the lint meet here, in the view,
     /// and nowhere earlier; a contract's own fields read through as the reviewed value's.
@@ -234,7 +234,7 @@ public struct Atlas: Sendable {
         }
     }
 
-    /// The front door of a module: root types used from another module, and root types nothing else
+    /// The entry points of a module: root types used from another module, and root types nothing else
     /// in their own module uses but that do depend on something. A type that touches nothing is
     /// left out, since it is no way in, and so is an extension of another module's type unless
     /// another module uses it, since it adds to a door rather than being one.

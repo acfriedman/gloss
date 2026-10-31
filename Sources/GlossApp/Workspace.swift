@@ -12,7 +12,7 @@ import SwiftUI
 final class Workspace {
     /// What the details pane shows and the map lights.
     enum Selection: Hashable {
-        case start
+        case overview
         case modules
         case module(String)
         case folder(String, String)
@@ -40,7 +40,7 @@ final class Workspace {
     private(set) var levels: [String: [String]] = [:]
     private(set) var isLoading = false
     private(set) var problem: String?
-    private(set) var selection = Selection.start
+    private(set) var selection = Selection.overview
     private(set) var scopeID = ""
     private(set) var drawing = Drawing()
     private var focusFrom: String?
@@ -113,7 +113,7 @@ final class Workspace {
         UserDefaults.standard.set(url.path, forKey: Self.lastFolderKey)
         root = url
         name = url.lastPathComponent
-        selection = .start
+        selection = .overview
         scopeID = ""
         reload()
     }
@@ -154,12 +154,12 @@ final class Workspace {
     private func restore() {
         let stillThere: Bool
         switch selection {
-        case .start, .modules: stillThere = true
+        case .overview, .modules: stillThere = true
         case .module(let module): stillThere = atlas?.modules.contains(module) == true
         case .folder(let module, let folder): stillThere = scopes.contains { $0.kind == .folder(module, folder) }
         case .type(let id): stillThere = atlas?.byID[id] != nil
         }
-        if !stillThere { selection = .start }
+        if !stillThere { selection = .overview }
         if scopeID != Self.focus || !stillThere, !scopes.contains(where: { $0.id == scopeID }) {
             scopeID = scope(for: selection)
         }
@@ -170,7 +170,7 @@ final class Workspace {
 
     /// Shows something in the details pane, and moves the map to a level that draws it.
     ///
-    /// - Parameter target: The start page, a module, a folder, or a type.
+    /// - Parameter target: The overview, a module, a folder, or a type.
     ///
     /// A module or folder draws its own level. A type keeps the current level when that level draws it,
     /// re-centers the focus when focused, and otherwise moves to the widest level that draws it.
@@ -264,8 +264,8 @@ final class Workspace {
             return
         }
         switch level.kind {
-        case .allTypes: select(.start)
-        case .modules: select(scopes.first?.id == level.id ? .start : .modules)
+        case .allTypes: select(.overview)
+        case .modules: select(scopes.first?.id == level.id ? .overview : .modules)
         case .module(let module): select(.module(module))
         case .folder(let module, let folder): select(.folder(module, folder))
         }
@@ -274,7 +274,7 @@ final class Workspace {
     private func scope(for target: Selection) -> String {
         let first = scopes.first?.id ?? ""
         switch target {
-        case .start:
+        case .overview:
             return first
         case .modules:
             return scopes.first { $0.kind == .modules }?.id ?? first
@@ -335,7 +335,7 @@ final class Workspace {
     var litID: String? {
         if let hovered { return hovered }
         switch shown {
-        case .start, .modules: return nil
+        case .overview, .modules: return nil
         case .module(let module): return MapScope.Unit.module(module).id
         case .folder(let module, let folder): return MapScope.Unit.folder(module, folder).id
         case .type(let id): return scopeID == Self.focus ? id : atlas?.byID[id]?.root

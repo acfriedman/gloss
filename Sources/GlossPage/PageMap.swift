@@ -28,11 +28,11 @@ extension InterfacePage {
     /// - Parameters:
     ///   - scope: The level.
     ///   - scopes: Every level, the default first.
-    /// - Returns: `start` for the default level, unless it is a module's, and otherwise the level's own view.
+    /// - Returns: `overview` for the default level, unless it is a module's, and otherwise the level's own view.
     static func view(of scope: MapScope, in scopes: [MapScope]) -> String {
         switch scope.kind {
-        case .allTypes: "start"
-        case .modules: scopes.first?.id == scope.id ? "start" : "modules"
+        case .allTypes: "overview"
+        case .modules: scopes.first?.id == scope.id ? "overview" : "modules"
         case .module(let module): moduleAnchor(module)
         case .folder(let module, let folder): folderAnchor(module, folder)
         }
@@ -136,7 +136,7 @@ extension InterfacePage {
     /// - Returns: One view per level besides the default, plus one per module that has none.
     static func scopeViews(_ atlas: Atlas, scopes: [MapScope]) -> String {
         var html = ""
-        if let overview = scopes.first(where: { $0.kind == .modules }), view(of: overview, in: scopes) != "start" {
+        if let modules = scopes.first(where: { $0.kind == .modules }), view(of: modules, in: scopes) != "overview" {
             html += "<section class=\"view\" id=\"modules\" data-view data-root=\"\" data-scope=\"s-modules\">"
             html += "<header class=\"view-head\"><p class=\"eyebrow\">Modules</p><h2>\(atlas.modules.count) modules</h2>"
             html += "<p class=\"lede\">Each module with the modules it depends on. Select one to draw its types.</p></header><div class=\"cards\">"
@@ -152,7 +152,7 @@ extension InterfacePage {
             html += "<section class=\"view\" id=\"\(view)\" data-view data-root=\"\(escape(MapScope.Unit.module(module).id))\" data-scope=\"\(scope)\">"
             html += "<header class=\"view-head\"><p class=\"eyebrow\">Module</p><h2>\(escape(module))</h2>"
             html += "<p class=\"lede\">\(atlas.summary(of: members))</p></header>"
-            html += chipBlock("Front door", atlas.entryPoints(in: module).map { MapScope.Unit.type($0.id) }, atlas: atlas)
+            html += chipBlock("Entry points", atlas.entryPoints(in: module).map { MapScope.Unit.type($0.id) }, atlas: atlas)
             html += chipBlock("Depends on", uses.map { MapScope.Unit.module($0) }, atlas: atlas)
             html += chipBlock("Used by", usedBy.map { MapScope.Unit.module($0) }, atlas: atlas)
             if folders.count > 1 { html += chipBlock("Folders", folders.map { MapScope.Unit.folder(module, $0) }, atlas: atlas) }

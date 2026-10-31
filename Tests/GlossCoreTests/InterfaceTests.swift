@@ -200,7 +200,7 @@ final class InterfaceTests: XCTestCase {
         let html = InterfacePage.render(interface, title: "Shop")
         XCTAssertTrue(html.contains("<section class=\"stage\" id=\"map\""))
         XCTAssertTrue(html.contains("<aside class=\"panel\""))
-        XCTAssertTrue(html.contains("id=\"start\" data-view data-root=\"\""))
+        XCTAssertTrue(html.contains("id=\"overview\" data-view data-root=\"\""))
         XCTAssertTrue(html.contains("<section class=\"view\" id=\"type\" data-view"), "Type views are built in the page from its data.")
         XCTAssertTrue(html.contains("[hidden] { display: none !important; }"), "Author styles must not reveal hidden elements.")
     }

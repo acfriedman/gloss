@@ -2,7 +2,7 @@ import GlossCore
 import GlossMap
 import SwiftUI
 
-/// The list: the start page, then each module as its source folders hold it, every module, folder,
+/// The list: the overview, then each module as its source folders hold it, every module, folder,
 /// and enclosing type opening and closing on its own.
 struct ListPane: View {
     @Environment(Workspace.self) private var workspace
@@ -17,9 +17,9 @@ struct ListPane: View {
         // selection's value type exactly, so an optional tag would hover but never select.
         ScrollViewReader { proxy in
             List(selection: selection) {
-                Label("Start here", systemImage: "door.left.hand.open")
-                    .modifier(RowHover(target: .start))
-                    .tag(Workspace.Selection.start)
+                Label("Overview", systemImage: "square.grid.2x2")
+                    .modifier(RowHover(target: .overview))
+                    .tag(Workspace.Selection.overview)
                 if let atlas = workspace.atlas {
                     ForEach(atlas.modules, id: \.self) { module in
                         Section(isExpanded: workspace.expansion(ofModule: module)) {

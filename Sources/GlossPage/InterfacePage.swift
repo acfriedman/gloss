@@ -4,7 +4,7 @@ import GlossMap
 
 /// Renders an ``Interface`` as one self-contained HTML page that discloses the system a level at a time.
 ///
-/// The page opens on the front door, the types other code reaches first. From there a reader opens the
+/// The page opens on the overview, the types other code reaches first. From there a reader opens the
 /// dependency map, one type and what flows in and out of it, one operation's full contract, and last
 /// the types used only inside bodies. Each level shows sensible defaults and folds the rest behind a
 /// visible count.
@@ -59,7 +59,7 @@ public enum InterfacePage {
         <label class="check"><input type="checkbox" id="findings-only"> Only types with findings</label>
         </div>
         <details class="index" open><summary>Browse</summary><nav>
-        <a class="top-link" href="#start" data-link="start">Start here</a>
+        <a class="top-link" href="#overview" data-link="overview">Overview</a>
 
         """
         for module in atlas.modules {
@@ -77,7 +77,7 @@ public enum InterfacePage {
         html += "</nav></details>\n</aside>\n"
         html += "<div class=\"splitter split-left\" role=\"separator\" aria-orientation=\"vertical\" aria-label=\"Resize the list\" tabindex=\"0\" data-split=\"left\"></div>\n"
         html += "<aside class=\"panel\" aria-label=\"Details\">\n<p class=\"preview-note\" id=\"preview-note\" hidden>Previewing. Click it to keep it here.</p>\n"
-        html += startView(atlas, title: title, scope: scopes.first?.id ?? "")
+        html += overview(atlas, scope: scopes.first?.id ?? "")
         html += scopeViews(atlas, scopes: scopes)
         html += "<section class=\"view\" id=\"type\" data-view data-root=\"\" aria-live=\"polite\"></section>\n"
         html += "<script type=\"application/json\" id=\"page-data\">\(encode(pageData(atlas, scopesOf: scopesOf)))</script>\n"
@@ -111,16 +111,12 @@ public enum InterfacePage {
         return "g-" + Atlas.safeID(node.module) + "-" + (node.name.isEmpty ? "top" : Atlas.safeID(node.name))
     }
 
-    // MARK: Start
+    // MARK: Overview
 
-    private static func startView(_ atlas: Atlas, title: String, scope: String) -> String {
+    private static func overview(_ atlas: Atlas, scope: String) -> String {
         var html = """
-        <section class="view" id="start" data-view data-root="" data-scope="\(scope)">
-        <header class="view-head">
-        <p class="eyebrow">Start here</p>
-        <h2>The front door of \(escape(title))</h2>
-        <p class="lede">These are the types other code reaches first: each one is used from another module, or is used by nothing else in its own. Open one to see what flows into and out of it, then follow those types inward.</p>
-        </header>
+        <section class="view" id="overview" data-view data-root="" data-scope="\(scope)">
+        <header class="view-head"><h2>Overview</h2></header>
 
         """
         for module in atlas.modules {
@@ -130,7 +126,6 @@ public enum InterfacePage {
             for node in entries {
                 let group = atlas.group(node.id)
                 let summary = group.head?.summary.map(Wording.firstSentence)
-                    ?? (node.keyword == "file" ? "The module's file-scope code: for an executable, its entry point." : nil)
                 let operations = group.members.filter { Wording.isCallable($0.keyword) && Contract.rank($0.access) >= 1 && !$0.isOverride }.count
                 let users = atlas.users(of: node.id)
                 html += "<a class=\"card\" href=\"#\(anchor(node.id, in: atlas))\">"
@@ -145,8 +140,7 @@ public enum InterfacePage {
             }
             html += "</div></section>\n"
         }
-        html += "<p class=\"caption\">Hover a box on the map to preview it here; select it to keep it.</p>\n</section>\n"
-        return html
+        return html + "</section>\n"
     }
 
     // MARK: Members
@@ -526,7 +520,7 @@ public enum InterfacePage {
       var note = document.getElementById("preview-note");
       var narrow = window.matchMedia("(max-width: 900px)");
       var index = document.querySelector(".index");
-      var selected = "start";
+      var selected = "overview";
       var previewing = null;
       var scopeMaps = {};
       document.querySelectorAll("[data-scope-map]").forEach(function (map) { scopeMaps[map.dataset.scopeMap] = map; });
@@ -923,7 +917,7 @@ public enum InterfacePage {
         return list[0];
       }
       function select(id, reveal) {
-        selected = known(id) ? id : "start";
+        selected = known(id) ? id : "overview";
         previewing = null;
         note.hidden = true;
         showScope(scopeFor(mount(selected)));

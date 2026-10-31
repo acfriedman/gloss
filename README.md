@@ -37,7 +37,7 @@ keeps them apart:
 | Target | Holds |
 |---|---|
 | `GlossCore` | Reading, the contract model and its graph, and the lint. |
-| `GlossMap` | The model arranged for reading (`Atlas`): front doors, map levels, the focus, and their layout. |
+| `GlossMap` | The model arranged for reading (`Atlas`): entry points, map levels, the focus, and their layout. |
 | `GlossPage` | The HTML page, rendered from that arrangement. |
 | `GlossApp` | The macOS app, drawn from the same arrangement. |
 
@@ -101,7 +101,7 @@ every pane: the access level, and the button that hides or shows the list, which
 place either way. Both dividers drag (or step with the arrow keys) to resize; sizes are kept in the
 browser, and double-clicking a divider restores its default.
 
-- **Start here** is what the details pane shows first: each module's front door, meaning root types
+- **Overview** is what the details pane shows first: each module's entry points, meaning root types
   used from another module and root types nothing else in their module uses.
 - **The map** shows root types, nested types folded in, with signature dependencies by default and
   body-only dependencies behind a toggle. Layout happens in Swift, so it is plain SVG. It reads at

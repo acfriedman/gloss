@@ -2,7 +2,7 @@ import GlossCore
 import GlossMap
 import SwiftUI
 
-/// The middle pane: the text of whatever is selected, from the start page down to one type's members.
+/// The middle pane: the text of whatever is selected, from the overview down to one type's members.
 ///
 /// A preview is laid over the selection rather than replacing it, so when the preview ends the
 /// selection is back where the reader left it: scrolled to the same place, members still open.
@@ -47,7 +47,7 @@ struct DetailPage: View {
             VStack(alignment: .leading, spacing: 24) {
                 if let atlas = workspace.atlas {
                     switch target {
-                    case .start: StartView(atlas: atlas)
+                    case .overview: Overview(atlas: atlas)
                     case .modules: ModulesView(atlas: atlas)
                     case .module(let module): ModuleView(atlas: atlas, module: module)
                     case .folder(let module, let folder): FolderView(atlas: atlas, module: module, folder: folder)
@@ -66,14 +66,13 @@ struct DetailPage: View {
 
 // MARK: Levels
 
-/// The front door: per module, the types other code reaches first.
-struct StartView: View {
+/// The overview: each module's entry points, the types other code reaches first.
+struct Overview: View {
     @Environment(Workspace.self) private var workspace
     var atlas: Atlas
 
     var body: some View {
-        Heading(eyebrow: "Start here", title: "The front door of \(workspace.name)",
-                lede: "These are the types other code reaches first: each one is used from another module, or is used by nothing else in its own. Open one to see what flows into and out of it, then follow those types inward.")
+        Heading(title: "Overview")
         ForEach(atlas.modules, id: \.self) { module in
             let entries = atlas.entryPoints(in: module).filter(workspace.isShown)
             if !entries.isEmpty {
@@ -88,7 +87,7 @@ struct StartView: View {
     }
 }
 
-/// A type on the start page: its kind, name, first sentence, and who uses it.
+/// A type on the overview: its kind, name, first sentence, and who uses it.
 struct Card: View {
     @Environment(Workspace.self) private var workspace
     var atlas: Atlas
@@ -99,7 +98,6 @@ struct Card: View {
         let operations = group.members.filter { Wording.isCallable($0.keyword) && Contract.rank($0.access) >= 1 && !$0.isOverride }.count
         let users = atlas.users(of: node.id)
         let summary = group.head?.summary.map(Wording.firstSentence)
-            ?? (node.keyword == "file" ? "The module's file-scope code: for an executable, its entry point." : nil)
         let facts = (operations > 0 ? ["\(operations) operation\(operations == 1 ? "" : "s")"] : [])
             + (users.isEmpty ? [] : ["used by " + users.map(atlas.label).joined(separator: ", ")])
         Button { workspace.select(.type(node.id)) } label: {
@@ -147,7 +145,7 @@ struct ModulesView: View {
     }
 }
 
-/// One module: its front door, the modules it depends on and is used by, its folders, and its types.
+/// One module: its entry points, the modules it depends on and is used by, its folders, and its types.
 struct ModuleView: View {
     var atlas: Atlas
     var module: String
@@ -156,7 +154,7 @@ struct ModuleView: View {
         let (uses, usedBy) = atlas.dependencies(ofModule: module)
         let folders = atlas.folders(in: module)
         Heading(eyebrow: "Module", title: module, lede: atlas.summary(of: atlas.types(in: module)))
-        ChipBlock(title: "Front door", units: atlas.entryPoints(in: module).map { .type($0.id) }, atlas: atlas)
+        ChipBlock(title: "Entry points", units: atlas.entryPoints(in: module).map { .type($0.id) }, atlas: atlas)
         ChipBlock(title: "Depends on", units: uses.map { .module($0) }, atlas: atlas)
         ChipBlock(title: "Used by", units: usedBy.map { .module($0) }, atlas: atlas)
         if folders.count > 1 { ChipBlock(title: "Folders", units: folders.map { .folder(module, $0) }, atlas: atlas) }
@@ -326,15 +324,15 @@ struct MemberRow: View {
 
 /// A view's heading: a small label, a title, and one line of context.
 struct Heading: View {
-    var eyebrow: String
+    var eyebrow: String?
     var title: String
-    var lede: String
+    var lede: String?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Eyebrow(text: eyebrow)
+            if let eyebrow { Eyebrow(text: eyebrow) }
             Text(title).font(.system(.title, design: .serif).italic())
-            Text(lede).foregroundStyle(.secondary)
+            if let lede { Text(lede).foregroundStyle(.secondary) }
         }
     }
 }

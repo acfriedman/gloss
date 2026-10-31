@@ -12,17 +12,20 @@ struct ListPane: View {
             get: { workspace.selection },
             set: { if let target = $0 { workspace.select(target) } }
         )
+        // Tags are the plain selection type: a List selects only rows whose tag type matches its
+        // selection's value type exactly, so an optional tag would hover but never select.
         List(selection: selection) {
             Label("Start here", systemImage: "door.left.hand.open")
-                .tag(Workspace.Selection?.some(.start))
+                .modifier(RowHover(target: .start))
+                .tag(Workspace.Selection.start)
             if let atlas = workspace.atlas {
                 ForEach(atlas.modules, id: \.self) { module in
                     let rows = workspace.listed(in: module)
                     Section {
                         ForEach(rows, id: \.id) { node in
                             TypeRow(node: node, atlas: atlas)
-                                .tag(Workspace.Selection?.some(.type(node.id)))
-                                .onHover { $0 ? workspace.hoverBegan(.type(node.id)) : workspace.hoverEnded() }
+                                .modifier(RowHover(target: .type(node.id)))
+                                .tag(Workspace.Selection.type(node.id))
                         }
                     } header: {
                         Button { workspace.select(.module(module)) } label: {
@@ -61,6 +64,31 @@ struct TypeRow: View {
                 .font(.caption.monospacedDigit())
                 .foregroundStyle(.tertiary)
         }
+    }
+}
+
+/// A list row's hover: a subtle highlight while the pointer is on the row or while what it names is
+/// previewed from the map, and the preview itself.
+struct RowHover {
+    @Environment(Workspace.self) private var workspace
+    @State private var isHovered = false
+    var target: Workspace.Selection
+}
+
+extension RowHover: ViewModifier {
+    func body(content: Content) -> some View {
+        let lit = isHovered || workspace.preview == target
+        content
+            .padding(.horizontal, 6)
+            .padding(.vertical, 2)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(RoundedRectangle(cornerRadius: 5).fill(Color.primary.opacity(lit ? 0.08 : 0)))
+            .padding(.horizontal, -6)
+            .padding(.vertical, -2)
+            .onHover { inside in
+                isHovered = inside
+                if inside { workspace.hoverBegan(target) } else { workspace.hoverEnded() }
+            }
     }
 }
 

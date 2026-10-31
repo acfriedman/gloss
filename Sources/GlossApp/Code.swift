@@ -38,7 +38,7 @@ struct Code: View {
         case .number: adaptive(light: 0x1C00CF, dark: 0xD9C97C)
         case .comment: adaptive(light: 0x5D6C79, dark: 0x7F8C98)
         case .type: adaptive(light: 0x3900A0, dark: 0xDABAFF)
-        case .projectType: adaptive(light: 0x1C464A, dark: 0x9EF1DD)
+        case .projectType: adaptive(light: 0x2F7C84, dark: 0x9EF1DD)
         case .declaration: adaptive(light: 0x0F68A0, dark: 0x41A1C0)
         }
     }

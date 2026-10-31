@@ -187,5 +187,6 @@ extension RulesTests {
         XCTAssertEqual(lint("/// Uses `nil`, `.strict`, `Date()`, `NotificationCenter.default`, and `\"a.b\"`.\nfunc f() {}"), [])
         XCTAssertEqual(SymbolReference.linkForm("Cache.load(from:)"), "Cache/load(from:)")
         XCTAssertEqual(lint("/// See `OrderStore.swift` and `plan.json.gz`.\nfunc f() {}"), [])
+        XCTAssertEqual(lint("/// Uses `throws(E)` and `private(set)`.\nfunc f() {}"), [])
     }
 }

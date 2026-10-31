@@ -309,6 +309,13 @@ public enum SymbolReference {
     /// Extensions that make a dotted span a file name rather than a type path.
     public static let fileExtensions: Set<String> = ["swift", "json", "md", "yml", "yaml", "gz", "txt", "plist", "html", "xcodeproj", "h", "m"]
 
+    /// Keywords that take a parenthesized argument, such as `throws(E)` or `private(set)`; call-shaped,
+    /// but never a symbol.
+    public static let keywordForms: Set<String> = [
+        "throws", "rethrows", "private", "fileprivate", "internal", "package", "public", "open",
+        "nonisolated", "unowned", "isolated"
+    ]
+
     /// Whether a span is one of the two reference shapes and not under an external type.
     ///
     /// - Parameter span: The text between single backticks.
@@ -320,6 +327,7 @@ public enum SymbolReference {
         guard isCall || isMember else { return false }
         let segments = span.split(separator: ".").map(String.init)
         if let last = segments.last, fileExtensions.contains(last) { return false }
+        if let base = span.split(separator: "(").first, keywordForms.contains(String(base)) { return false }
         return !externalPrefixes.contains(segments[0])
     }
 

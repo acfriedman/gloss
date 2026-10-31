@@ -49,13 +49,20 @@ a dependency graph of types. A module's top-level statements count as one `top-l
 an executable's entry point appears in the graph. Names no scanned source declares are kept on the
 mention but are not graph nodes.
 
-The page has a sidebar that lists every type and shows one view at a time. The first view is the
-dependency map, with nested types folded into their parent. Each type's view shows its declaration
-and doc, a focused graph (what depends on it on the left, what it depends on on the right, each edge
-labeled holds, takes, returns, throws, conforms, or uses), and its members with their docs and the
-types each one uses. Solid edges come from signatures; dashed edges come only from bodies. The
-sidebar filters by access level, name, and findings. Graph layout happens in Swift, so the figures
-are plain SVG.
+The page discloses the system a level at a time, with a sidebar that lists every type:
+
+1. **Start here** shows each module's front door: root types used from another module, and root
+   types nothing else in their module uses.
+2. **Dependency map** shows every root type, nested types folded in, with signature dependencies
+   by default and body-only dependencies behind a toggle. Layout happens in Swift, so it is plain SVG.
+3. **A type** reads top to bottom: what uses it, the type, what it conforms to, holds, takes,
+   returns, and throws through its signatures, the types it nests, and, folded, what its bodies use.
+4. **A member** is one line (`(source: String) → [Diagnostic]` plus the first sentence of its
+   summary) that opens to its full contract and the types it uses. Overrides start folded, and
+   members with findings start open.
+
+Access filtering defaults to public when the sources declare anything public, and to internal
+otherwise.
 
 The page loads nothing and stamps no time, so it works offline as a CI artifact and the same
 sources always render the same bytes. It shows only what the JSON holds. The command always exits 0;

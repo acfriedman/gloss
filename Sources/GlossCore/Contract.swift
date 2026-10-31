@@ -65,9 +65,13 @@ public struct Contract: Sendable, Equatable, Codable {
     public var parameters: [Parameter]
     /// The return type as written, or `nil` for `Void` callables and for non-callables.
     public var returnType: String?
+    /// A property's type annotation as written, or `nil` when it has none or is not a property.
+    public var valueType: String?
     /// The `throws`, `throws(E)`, or `rethrows` clause as written, or `nil` when the callable does not throw.
     public var throwsClause: String?
     public var isAsync: Bool
+    /// `true` for an `override`, whose contract is the inherited one.
+    public var isOverride: Bool
     public var isDocumented: Bool
     public var requiresDoc: Bool
     public var summary: String?
@@ -131,8 +135,10 @@ public struct Contract: Sendable, Equatable, Codable {
             declaration: facts.header,
             parameters: parameters,
             returnType: declaration.returnsValue ? facts.returnType : nil,
+            valueType: facts.valueType,
             throwsClause: facts.throwsClause,
             isAsync: facts.isAsync,
+            isOverride: declaration.isOverride,
             isDocumented: doc != nil,
             requiresDoc: declaration.requiresDoc,
             summary: structure.flatMap { $0.summary.isEmpty ? nil : $0.summary.map(\.text).joined(separator: " ").trimmed },
@@ -189,6 +195,7 @@ public struct Contract: Sendable, Equatable, Codable {
         var header: String
         var parameterTypes: [(type: String, hasDefault: Bool)]
         var returnType: String?
+        var valueType: String?
         var throwsClause: String?
         var isAsync: Bool
     }

@@ -1,4 +1,4 @@
-/// Places boxes and edge curves for the page's dependency figures: the map top to bottom, a focus left to right.
+/// Places boxes and edge curves for the page's dependency map, top to bottom.
 ///
 /// Layout runs in Swift, not in the browser, so a figure is fixed SVG: it renders without script and
 /// the same graph always yields the same drawing.
@@ -41,8 +41,6 @@ struct GraphLayout {
     var height = 0.0
 
     static let boxHeight = 38.0
-    static let rowGap = 12.0
-    static let columnGap = 88.0
     static let margin = 6.0
 
     /// The width a box needs for its text, from the monospace label and the smaller detail line.
@@ -111,6 +109,16 @@ struct GraphLayout {
                 if indegree[next] == 0 { queue.append(next) }
             }
         }
+
+        // A source sits right above its nearest dependency instead of in the top row, which keeps the
+        // edges of a leaf-level consumer short.
+        var hasPredecessor = Array(repeating: false, count: count)
+        for edge in flow { hasPredecessor[edge.high] = true }
+        for node in 0..<count where !hasPredecessor[node] {
+            if let nearest = successors[node].map({ layer[$0] }).min() { layer[node] = nearest - 1 }
+        }
+        let lowest = layer.min() ?? 0
+        layer = layer.map { $0 - lowest }
 
         let layerCount = (layer.max() ?? 0) + 1
         var slots = Array(repeating: [Slot](), count: layerCount)
@@ -186,71 +194,6 @@ struct GraphLayout {
         layout.width = widest + margin * 2
         layout.height = Double(layerCount) * boxHeight + Double(layerCount - 1) * layerGap + margin * 2
         return layout
-    }
-
-    /// Lays out one node with what depends on it to the left and what it depends on to the right.
-    ///
-    /// - Parameters:
-    ///   - center: The node in focus.
-    ///   - incoming: Nodes that depend on it, each with its link to the center.
-    ///   - outgoing: Nodes it depends on, each with its link from the center.
-    /// - Returns: The placed figure; an empty side leaves its column out.
-    static func focus(center: Item, incoming: [(item: Item, link: Link)], outgoing: [(item: Item, link: Link)]) -> GraphLayout {
-        func columnHeight(_ count: Int) -> Double {
-            Double(count) * boxHeight + Double(max(count - 1, 0)) * rowGap
-        }
-        let tallest = max(columnHeight(incoming.count), columnHeight(outgoing.count), boxHeight)
-        let leftWidth = incoming.map { width(of: $0.item) }.max() ?? 0
-        let centerWidth = width(of: center)
-        let rightWidth = outgoing.map { width(of: $0.item) }.max() ?? 0
-        let centerX = margin + (incoming.isEmpty ? 0 : leftWidth + columnGap)
-        let rightX = centerX + centerWidth + columnGap
-
-        var layout = GraphLayout()
-        let centerY = margin + (tallest - boxHeight) / 2
-        layout.boxes.append(Box(item: center, x: centerX, y: centerY, width: centerWidth))
-        let middle = centerY + boxHeight / 2
-        var y = margin + (tallest - columnHeight(incoming.count)) / 2
-        for (item, link) in incoming {
-            let boxWidth = width(of: item)
-            let left = margin + leftWidth - boxWidth
-            layout.boxes.append(Box(item: item, x: left, y: y, width: boxWidth))
-            let start = (left: left, right: left + boxWidth, y: y + boxHeight / 2)
-            layout.curves.append(Curve(link: link, path: path(through: [start, (centerX, centerX, middle)]), reversed: false))
-            y += boxHeight + rowGap
-        }
-        y = margin + (tallest - columnHeight(outgoing.count)) / 2
-        for (item, link) in outgoing {
-            let boxWidth = width(of: item)
-            layout.boxes.append(Box(item: item, x: rightX, y: y, width: boxWidth))
-            let end = (left: rightX, right: rightX + boxWidth, y: y + boxHeight / 2)
-            layout.curves.append(Curve(link: link, path: path(through: [(centerX + centerWidth, centerX + centerWidth, middle), end]), reversed: false))
-            y += boxHeight + rowGap
-        }
-        layout.width = (outgoing.isEmpty ? centerX + centerWidth : rightX + rightWidth) + margin
-        layout.height = tallest + margin * 2
-        return layout
-    }
-
-    /// An SVG path leaving each point's right side and entering the next point's left side, with
-    /// horizontal tangents so edges read as flowing left to right.
-    ///
-    /// - Parameter points: Anchors in flow order; a placeholder's left and right differ, a box's are its sides.
-    /// - Returns: Path data for the `d` attribute.
-    static func path(through points: [(left: Double, right: Double, y: Double)]) -> String {
-        guard let first = points.first else { return "" }
-        var data = "M\(format(first.right)),\(format(first.y))"
-        var previous = first
-        for (index, point) in points.enumerated().dropFirst() {
-            let bend = (point.left - previous.right) / 2
-            data += " C\(format(previous.right + bend)),\(format(previous.y)) \(format(point.left - bend)),\(format(point.y)) \(format(point.left)),\(format(point.y))"
-            // A placeholder mid-route is crossed straight; the last point is a box, entered at its left side.
-            if index < points.count - 1, point.right > point.left {
-                data += " L\(format(point.right)),\(format(point.y))"
-            }
-            previous = point
-        }
-        return data
     }
 
     /// An SVG path leaving each point's bottom and entering the next point's top, with vertical tangents,

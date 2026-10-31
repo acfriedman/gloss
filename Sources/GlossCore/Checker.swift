@@ -88,7 +88,7 @@ public final class Checker: SyntaxVisitor {
         let line = converter.location(for: first.positionAfterSkippingLeadingTrivia).line
         let declaration = Declaration(kind: .other, name: "top-level code", file: file, line: line, column: 1)
         let facts = Contract.Facts(keyword: "code", mentions: mentions, container: [], access: "internal",
-                                   header: "top-level code", parameterTypes: [], returnType: nil, throwsClause: nil, isAsync: false)
+                                   header: "top-level code", parameterTypes: [], returnType: nil, valueType: nil, throwsClause: nil, isAsync: false)
         recorded.append(Contract.make(declaration, doc: nil, facts: facts, findings: []))
         return .visitChildren
     }
@@ -288,6 +288,7 @@ public final class Checker: SyntaxVisitor {
             header: Header.text(of: node),
             parameterTypes: (parameters ?? []).map { ($0.type.trimmedDescription + ($0.ellipsis?.text ?? ""), $0.defaultValue != nil) },
             returnType: returnType?.trimmedDescription,
+            valueType: node.as(VariableDeclSyntax.self)?.bindings.first?.typeAnnotation?.type.trimmedDescription,
             throwsClause: effects?.throwsClause?.trimmedDescription,
             isAsync: effects?.asyncSpecifier != nil
         )

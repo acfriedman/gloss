@@ -1,7 +1,11 @@
 import Foundation
 
-/// Renders an ``Interface`` as one self-contained HTML page: a sidebar that lists every type, and a
-/// main area that shows one thing at a time, either the dependency map or a single type.
+/// Renders an ``Interface`` as one self-contained HTML page that discloses the system a level at a time.
+///
+/// The page opens on the front door, the types other code reaches first. From there a reader opens the
+/// dependency map, one type and what flows in and out of it, one operation's full contract, and last
+/// the types used only inside bodies. Each level shows sensible defaults and folds the rest behind a
+/// visible count.
 ///
 /// The page loads nothing and stamps no time, so the same sources always render the same bytes and a
 /// CI artifact diffs cleanly. It shows only what the model holds; a gap on the page is a gap in the model.
@@ -16,6 +20,8 @@ public enum InterfacePage {
         let site = Site(interface)
         let owed = interface.contracts.filter(\.requiresDoc)
         let findings = interface.contracts.reduce(0) { $0 + $1.findings.count }
+        let hasPublic = interface.contracts.contains { Contract.rank($0.access) >= 3 }
+        func pressed(_ min: Int) -> String { String(min == (hasPublic ? 3 : 1)) }
         var html = """
         <!doctype html>
         <html lang="en">
@@ -39,22 +45,24 @@ public enum InterfacePage {
         </dl>
         <div class="controls">
         <div class="seg" role="group" aria-label="Access level">
-        <button type="button" data-min="3" aria-pressed="false">Public</button>
-        <button type="button" data-min="1" aria-pressed="true">Internal</button>
-        <button type="button" data-min="0" aria-pressed="false">All</button>
+        <button type="button" data-min="3" aria-pressed="\(pressed(3))">Public</button>
+        <button type="button" data-min="1" aria-pressed="\(pressed(1))">Internal</button>
+        <button type="button" data-min="0" aria-pressed="\(pressed(0))">All</button>
         </div>
         <input type="search" id="filter" placeholder="Find a type or member" aria-label="Find a type or member" autocomplete="off">
         <label class="check"><input type="checkbox" id="findings-only"> Only types with findings</label>
         </div>
         <details class="index" open><summary>Browse</summary><nav>
-        <a class="map-link" href="#map" data-link="map">Dependency map<span class="count">\(site.rootIDs.count)</span></a>
+        <a class="top-link" href="#start" data-link="start">Start here</a>
+        <a class="top-link" href="#map" data-link="map">Dependency map<span class="count">\(site.rootIDs.count)</span></a>
 
         """
         for module in site.modules {
             html += "<h2>\(escape(module))</h2><ul>"
             for node in site.nodes where node.module == module {
                 let group = site.groups[node.id] ?? Site.Group()
-                let rank = ([group.head].compactMap { $0 } + group.members).map { Contract.rank($0.access) }.max() ?? Contract.rank(node.access)
+                let contracts = [group.head].compactMap { $0 } + group.members
+                let rank = node.keyword == "file" ? 3 : contracts.map { Contract.rank($0.access) }.max() ?? Contract.rank(node.access)
                 let search = ([node.name] + group.members.map(\.name)).joined(separator: " ").lowercased()
                 let dot = group.findingCount > 0 ? "<span class=\"dot\" title=\"\(group.findingCount) findings\"></span>" : ""
                 html += "<li class=\"depth-\(site.depth(node))\" data-group data-rank=\"\(rank)\" data-findings=\"\(group.findingCount)\" data-search=\"\(escape(search))\">"
@@ -63,6 +71,7 @@ public enum InterfacePage {
             html += "</ul>\n"
         }
         html += "</nav></details>\n</aside>\n<main>\n"
+        html += startView(site, title: title)
         html += mapView(site)
         for node in site.nodes { html += typeView(node, site) }
         html += """
@@ -86,6 +95,13 @@ public enum InterfacePage {
             var head: Contract?
             var members: [Contract] = []
             var findingCount: Int { (head?.findings.count ?? 0) + members.reduce(0) { $0 + $1.findings.count } }
+        }
+
+        /// An edge between two root nodes, with nested types folded into their roots.
+        struct Rolled {
+            var from: String
+            var to: String
+            var roles: [Contract.Mention.Role]
         }
 
         var nodes: [Graph.Node]
@@ -137,10 +153,10 @@ public enum InterfacePage {
         /// The node's full name as a reader says it.
         ///
         /// - Parameter node: A node.
-        /// - Returns: The qualified name, `extension Name`, or `top-level code`.
+        /// - Returns: The qualified name, `extension Name`, or `top level`.
         func label(_ node: Graph.Node) -> String {
             switch node.keyword {
-            case "file": "top level"
+            case "file": "\(node.module) top level"
             case "extension": "extension \(node.name)"
             default: node.name
             }
@@ -151,23 +167,77 @@ public enum InterfacePage {
         /// - Parameter node: A node.
         /// - Returns: The label, shortened for nested types.
         func shortLabel(_ node: Graph.Node) -> String {
-            depth(node) > 0 ? String(node.name.split(separator: ".").last ?? "") : label(node)
+            if node.keyword == "file" { return "top level" }
+            return depth(node) > 0 ? String(node.name.split(separator: ".").last ?? "") : label(node)
         }
 
-        /// The finding count of a node together with every type nested in it, for the map.
+        /// Whether one node is nested, at any depth, inside another.
+        ///
+        /// - Parameters:
+        ///   - inner: The candidate nested node.
+        ///   - outer: The candidate enclosing node.
+        /// - Returns: `true` when both share a module and `inner`'s name extends `outer`'s with a dot.
+        func isNested(_ inner: Graph.Node, in outer: Graph.Node) -> Bool {
+            inner.module == outer.module && !outer.name.isEmpty && inner.name.hasPrefix(outer.name + ".")
+        }
+
+        /// The finding count of a node together with every type nested in it.
         ///
         /// - Parameter root: A root node id.
         /// - Returns: The total.
         func findings(under root: String) -> Int {
             nodes.filter { $0.root == root }.reduce(0) { $0 + (groups[$1.id]?.findingCount ?? 0) }
         }
+
+        /// Edges between root nodes, nested types folded into their roots.
+        ///
+        /// - Parameter includeBody: `false` drops the `body` role, and with it every edge made only of it.
+        /// - Returns: One edge per ordered pair of roots, in order of first appearance.
+        func rolled(includeBody: Bool) -> [Rolled] {
+            var result: [Rolled] = []
+            var index: [String: Int] = [:]
+            for edge in edges {
+                guard let from = byID[edge.from]?.root, let to = byID[edge.to]?.root, from != to else { continue }
+                let roles = edge.roles.filter { includeBody || $0 != .body }
+                guard !roles.isEmpty else { continue }
+                let key = from + "\u{0}" + to
+                if index[key] == nil {
+                    index[key] = result.count
+                    result.append(Rolled(from: from, to: to, roles: []))
+                }
+                guard let at = index[key] else { continue }
+                for role in roles where !result[at].roles.contains(role) { result[at].roles.append(role) }
+            }
+            let order = Contract.Mention.Role.allCases
+            return result.map { edge in
+                var edge = edge
+                edge.roles.sort { order.firstIndex(of: $0)! < order.firstIndex(of: $1)! }
+                return edge
+            }
+        }
+
+        /// The front door of a module: root types used from another module, and root types nothing else
+        /// in their own module uses but that do depend on something. A type that touches nothing is
+        /// left out, since it is no way in.
+        ///
+        /// - Parameter module: The module name.
+        /// - Returns: Root nodes in graph order.
+        func entryPoints(in module: String) -> [Graph.Node] {
+            let links = rolled(includeBody: true)
+            return rootIDs.compactMap { byID[$0] }.filter { node in
+                guard node.module == module else { return false }
+                let incoming = links.filter { $0.to == node.id }.compactMap { byID[$0.from] }
+                if incoming.contains(where: { $0.module != module }) { return true }
+                return incoming.isEmpty && links.contains { $0.from == node.id }
+            }
+        }
     }
 
-    // MARK: Views
+    // MARK: Words
 
     /// Words for each role, read as "the source … the target".
     static let roleWords: [Contract.Mention.Role: String] = [
-        .conformance: "conforms", .property: "holds", .parameter: "takes",
+        .conformance: "conforms to", .property: "holds", .parameter: "takes",
         .returns: "returns", .throws: "throws", .body: "uses"
     ]
 
@@ -179,102 +249,359 @@ public enum InterfacePage {
         roles.compactMap { roleWords[$0] }.joined(separator: " · ")
     }
 
+    /// The first sentence of a summary, for one-line listings; a period inside a code span does not end it.
+    ///
+    /// - Parameter text: A summary paragraph.
+    /// - Returns: Text up to and including the first sentence-ending period, or all of it.
+    static func firstSentence(_ text: String) -> String {
+        var inCode = false
+        var previous: Character = " "
+        for (offset, character) in text.enumerated() {
+            if character == "`" { inCode.toggle() }
+            let next = text.dropFirst(offset + 1).first
+            if !inCode, character == ".", next == nil || next == " ", previous != "." {
+                return String(text.prefix(offset + 1))
+            }
+            previous = character
+        }
+        return text
+    }
+
+    // MARK: Start
+
+    private static func startView(_ site: Site, title: String) -> String {
+        var html = """
+        <section class="view" id="start" data-view>
+        <header class="view-head">
+        <p class="eyebrow">Start here</p>
+        <h2>The front door of \(escape(title))</h2>
+        <p class="lede">These are the types other code reaches first: each one is used from another module, or is used by nothing else in its own. Open one to see what flows into and out of it, then follow those types inward.</p>
+        </header>
+
+        """
+        let links = site.rolled(includeBody: true)
+        for module in site.modules {
+            let entries = site.entryPoints(in: module)
+            guard !entries.isEmpty else { continue }
+            html += "<section class=\"block\"><h3>\(escape(module))</h3><div class=\"cards\">"
+            for node in entries {
+                let group = site.groups[node.id] ?? Site.Group()
+                let summary = group.head?.summary.map(firstSentence)
+                    ?? (node.keyword == "file" ? "The module's file-scope code: for an executable, its entry point." : nil)
+                let operations = group.members.filter { isCallable($0) && Contract.rank($0.access) >= 1 && !$0.isOverride }.count
+                let users = links.filter { $0.to == node.id }.compactMap { site.byID[$0.from] }
+                html += "<a class=\"card\" href=\"#\(site.anchor(node.id))\">"
+                html += "<span class=\"card-kind\">\(escape(node.keyword == "file" ? "file scope" : node.keyword))</span>"
+                html += "<code class=\"card-name\">\(escape(site.label(node)))</code>"
+                html += summary.map { "<span class=\"card-summary\">\(inline($0))</span>" } ?? ""
+                var facts: [String] = []
+                if operations > 0 { facts.append("\(operations) operation\(operations == 1 ? "" : "s")") }
+                if !users.isEmpty { facts.append("used by " + users.map(site.label).joined(separator: ", ")) }
+                if !facts.isEmpty { html += "<span class=\"card-facts\">\(escape(facts.joined(separator: " · ")))</span>" }
+                html += "</a>"
+            }
+            html += "</div></section>\n"
+        }
+        html += "<p class=\"caption\"><a href=\"#map\">Open the dependency map</a> to see every type at once.</p>\n</section>\n"
+        return html
+    }
+
+    // MARK: Map
+
     private static func mapView(_ site: Site) -> String {
-        let multiModule = site.modules.count > 1
-        let items = site.rootIDs.compactMap { site.byID[$0] }.map { node in
-            GraphLayout.Item(id: node.id, label: site.label(node),
-                             detail: ([node.keyword == "file" ? "file scope" : node.keyword] + (multiModule ? [node.module] : [])).joined(separator: " · "),
-                             link: site.anchor(node.id),
-                             classes: [site.findings(under: node.id) > 0 ? "dirty" : nil, Contract.rank(node.access) == 0 ? "private" : nil]
-                                .compactMap { $0 }.joined(separator: " "))
-        }
-        var rolled: [String: (from: String, to: String, roles: [Contract.Mention.Role])] = [:]
-        var order: [String] = []
-        for edge in site.edges {
-            guard let from = site.byID[edge.from]?.root, let to = site.byID[edge.to]?.root, from != to else { continue }
-            let key = from + "\u{0}" + to
-            if rolled[key] == nil { order.append(key); rolled[key] = (from, to, []) }
-            for role in edge.roles where rolled[key]?.roles.contains(role) == false { rolled[key]?.roles.append(role) }
-        }
-        let rolesOrder = Contract.Mention.Role.allCases
-        let links = order.compactMap { rolled[$0] }.map { edge in
-            let roles = edge.roles.sorted { rolesOrder.firstIndex(of: $0)! < rolesOrder.firstIndex(of: $1)! }
-            let names = [edge.from, edge.to].map { site.byID[$0].map(site.label) ?? $0 }
-            return GraphLayout.Link(from: edge.from, to: edge.to, dashed: roles == [.body],
-                                    title: "\(names[0]) \(words(roles)) \(names[1])")
-        }
-        let layout = GraphLayout.layered(items, links)
-        return """
+        var html = """
         <section class="view" id="map" data-view>
         <header class="view-head">
         <p class="eyebrow">Dependency map</p>
         <h2>How the types connect</h2>
-        <p class="lede">Each box is a type with everything nested in it. An arrow points from a type to a type it depends on. Hover a box to trace its edges; select it to open the type.</p>
-        <ul class="legend"><li><span class="swatch"></span>Interface: holds, takes, returns, throws, or conforms</li><li><span class="swatch body"></span>Body only: uses inside an implementation</li></ul>
+        <p class="lede">Each box is a type with everything nested in it, and an arrow points from a type to one it depends on. The map starts with dependencies that are part of a signature; hover a box to trace its edges, and select it to open the type.</p>
+        <label class="check"><input type="checkbox" id="map-body"> Include dependencies used only inside bodies</label>
         </header>
-        <div class="figure">\(svg(layout, label: "Dependency map of \(items.count) types", marker: "map"))</div>
-        <p class="caption">\(items.count) types, \(links.count) dependencies.</p>
-        </section>
 
         """
+        for includeBody in [false, true] {
+            let links = site.rolled(includeBody: includeBody)
+            let connected = Set(links.flatMap { [$0.from, $0.to] })
+            let roots = site.rootIDs.compactMap { site.byID[$0] }
+            let items = roots.filter { connected.contains($0.id) }.map { node in
+                GraphLayout.Item(id: node.id, label: site.label(node),
+                                 detail: ([node.keyword == "file" ? "file scope" : node.keyword] + (site.modules.count > 1 ? [node.module] : [])).joined(separator: " · "),
+                                 link: site.anchor(node.id),
+                                 classes: [site.findings(under: node.id) > 0 ? "dirty" : nil, Contract.rank(node.access) == 0 ? "private" : nil]
+                                    .compactMap { $0 }.joined(separator: " "))
+            }
+            let drawn = links.map { edge in
+                let names = [edge.from, edge.to].map { site.byID[$0].map(site.label) ?? $0 }
+                return GraphLayout.Link(from: edge.from, to: edge.to, dashed: edge.roles == [.body], title: "\(names[0]) \(words(edge.roles)) \(names[1])")
+            }
+            let layout = GraphLayout.layered(items, drawn)
+            let loose = roots.filter { !connected.contains($0.id) }
+            html += "<div class=\"map-variant\" data-map=\"\(includeBody ? "all" : "interface")\"\(includeBody ? " hidden" : "")>"
+            html += "<ul class=\"legend\"><li><span class=\"swatch\"></span>In a signature: holds, takes, returns, throws, or conforms to</li>"
+            if includeBody { html += "<li><span class=\"swatch body\"></span>Only inside a body: uses</li>" }
+            html += "</ul>"
+            html += "<div class=\"figure\">\(svg(layout, label: "Dependency map of \(items.count) types", marker: includeBody ? "map-all" : "map"))</div>"
+            html += "<p class=\"caption\">\(items.count) connected types, \(drawn.count) dependencies.</p>"
+            if !loose.isEmpty {
+                html += "<p class=\"loose\"><span class=\"term\">Not connected</span>"
+                for node in loose { html += chip(node, site: site) }
+                html += "</p>"
+            }
+            html += "</div>\n"
+        }
+        return html + "</section>\n"
     }
+
+    // MARK: Type
 
     private static func typeView(_ node: Graph.Node, _ site: Site) -> String {
         let group = site.groups[node.id] ?? Site.Group()
         let anchor = site.anchor(node.id)
+        let name = site.label(node)
         var html = "<section class=\"view\" id=\"\(anchor)\" data-view>\n<header class=\"view-head\">"
-        let path = node.root == node.id ? "" : " · in \(escape(site.byID[node.root].map(site.label) ?? ""))"
-        html += "<p class=\"eyebrow\">\(escape(node.module)) · \(escape(node.keyword == "file" ? "file scope" : node.keyword))\(path)</p>"
+        let parent = node.root == node.id ? "" : " · in \(escape(site.byID[node.root].map(site.label) ?? ""))"
+        html += "<p class=\"eyebrow\">\(escape(node.module)) · \(escape(node.keyword == "file" ? "file scope" : node.keyword))\(parent)</p>"
         if let head = group.head {
             html += "<h2 class=\"decl\"><code>\(highlight(head.declaration, name: head.name))</code></h2>"
-            html += "<div class=\"head-gloss\">\(gloss(head, site: site, owner: node.id, showUses: false))</div>"
-            html += "<p class=\"loc\">\(escape(head.file)):\(head.line)</p>"
+            if let summary = head.summary {
+                html += "<p class=\"lede ink\">\(inline(summary))</p>"
+            } else if head.exemption == nil {
+                html += "<p class=\"lede missing\">No doc comment.</p>"
+            }
+            html += findingsList(head)
+            let more = head.notes.map { "<p>\(inline($0))</p>" }.joined()
+                + head.callouts.map { "<p><span class=\"term\">\(escape($0.keyword))</span> \(inline($0.text))</p>" }.joined()
+                + (head.exemption.map { "<p><span class=\"tag\">Exempt</span> \(inline($0))</p>" } ?? "")
+            if !more.isEmpty {
+                html += "<details class=\"more\"><summary>More about \(escape(head.name))</summary><div class=\"more-body\">\(more)<p class=\"loc\">\(escape(head.file)):\(head.line)</p></div></details>"
+            }
         } else {
-            html += "<h2>\(escape(site.label(node)))</h2>"
+            html += "<h2>\(escape(name))</h2>"
             html += node.keyword == "extension"
                 ? "<p class=\"lede\">Members added to a type that no scanned source declares.</p>"
                 : "<p class=\"lede\">Declarations and statements at file scope in this module.</p>"
         }
         html += "</header>\n"
-
-        let center = GraphLayout.Item(id: node.id, label: site.label(node), detail: node.keyword == "file" ? "file scope" : node.keyword,
-                                      link: anchor, classes: "current")
-        func neighbor(_ id: String, _ roles: [Contract.Mention.Role]) -> GraphLayout.Item? {
-            guard let other = site.byID[id] else { return nil }
-            let module = other.module == node.module ? [] : [other.module]
-            return GraphLayout.Item(id: other.id, label: site.label(other), detail: ([words(roles)] + module).joined(separator: " · "),
-                                    link: site.anchor(other.id),
-                                    classes: (site.groups[other.id]?.findingCount ?? 0) > 0 ? "dirty" : "")
-        }
-        // Signature edges first, then body-only ones: the contract's own dependencies lead.
-        let ranked = site.edges.enumerated().sorted { ($0.element.roles == [.body] ? 1 : 0, $0.offset) < ($1.element.roles == [.body] ? 1 : 0, $1.offset) }.map(\.element)
-        let incoming = ranked.filter { $0.to == node.id }.compactMap { edge in
-            neighbor(edge.from, edge.roles).map { ($0, GraphLayout.Link(from: edge.from, to: edge.to, dashed: edge.roles == [.body],
-                                                                         title: "\($0.label) \(words(edge.roles)) \(center.label) via \(edge.via.joined(separator: ", "))")) }
-        }
-        let outgoing = ranked.filter { $0.from == node.id }.compactMap { edge in
-            neighbor(edge.to, edge.roles).map { ($0, GraphLayout.Link(from: edge.from, to: edge.to, dashed: edge.roles == [.body],
-                                                                       title: "\(center.label) \(words(edge.roles)) \($0.label) via \(edge.via.joined(separator: ", "))")) }
-        }
-        html += "<section class=\"block\"><h3>Dependencies</h3>"
-        if incoming.isEmpty && outgoing.isEmpty {
-            html += "<p class=\"caption\">Nothing in the scanned sources depends on \(escape(center.label)), and it depends on nothing scanned.</p>"
-        } else {
-            let left = incoming.isEmpty ? "Nothing scanned depends on it" : "Left: what depends on it"
-            let right = outgoing.isEmpty ? "it depends on nothing scanned" : "right: what it depends on"
-            html += "<p class=\"caption\">\(left); \(right). Labels say how.</p>"
-            let layout = GraphLayout.focus(center: center, incoming: incoming, outgoing: outgoing)
-            html += "<div class=\"figure\">\(svg(layout, label: "Dependencies of \(center.label)", marker: anchor))</div>"
-        }
-        html += "</section>\n"
-
-        if !group.members.isEmpty {
-            html += "<section class=\"block\"><h3>Members <span class=\"count\">\(group.members.count)</span></h3>"
-            html += "<div class=\"columns\" aria-hidden=\"true\"><span>Declaration</span><span>Gloss</span></div>\n"
-            for member in group.members { html += row(member, site: site, owner: node.id) }
-            html += "<p class=\"empty\" hidden>No members match the current filter.</p></section>\n"
-        }
+        html += flow(node, site: site)
+        html += members(group.members, site: site, owner: node.id)
         return html + "</section>\n"
+    }
+
+    /// The type's place in the system, read top to bottom: what uses it, the type, what it takes in and
+    /// gives out through its signatures, and, folded, what its bodies use.
+    ///
+    /// - Parameters:
+    ///   - node: The type in view.
+    ///   - site: The arranged interface, for neighbors and links.
+    /// - Returns: The flow block; types nested in the node are listed as nested, never as neighbors.
+    private static func flow(_ node: Graph.Node, site: Site) -> String {
+        let incoming = site.edges.filter { edge in
+            guard edge.to == node.id, let from = site.byID[edge.from] else { return false }
+            return !site.isNested(from, in: node)
+        }.sorted { ($0.roles == [.body] ? 1 : 0) < ($1.roles == [.body] ? 1 : 0) }
+        let outgoing = site.edges.filter { edge in
+            guard edge.from == node.id, let to = site.byID[edge.to] else { return false }
+            return !site.isNested(to, in: node)
+        }
+        let nested = site.nodes.filter { site.isNested($0, in: node) && $0.name.split(separator: ".").count == node.name.split(separator: ".").count + 1 }
+        let name = node.keyword == "file" ? "top level" : site.shortLabel(node)
+
+        var html = "<section class=\"block\"><h3>Flow</h3><div class=\"flow\">"
+        html += "<div class=\"band\"><span class=\"role\">Used by</span><div class=\"chips\">"
+        if incoming.isEmpty {
+            html += "<span class=\"none\">Nothing in the scanned sources</span>"
+        } else {
+            for edge in incoming {
+                guard let from = site.byID[edge.from] else { continue }
+                html += chip(from, site: site, dashed: edge.roles == [.body], title: "\(site.label(from)) \(words(edge.roles)) \(name)")
+            }
+        }
+        html += "</div></div>"
+        html += "<div class=\"core\"><code>\(escape(name))</code></div>"
+        var rows = ""
+        for role in Contract.Mention.Role.allCases where role != .body {
+            let targets = outgoing.filter { $0.roles.contains(role) }.compactMap { site.byID[$0.to] }
+            guard !targets.isEmpty else { continue }
+            rows += "<div class=\"band\"><span class=\"role\">\(escape(roleWords[role] ?? ""))</span><div class=\"chips\">"
+            for target in targets { rows += chip(target, site: site) }
+            rows += "</div></div>"
+        }
+        html += rows.isEmpty ? "<div class=\"band\"><span class=\"role\">signature</span><div class=\"chips\"><span class=\"none\">No scanned types in its signatures</span></div></div>" : rows
+        if !nested.isEmpty {
+            html += "<div class=\"band\"><span class=\"role\">nests</span><div class=\"chips\">"
+            for child in nested { html += chip(child, site: site, short: true) }
+            html += "</div></div>"
+        }
+        let inside = outgoing.filter { $0.roles == [.body] }.compactMap { site.byID[$0.to] }
+        if !inside.isEmpty {
+            html += "<details class=\"band inside\"><summary><span class=\"role\">inside</span><span class=\"reveal\">Uses \(inside.count) more type\(inside.count == 1 ? "" : "s") inside its bodies</span></summary><div class=\"chips\">"
+            for target in inside { html += chip(target, site: site, dashed: true) }
+            html += "</div></details>"
+        }
+        return html + "</div></section>\n"
+    }
+
+    /// A link to a node's view, filtered with the access level like everything else on the page.
+    ///
+    /// - Parameters:
+    ///   - node: The node to link to.
+    ///   - site: The arranged interface, for the label and anchor.
+    ///   - dashed: `true` when the link stands for a dependency used only inside a body.
+    ///   - title: The tooltip, or `nil` for none.
+    ///   - short: `true` to show only the last path component, for a type nested in the one in view.
+    /// - Returns: An `<a>` element; file scope counts as public so the filter never hides an entry point.
+    private static func chip(_ node: Graph.Node, site: Site, dashed: Bool = false, title: String? = nil, short: Bool = false) -> String {
+        let label = short ? site.shortLabel(node) : site.label(node)
+        let dirty = (site.groups[node.id]?.findingCount ?? 0) > 0
+        let classes = ["chip", dashed ? "body" : nil, dirty ? "dirty" : nil].compactMap { $0 }.joined(separator: " ")
+        let access = node.keyword == "file" ? "public" : node.access
+        return "<a class=\"\(classes)\" href=\"#\(site.anchor(node.id))\" data-access=\"\(access)\"\(title.map { " title=\"\(escape($0))\"" } ?? "")>\(escape(label))</a>"
+    }
+
+    // MARK: Members
+
+    /// Whether a contract is something a caller invokes.
+    ///
+    /// - Parameter contract: Any contract.
+    /// - Returns: `true` for functions, initializers, subscripts, and macros.
+    static func isCallable(_ contract: Contract) -> Bool {
+        ["func", "init", "subscript", "macro"].contains(contract.keyword)
+    }
+
+    /// The members of one type, a line each, grouped by what a caller does with them. Overrides
+    /// restate an inherited contract, so they start folded.
+    ///
+    /// - Parameters:
+    ///   - contracts: The members, in source order.
+    ///   - site: The arranged interface, for links.
+    ///   - owner: The node id of the type in view, left out of each member's uses.
+    /// - Returns: One section per non-empty group, or an empty string for a type with no members.
+    private static func members(_ contracts: [Contract], site: Site, owner: String) -> String {
+        guard !contracts.isEmpty else { return "" }
+        let sections: [(title: String, members: [Contract], folded: Bool)] = [
+            ("Operations", contracts.filter { isCallable($0) && !$0.isOverride }, false),
+            ("Properties", contracts.filter { ["var", "let"].contains($0.keyword) && !$0.isOverride }, false),
+            ("Cases", contracts.filter { $0.keyword == "case" }, false),
+            ("Other", contracts.filter { !isCallable($0) && !["var", "let", "case"].contains($0.keyword) }, false),
+            ("Overrides", contracts.filter(\.isOverride), true)
+        ]
+        var html = ""
+        for section in sections where !section.members.isEmpty {
+            let list = section.members.map { member($0, site: site, owner: owner) }.joined()
+            let heading = "\(section.title) <span class=\"count\" data-shown>\(section.members.count)</span>"
+            if section.folded {
+                html += "<section class=\"block\"><details class=\"fold\"><summary><h3>\(heading)</h3><span class=\"fold-note\">Inherited contracts, folded</span></summary><div class=\"members\">\(list)</div></details></section>\n"
+            } else {
+                html += "<section class=\"block\"><h3>\(heading)</h3><div class=\"members\">\(list)</div></section>\n"
+            }
+        }
+        return html
+    }
+
+    /// One member as a line that opens to its full contract. A member with findings starts open.
+    ///
+    /// - Parameters:
+    ///   - contract: The member.
+    ///   - site: The arranged interface, for links.
+    ///   - owner: The node id of the type in view.
+    /// - Returns: A `<details>` element whose summary is the one-line form.
+    private static func member(_ contract: Contract, site: Site, owner: String) -> String {
+        let classes = ["member", Contract.rank(contract.access) == 0 ? "private" : nil].compactMap { $0 }.joined(separator: " ")
+        var html = "<details class=\"\(classes)\" data-row data-access=\"\(contract.access)\" data-findings=\"\(contract.findings.count)\"\(contract.findings.isEmpty ? "" : " open")>"
+        html += "<summary><span class=\"sig\"><b>\(escape(contract.name))</b>\(signatureFlow(contract))</span>"
+        if !contract.findings.isEmpty { html += "<span class=\"dot\" title=\"\(contract.findings.count) findings\"></span>" }
+        if let summary = contract.summary {
+            html += "<span class=\"brief\">\(inline(firstSentence(summary)))</span>"
+        } else if contract.requiresDoc, contract.exemption == nil {
+            html += "<span class=\"brief missing\">No doc comment.</span>"
+        }
+        html += "</summary><div class=\"member-body\">"
+        html += "<div class=\"code\"><code>\(highlight(contract.declaration, name: contract.name))</code>"
+        html += "<span class=\"loc\">\(escape((contract.file as NSString).lastPathComponent)):\(contract.line)</span></div>"
+        html += "<div class=\"gloss\">\(gloss(contract, site: site, owner: owner))</div>"
+        return html + "</div></details>\n"
+    }
+
+    /// What a member takes and gives back, in one line: `(source: String) throws → [Diagnostic]` for a
+    /// callable, `: Int` for an annotated property, and nothing for the rest.
+    ///
+    /// - Parameter contract: The member.
+    /// - Returns: Escaped HTML, or an empty string for a member with nothing to show.
+    static func signatureFlow(_ contract: Contract) -> String {
+        if isCallable(contract) {
+            let parameters = contract.parameters.map { parameter in
+                (parameter.label.map { "<span class=\"param\">\(escape($0)):</span> " } ?? "") + "<span class=\"ty\">\(escape(parameter.type))</span>"
+            }.joined(separator: ", ")
+            var text = "<span class=\"flow-line\">(\(parameters))"
+            if contract.isAsync { text += " <span class=\"kw\">async</span>" }
+            if let clause = contract.throwsClause { text += " <span class=\"kw\">\(escape(clause))</span>" }
+            if let type = contract.returnType { text += " → <span class=\"ty\">\(escape(type))</span>" }
+            return text + "</span>"
+        }
+        if let type = contract.valueType { return "<span class=\"flow-line\">: <span class=\"ty\">\(escape(type))</span></span>" }
+        return ""
+    }
+
+    private static func findingsList(_ contract: Contract) -> String {
+        guard !contract.findings.isEmpty else { return "" }
+        var html = "<ul class=\"findings\">"
+        for finding in contract.findings {
+            html += "<li><code class=\"rule\">\(escape(finding.rule))</code> \(inline(finding.message)) <span class=\"at\">line \(finding.line)</span></li>"
+        }
+        return html + "</ul>"
+    }
+
+    /// A member's full contract: summary, entries, notes, the types it uses, and its findings.
+    ///
+    /// - Parameters:
+    ///   - contract: The member.
+    ///   - site: The arranged interface, for links to the types it uses.
+    ///   - owner: The node id of the type in view, left out of the uses.
+    /// - Returns: Escaped HTML for the expanded member.
+    private static func gloss(_ contract: Contract, site: Site, owner: String) -> String {
+        var html = ""
+        if let summary = contract.summary {
+            html += "<p class=\"summary\">\(inline(summary))</p>"
+        }
+        if let exemption = contract.exemption {
+            html += "<p class=\"exempt\"><span class=\"tag\">Exempt</span> \(inline(exemption))</p>"
+        }
+        var terms = ""
+        for parameter in contract.parameters {
+            let label = parameter.label.map { $0 == parameter.name ? $0 : "\($0) \(parameter.name)" } ?? "_ \(parameter.name)"
+            terms += "<dt><code>\(escape(label))</code><span class=\"type\">\(escape(parameter.type))\(parameter.hasDefault ? " = default" : "")</span></dt>"
+            terms += parameter.doc.map { "<dd>\(inline($0))</dd>" } ?? "<dd class=\"missing\">Undocumented.</dd>"
+        }
+        if let type = contract.returnType {
+            terms += "<dt><span class=\"term\">Returns</span><span class=\"type\">\(escape(type))</span></dt>"
+            terms += contract.returns.map { "<dd>\(inline($0))</dd>" } ?? "<dd class=\"missing\">Undocumented.</dd>"
+        }
+        if let clause = contract.throwsClause {
+            terms += "<dt><span class=\"term\">Throws</span><span class=\"type\">\(escape(clause))</span></dt>"
+            terms += contract.throwsDoc.map { "<dd>\(inline($0))</dd>" } ?? "<dd class=\"missing\">Undocumented.</dd>"
+        }
+        for callout in contract.callouts {
+            terms += "<dt><span class=\"term\">\(escape(callout.keyword))</span></dt><dd>\(inline(callout.text))</dd>"
+        }
+        if !terms.isEmpty, contract.exemption == nil || contract.isDocumented { html += "<dl class=\"terms\">\(terms)</dl>" }
+        for note in contract.notes { html += "<p class=\"note\">\(inline(note))</p>" }
+        var targets: [String] = []
+        var bodyOnly: [String: Bool] = [:]
+        for mention in contract.mentions {
+            guard let target = mention.resolved, target != owner else { continue }
+            if bodyOnly[target] == nil { targets.append(target) }
+            bodyOnly[target] = (bodyOnly[target] ?? true) && mention.role == .body
+        }
+        if !targets.isEmpty {
+            html += "<p class=\"uses\"><span class=\"term\">Uses</span>"
+            for target in targets {
+                guard let node = site.byID[target] else { continue }
+                html += chip(node, site: site, dashed: bodyOnly[target] == true,
+                             title: bodyOnly[target] == true ? "Used inside the body" : "Part of the signature")
+            }
+            html += "</p>"
+        }
+        return html + findingsList(contract)
     }
 
     // MARK: Figures
@@ -304,76 +631,6 @@ public enum InterfacePage {
             html += "<text class=\"detail\" x=\"\(format(box.x + 12))\" y=\"\(format(box.y + 30))\">\(escape(item.detail))</text></a>"
         }
         return html + "</g></svg>"
-    }
-
-    // MARK: Rows
-
-    private static func row(_ contract: Contract, site: Site, owner: String) -> String {
-        let classes = ["row", Contract.rank(contract.access) == 0 ? "private" : nil,
-                       contract.findings.isEmpty ? nil : "has-findings"].compactMap { $0 }.joined(separator: " ")
-        let location = (contract.file as NSString).lastPathComponent + ":\(contract.line)"
-        var html = "<div class=\"\(classes)\" data-row data-access=\"\(contract.access)\" data-findings=\"\(contract.findings.count)\">"
-        html += "<div class=\"code\"><code>\(highlight(contract.declaration, name: contract.name))</code>"
-        html += "<span class=\"loc\" title=\"\(escape(contract.file)):\(contract.line)\">\(escape(location))</span></div>"
-        html += "<div class=\"gloss\">" + gloss(contract, site: site, owner: owner, showUses: true) + "</div></div>\n"
-        return html
-    }
-
-    private static func gloss(_ contract: Contract, site: Site, owner: String, showUses: Bool) -> String {
-        var html = ""
-        if let summary = contract.summary {
-            html += "<p class=\"summary\">\(inline(summary))</p>"
-        } else if contract.exemption == nil, contract.keyword != "code" {
-            html += "<p class=\"missing\">\(contract.isDocumented ? "The doc comment has no summary." : "No doc comment.")</p>"
-        }
-        if let exemption = contract.exemption {
-            html += "<p class=\"exempt\"><span class=\"tag\">Exempt</span> \(inline(exemption))</p>"
-        }
-        var terms = ""
-        for parameter in contract.parameters {
-            let label = parameter.label.map { $0 == parameter.name ? $0 : "\($0) \(parameter.name)" } ?? "_ \(parameter.name)"
-            terms += "<dt><code>\(escape(label))</code><span class=\"type\">\(escape(parameter.type))\(parameter.hasDefault ? " = default" : "")</span></dt>"
-            terms += parameter.doc.map { "<dd>\(inline($0))</dd>" } ?? "<dd class=\"missing\">Undocumented.</dd>"
-        }
-        if let type = contract.returnType {
-            terms += "<dt><span class=\"term\">Returns</span><span class=\"type\">\(escape(type))</span></dt>"
-            terms += contract.returns.map { "<dd>\(inline($0))</dd>" } ?? "<dd class=\"missing\">Undocumented.</dd>"
-        }
-        if let clause = contract.throwsClause {
-            terms += "<dt><span class=\"term\">Throws</span><span class=\"type\">\(escape(clause))</span></dt>"
-            terms += contract.throwsDoc.map { "<dd>\(inline($0))</dd>" } ?? "<dd class=\"missing\">Undocumented.</dd>"
-        }
-        for callout in contract.callouts {
-            terms += "<dt><span class=\"term\">\(escape(callout.keyword))</span></dt><dd>\(inline(callout.text))</dd>"
-        }
-        if !terms.isEmpty, contract.exemption == nil || contract.isDocumented { html += "<dl class=\"terms\">\(terms)</dl>" }
-        for note in contract.notes { html += "<p class=\"note\">\(inline(note))</p>" }
-        if showUses {
-            var targets: [String] = []
-            var bodyOnly: [String: Bool] = [:]
-            for mention in contract.mentions {
-                guard let target = mention.resolved, target != owner else { continue }
-                if bodyOnly[target] == nil { targets.append(target) }
-                bodyOnly[target] = (bodyOnly[target] ?? true) && mention.role == .body
-            }
-            if !targets.isEmpty {
-                html += "<p class=\"uses\"><span class=\"term\">Uses</span>"
-                for target in targets {
-                    guard let node = site.byID[target] else { continue }
-                    let title = bodyOnly[target] == true ? "Used inside the body" : "Part of the signature"
-                    html += "<a class=\"chip\(bodyOnly[target] == true ? " body" : "")\" href=\"#\(site.anchor(target))\" title=\"\(title)\">\(escape(site.label(node)))</a>"
-                }
-                html += "</p>"
-            }
-        }
-        if !contract.findings.isEmpty {
-            html += "<ul class=\"findings\">"
-            for finding in contract.findings {
-                html += "<li><code class=\"rule\">\(escape(finding.rule))</code> \(inline(finding.message)) <span class=\"at\">line \(finding.line)</span></li>"
-            }
-            html += "</ul>"
-        }
-        return html
     }
 
     // MARK: Text
@@ -473,11 +730,11 @@ public enum InterfacePage {
     // MARK: Assets
 
     private static let style = """
-    /* Layout: a sidebar that lists every type, and one view at a time beside it. In a type's view the
-       declaration sits in the main column and its contract beside it, as the gloss. */
+    /* Layout: a sidebar that lists every type, and one view at a time beside it. Views read top to
+       bottom and fold detail behind a visible count, so each level shows only what its question needs. */
     :root {
       --bg: #f6f7f9; --panel: #eef0f4; --surface: #ffffff; --ink: #1a1e26; --muted: #5d6573; --faint: #8a92a0;
-      --rule: #dde1e7; --line: #b9c0cc; --rule-strong: #1a1e26; --edge: #7b8494; --accent: #2f4fbf; --accent-soft: #e6ebfa;
+      --rule: #dde1e7; --line: #b9c0cc; --edge: #7b8494; --accent: #2f4fbf; --accent-soft: #e6ebfa;
       --danger: #b4321c; --danger-soft: #fbe9e5; --exempt: #8a6100; --exempt-soft: #f6eed9; --ok: #2c7a4b;
       --font-code: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
       --font-gloss: ui-serif, "New York", "Iowan Old Style", Georgia, serif;
@@ -485,23 +742,26 @@ public enum InterfacePage {
     }
     @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
       --bg: #11141a; --panel: #151920; --surface: #1a1e26; --ink: #e5e8ee; --muted: #9aa2b0; --faint: #6f7786;
-      --rule: #2a3039; --line: #3d4552; --rule-strong: #c9ced8; --edge: #7d8698; --accent: #94a9ff; --accent-soft: #1f2740;
+      --rule: #2a3039; --line: #3d4552; --edge: #7d8698; --accent: #94a9ff; --accent-soft: #1f2740;
       --danger: #ff8a73; --danger-soft: #34201c; --exempt: #e2b955; --exempt-soft: #2e2817; --ok: #6fcf97;
       color-scheme: dark;
     } }
     :root[data-theme="dark"] {
       --bg: #11141a; --panel: #151920; --surface: #1a1e26; --ink: #e5e8ee; --muted: #9aa2b0; --faint: #6f7786;
-      --rule: #2a3039; --line: #3d4552; --rule-strong: #c9ced8; --edge: #7d8698; --accent: #94a9ff; --accent-soft: #1f2740;
+      --rule: #2a3039; --line: #3d4552; --edge: #7d8698; --accent: #94a9ff; --accent-soft: #1f2740;
       --danger: #ff8a73; --danger-soft: #34201c; --exempt: #e2b955; --exempt-soft: #2e2817; --ok: #6fcf97;
       color-scheme: dark;
     }
     * { box-sizing: border-box; }
     body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.5 var(--font-ui); }
+    a { color: var(--accent); }
     code { font-family: var(--font-code); font-size: 0.92em; }
     :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+    summary { cursor: pointer; }
     .eyebrow { margin: 0; font: 600 11px/1.3 var(--font-ui); letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }
+    .term, .role { font: 600 10.5px/1.4 var(--font-ui); letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
 
-    .app { display: grid; grid-template-columns: 284px minmax(0, 1fr); min-height: 100vh; }
+    .app { display: grid; grid-template-columns: 272px minmax(0, 1fr); min-height: 100vh; }
     .sidebar { position: sticky; top: env(safe-area-inset-top, 0px); height: calc(100vh - env(safe-area-inset-top, 0px)); overflow: auto;
       background: var(--panel); border-right: 1px solid var(--rule); display: flex; flex-direction: column; gap: 18px;
       padding-block: 24px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: 16px; }
@@ -520,7 +780,7 @@ public enum InterfacePage {
     .seg button[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); }
     #filter { font: 13px var(--font-code); color: var(--ink); background: var(--surface); border: 1px solid var(--rule); border-radius: 6px; padding: 6px 10px; width: 100%; }
     .check { display: flex; align-items: center; gap: 6px; color: var(--muted); font-size: 12.5px; cursor: pointer; }
-    .index summary { display: none; }
+    .index > summary { display: none; }
     .index nav { display: grid; gap: 2px; }
     .index h2 { margin: 14px 0 4px; font: 600 11px/1.4 var(--font-ui); letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }
     .index ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 1px; }
@@ -531,57 +791,81 @@ public enum InterfacePage {
     .index li.depth-1 a, .index li.depth-2 a, .index li.depth-3 a { color: var(--muted); }
     .index a:hover { color: var(--accent); }
     .index a[aria-current="true"] { background: var(--accent-soft); color: var(--accent); }
-    .map-link { display: flex; justify-content: space-between; font-family: var(--font-ui) !important; font-weight: 600; font-size: 13px !important; }
-    .count { color: var(--faint); font: 400 11px var(--font-code); font-variant-numeric: tabular-nums; }
-    .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--danger); flex: none; }
+    .index .top-link { display: flex; justify-content: space-between; font: 600 13px/1.4 var(--font-ui); }
+    .count { color: var(--faint); font: 400 11px var(--font-code); font-variant-numeric: tabular-nums; letter-spacing: 0; text-transform: none; }
+    .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--danger); flex: none; display: inline-block; }
 
-    main { min-width: 0; padding-block: 32px 48px; padding-left: 40px; padding-right: max(16px, env(safe-area-inset-right, 0px)); display: grid; gap: 28px; align-content: start; }
+    main { min-width: 0; padding-block: 32px 48px; padding-left: 44px; padding-right: max(16px, env(safe-area-inset-right, 0px)); display: grid; gap: 28px; align-content: start; }
     .js .view:not(.active) { display: none; }
-    .view { display: grid; gap: 28px; min-width: 0; max-width: 1180px; }
+    .view { display: grid; gap: 30px; min-width: 0; max-width: 960px; }
     .view-head { display: grid; gap: 10px; }
     .view-head h2 { margin: 0; font: 400 1.9rem/1.2 var(--font-gloss); text-wrap: balance; }
-    .view-head h2.decl { font: 400 1.05rem/1.5 var(--font-code); }
+    .view-head h2.decl { font: 400 1.05rem/1.5 var(--font-code); color: var(--muted); }
     .view-head h2.decl code { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 1em; }
-    .lede { margin: 0; max-width: 66ch; color: var(--muted); font: 16px/1.5 var(--font-gloss); }
-    .head-gloss { display: grid; gap: 10px; max-width: 72ch; font: 16px/1.55 var(--font-gloss); }
-    .head-gloss p { margin: 0; }
-    .legend { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px 22px; font-size: 12.5px; color: var(--muted); }
-    .legend li { display: flex; align-items: center; gap: 8px; }
-    .swatch { width: 28px; border-top: 1.5px solid var(--edge); }
-    .swatch.body { border-top-style: dashed; border-color: var(--faint); }
-    .block { display: grid; gap: 10px; min-width: 0; }
-    .block h3 { margin: 0; font: 600 11px/1.4 var(--font-ui); letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); display: flex; gap: 8px; align-items: baseline; }
+    .lede { margin: 0; max-width: 64ch; color: var(--muted); font: 16px/1.55 var(--font-gloss); }
+    .lede.ink { color: var(--ink); font-size: 18px; }
+    .lede code, .card-summary code { font-size: 0.8em; background: var(--surface); border: 1px solid var(--rule); border-radius: 4px; padding: 0 4px; }
+    .more > summary { color: var(--accent); font-size: 13px; }
+    .more-body { display: grid; gap: 8px; padding: 10px 0 0 14px; border-left: 1px solid var(--rule); margin-top: 8px; max-width: 64ch; font: 15px/1.55 var(--font-gloss); color: var(--muted); }
+    .more-body p { margin: 0; }
+    .block { display: grid; gap: 12px; min-width: 0; }
+    .block h3 { margin: 0; font: 600 11px/1.4 var(--font-ui); letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); display: inline-flex; gap: 8px; align-items: baseline; }
     .caption { margin: 0; color: var(--muted); font-size: 13px; }
-    .figure { overflow-x: auto; background: var(--surface); border: 1px solid var(--rule); border-radius: 8px; padding: 14px; }
-    .figure svg { display: block; max-width: none; }
     .loc { margin: 0; font: 11px var(--font-code); color: var(--faint); }
 
-    .graph .edge { fill: none; stroke: var(--edge); stroke-width: 1.3; transition: opacity 0.15s; }
-    .graph .edge.body { stroke: var(--faint); stroke-dasharray: 4 3; }
-    .graph .arrowhead { fill: var(--edge); }
-    .graph .node rect { fill: var(--surface); stroke: var(--line); stroke-width: 1; }
-    .graph .node .label { font: 12px var(--font-code); fill: var(--ink); }
-    .graph .node .detail { font: 10.5px var(--font-ui); fill: var(--muted); }
-    .graph .node:hover rect, .graph .node:focus-visible rect { stroke: var(--accent); stroke-width: 1.5; }
-    .graph .node.current rect { fill: var(--accent-soft); stroke: var(--accent); stroke-width: 1.5; }
-    .graph .node.dirty rect { stroke: var(--danger); }
-    .graph .node.private { opacity: 0.6; }
-    .graph.focusing .edge { opacity: 0.12; }
-    .graph.focusing .edge.lit { opacity: 1; stroke: var(--accent); }
+    .cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; }
+    .card { display: grid; gap: 6px; align-content: start; padding: 16px; background: var(--surface); border: 1px solid var(--rule); border-radius: 8px; color: var(--ink); text-decoration: none; }
+    .card:hover { border-color: var(--accent); }
+    .card-kind { font: 600 10.5px/1 var(--font-ui); letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+    .card-name { font: 600 15px var(--font-code); }
+    .card-summary { font: 15px/1.45 var(--font-gloss); }
+    .card-facts { font-size: 12px; color: var(--muted); }
 
-    .columns, .row { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); gap: 0 28px; }
-    .columns { padding-bottom: 4px; font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--faint); }
-    .columns span + span { padding-left: 21px; }
-    .row { padding-block: 12px; border-top: 1px solid var(--rule); }
-    .row.private { opacity: 0.62; }
+    .flow { display: grid; gap: 0; border-left: 2px solid var(--line); margin-left: 6px; }
+    .flow .band { display: grid; grid-template-columns: 96px minmax(0, 1fr); gap: 4px 12px; align-items: baseline; padding: 7px 0 7px 18px; position: relative; }
+    .flow .band::before { content: ""; position: absolute; left: -5px; top: 14px; width: 8px; height: 8px; border-radius: 50%; background: var(--bg); border: 2px solid var(--line); }
+    .flow .core { padding: 10px 0 10px 18px; position: relative; }
+    .flow .core::before { content: ""; position: absolute; left: -7px; top: 50%; margin-top: -6px; width: 12px; height: 12px; border-radius: 50%; background: var(--accent); }
+    .flow .core code { font: 600 15px var(--font-code); color: var(--accent); background: var(--accent-soft); padding: 4px 10px; border-radius: 5px; }
+    .flow .inside > summary { grid-column: 1 / -1; display: grid; grid-template-columns: 96px minmax(0, 1fr); gap: 4px 12px; align-items: baseline; list-style: none; }
+    .flow .inside > summary::-webkit-details-marker { display: none; }
+    .reveal { color: var(--accent); font-size: 13px; }
+    .reveal::after { content: " ▸"; }
+    .inside[open] .reveal::after { content: " ▾"; }
+    .flow .inside > .chips { grid-column: 2; }
+    .chips { display: flex; flex-wrap: wrap; gap: 6px; min-width: 0; }
+    .none { color: var(--faint); font-style: italic; font-size: 13px; }
+    .chip { font: 12px var(--font-code); color: var(--ink); text-decoration: none; border: 1px solid var(--line); background: var(--surface); border-radius: 4px; padding: 2px 7px; }
+    .chip.body { border-style: dashed; color: var(--muted); background: transparent; }
+    .chip.dirty { border-color: var(--danger); }
+    .chip:hover { border-color: var(--accent); color: var(--accent); }
+
+    .members { display: grid; border-top: 1px solid var(--rule); }
+    .member { border-bottom: 1px solid var(--rule); }
+    .member > summary { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 14px; padding: 9px 0; list-style: none; }
+    .member > summary::-webkit-details-marker { display: none; }
+    .member > summary::before { content: "▸"; color: var(--muted); font-size: 12px; width: 12px; }
+    .member[open] > summary::before { content: "▾"; }
+    .member.private { opacity: 0.62; }
+    .sig { font: 13px/1.5 var(--font-code); min-width: 0; overflow-wrap: anywhere; }
+    .sig b { color: var(--ink); }
+    .flow-line { color: var(--muted); }
+    .param { color: var(--faint); }
+    .brief { flex: 1 1 260px; min-width: 0; color: var(--muted); font: 14.5px/1.45 var(--font-gloss); }
+    .member-body { display: grid; gap: 12px; padding: 4px 0 16px 24px; }
+    .fold > summary { display: flex; align-items: baseline; gap: 12px; list-style: none; }
+    .fold > summary::-webkit-details-marker { display: none; }
+    .fold > summary::after { content: "Show ▸"; color: var(--accent); font-size: 12px; }
+    .fold[open] > summary::after { content: "Hide ▾"; }
+    .fold-note { color: var(--faint); font-size: 12px; }
+    .fold > .members { margin-top: 12px; }
     .code { min-width: 0; display: flex; flex-direction: column; gap: 4px; }
     .code code { font-size: 12.5px; line-height: 1.55; white-space: pre-wrap; overflow-wrap: anywhere; color: var(--muted); }
     .kw { color: var(--accent); } .attr { color: var(--exempt); } .ty { color: var(--ink); } .name { font-weight: 700; color: var(--ink); }
-    .has-findings .loc { color: var(--danger); }
-    .gloss { min-width: 0; border-left: 1px solid var(--rule); padding-left: 20px; display: grid; gap: 8px; align-content: start; font-family: var(--font-gloss); font-size: 15px; line-height: 1.5; }
-    .gloss p { margin: 0; max-width: 68ch; }
-    .gloss code, .head-gloss code { font-size: 12.5px; color: var(--ink); background: var(--surface); border: 1px solid var(--rule); border-radius: 4px; padding: 0 4px; }
-    .gloss code.link, .head-gloss code.link { color: var(--accent); border-color: transparent; background: var(--accent-soft); }
+    .gloss { min-width: 0; display: grid; gap: 8px; align-content: start; font-family: var(--font-gloss); font-size: 15px; line-height: 1.5; max-width: 72ch; }
+    .gloss p { margin: 0; }
+    .gloss code { font-size: 12.5px; color: var(--ink); background: var(--surface); border: 1px solid var(--rule); border-radius: 4px; padding: 0 4px; }
+    .gloss code.link, .lede code.link { color: var(--accent); border-color: transparent; background: var(--accent-soft); }
     .note { color: var(--muted); font-size: 14px; }
     .missing { color: var(--faint); font-style: italic; }
     .exempt { color: var(--exempt); font-size: 14px; }
@@ -589,29 +873,45 @@ public enum InterfacePage {
     .terms { margin: 0; display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 4px 14px; font-size: 14px; }
     .terms dt { font-family: var(--font-ui); display: flex; flex-direction: column; min-width: 0; }
     .terms dt code { background: none !important; border: 0 !important; padding: 0 !important; font-weight: 600; }
-    .term { font: 600 11px/1.4 var(--font-ui); letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); padding-top: 3px; }
+    .terms .term { padding-top: 3px; }
     .terms .type { font: 11px var(--font-code); color: var(--faint); max-width: 22ch; overflow-wrap: anywhere; }
     .terms dd { margin: 0; min-width: 0; }
-    .uses { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-family: var(--font-ui); }
-    .uses .term { padding: 0 4px 0 0; }
-    .chip { font: 11.5px var(--font-code); color: var(--ink); text-decoration: none; border: 1px solid var(--line); border-radius: 4px; padding: 1px 6px; }
-    .chip.body { border-style: dashed; color: var(--muted); }
-    .chip:hover { border-color: var(--accent); color: var(--accent); }
-    .findings { list-style: none; margin: 2px 0 0; padding: 0; display: grid; gap: 6px; font: 13px/1.45 var(--font-ui); }
+    .uses, .loose { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-family: var(--font-ui); margin: 0; }
+    .uses .term, .loose .term { padding-right: 4px; }
+    .findings { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; font: 13px/1.45 var(--font-ui); }
     .findings li { background: var(--danger-soft); color: var(--ink); border-left: 2px solid var(--danger); padding: 6px 10px; border-radius: 0 4px 4px 0; }
     .findings .rule { color: var(--danger); font-weight: 600; background: none !important; border: 0 !important; padding: 0 !important; }
     .findings .at { color: var(--muted); font-size: 11px; white-space: nowrap; }
-    .empty { color: var(--muted); font-style: italic; margin: 0; padding: 12px 0; }
+
+    .map-variant { display: grid; gap: 12px; }
+    .legend { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px 22px; font-size: 12.5px; color: var(--muted); }
+    .legend li { display: flex; align-items: center; gap: 8px; }
+    .swatch { width: 28px; border-top: 1.5px solid var(--edge); }
+    .swatch.body { border-top-style: dashed; border-color: var(--faint); }
+    .figure { overflow-x: auto; background: var(--surface); border: 1px solid var(--rule); border-radius: 8px; padding: 14px; }
+    .figure svg { display: block; max-width: none; margin: 0 auto; }
+    .graph .edge { fill: none; stroke: var(--edge); stroke-width: 1.3; transition: opacity 0.15s; }
+    .graph .edge.body { stroke: var(--faint); stroke-dasharray: 4 3; }
+    .graph .arrowhead { fill: var(--edge); }
+    .graph .node rect { fill: var(--surface); stroke: var(--line); stroke-width: 1; }
+    .graph .node .label { font: 12px var(--font-code); fill: var(--ink); }
+    .graph .node .detail { font: 10.5px var(--font-ui); fill: var(--muted); }
+    .graph .node:hover rect, .graph .node:focus-visible rect { stroke: var(--accent); stroke-width: 1.5; }
+    .graph .node.dirty rect { stroke: var(--danger); }
+    .graph .node.private { opacity: 0.6; }
+    .graph.focusing .edge { opacity: 0.12; }
+    .graph.focusing .edge.lit { opacity: 1; stroke: var(--accent); }
     footer p { margin: 0; color: var(--faint); font-size: 12px; }
 
     @media (max-width: 900px) {
       .app { display: block; }
       .sidebar { position: static; height: auto; border-right: 0; border-bottom: 1px solid var(--rule); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
-      .index summary { display: list-item; cursor: pointer; font-weight: 600; color: var(--accent); }
+      .index > summary { display: list-item; font-weight: 600; color: var(--accent); }
       main { padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-block: 24px 40px; }
-      .columns { display: none; }
-      .row { grid-template-columns: minmax(0, 1fr); gap: 10px; }
-      .gloss { padding-left: 14px; }
+      .flow .band { grid-template-columns: minmax(0, 1fr); }
+      .flow .inside > summary { grid-template-columns: minmax(0, 1fr); }
+      .flow .inside > .chips { grid-column: 1; }
+      .member-body { padding-left: 10px; }
     }
     @media (prefers-reduced-motion: reduce) { .graph .edge { transition: none; } }
     """
@@ -623,7 +923,7 @@ public enum InterfacePage {
       var narrow = window.matchMedia("(max-width: 900px)");
       var index = document.querySelector(".index");
       function show(id, fromNavigation) {
-        var target = views[id] ? id : "map";
+        var target = views[id] ? id : "start";
         Object.keys(views).forEach(function (key) { views[key].classList.toggle("active", key === target); });
         document.querySelectorAll("[data-link]").forEach(function (link) {
           link.setAttribute("aria-current", String(link.dataset.link === target));
@@ -638,7 +938,8 @@ public enum InterfacePage {
       show(location.hash.slice(1), false);
 
       var rank = { open: 3, public: 3, package: 2, internal: 1, fileprivate: 0, private: 0 };
-      var state = { min: 1, query: "", findings: false };
+      var pressed = document.querySelector('.seg button[aria-pressed="true"]');
+      var state = { min: pressed ? Number(pressed.dataset.min) : 1, query: "", findings: false };
       function apply() {
         document.querySelectorAll("[data-group]").forEach(function (item) {
           item.hidden = Number(item.dataset.rank) < state.min
@@ -648,15 +949,23 @@ public enum InterfacePage {
         document.querySelectorAll(".index ul").forEach(function (list) {
           list.previousElementSibling.hidden = !list.querySelector("[data-group]:not([hidden])");
         });
-        Object.keys(views).forEach(function (key) {
-          var rows = views[key].querySelectorAll("[data-row]");
+        document.querySelectorAll(".chip[data-access]").forEach(function (chip) {
+          chip.hidden = rank[chip.dataset.access] < state.min;
+        });
+        document.querySelectorAll(".flow .band").forEach(function (band) {
+          var chips = band.querySelectorAll(".chip");
+          band.hidden = chips.length > 0 && !band.querySelector(".chip:not([hidden])");
+        });
+        document.querySelectorAll(".members").forEach(function (list) {
           var shown = 0;
-          rows.forEach(function (row) {
+          list.querySelectorAll("[data-row]").forEach(function (row) {
             row.hidden = rank[row.dataset.access] < state.min || (state.findings && Number(row.dataset.findings) === 0);
             if (!row.hidden) shown += 1;
           });
-          var empty = views[key].querySelector(".empty");
-          if (empty) empty.hidden = shown > 0 || rows.length === 0;
+          var block = list.closest(".block");
+          block.hidden = shown === 0;
+          var count = block.querySelector("[data-shown]");
+          if (count) count.textContent = shown;
         });
       }
       document.querySelectorAll(".seg button").forEach(function (button) {
@@ -677,6 +986,13 @@ public enum InterfacePage {
         apply();
       });
       apply();
+
+      var mapBody = document.getElementById("map-body");
+      mapBody.addEventListener("change", function () {
+        document.querySelectorAll("[data-map]").forEach(function (variant) {
+          variant.hidden = (variant.dataset.map === "all") !== mapBody.checked;
+        });
+      });
 
       document.querySelectorAll(".graph").forEach(function (graph) {
         graph.querySelectorAll(".node").forEach(function (node) {

@@ -153,6 +153,37 @@ final class InterfaceTests: XCTestCase {
         XCTAssertEqual(layout.curves.filter(\.reversed).count, 1, "Only the edge closing the cycle runs against the flow.")
     }
 
+    func testEntryPointsAreUsedFromOutsideOrUnusedInside() {
+        let interface = Interface.build(sources: [
+            ("Sources/Core/Engine.swift", "public struct Engine { func run(_ plan: Plan) -> Report { Report() } }"),
+            ("Sources/Core/Plan.swift", "public struct Plan {}\npublic struct Report {}\nstruct Orphan {}"),
+            ("Sources/Tool/main.swift", "print(Report())")
+        ])
+        let site = InterfacePage.Site(interface)
+        XCTAssertEqual(site.entryPoints(in: "Core").map(\.name), ["Engine", "Report"])
+        XCTAssertEqual(site.entryPoints(in: "Tool").map(\.keyword), ["file"])
+    }
+
+    func testMemberLinesShowWhatFlowsInAndOut() throws {
+        let contracts = contracts("""
+        struct Cart {
+            var total: Int
+            func add(_ item: Item, count: Int) async throws -> Receipt { Receipt() }
+            override func reset() {}
+        }
+        """)
+        let add = try XCTUnwrap(contracts.first { $0.name == "add" })
+        XCTAssertEqual(InterfacePage.signatureFlow(add),
+                       "<span class=\"flow-line\">(<span class=\"ty\">Item</span>, <span class=\"param\">count:</span> <span class=\"ty\">Int</span>) <span class=\"kw\">async</span> <span class=\"kw\">throws</span> → <span class=\"ty\">Receipt</span></span>")
+        XCTAssertEqual(contracts.first { $0.name == "total" }?.valueType, "Int")
+        XCTAssertEqual(contracts.first { $0.name == "reset" }?.isOverride, true)
+    }
+
+    func testFirstSentenceIgnoresPeriodsInCode() {
+        XCTAssertEqual(InterfacePage.firstSentence("Reads `a.b` first. Then more."), "Reads `a.b` first.")
+        XCTAssertEqual(InterfacePage.firstSentence("No period"), "No period")
+    }
+
     func testInlineCodeSpans() {
         XCTAssertEqual(InterfacePage.inline("Use ``Cart/add(_:)`` or `x < y`."),
                        "Use <code class=\"link\">Cart/add(_:)</code> or <code>x &lt; y</code>.")

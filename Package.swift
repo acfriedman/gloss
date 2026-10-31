@@ -22,7 +22,12 @@ let package = Package(
             .product(name: "SwiftSyntax", package: "swift-syntax"),
             .product(name: "SwiftParser", package: "swift-syntax")
         ]),
-        .target(name: "GlossMap", dependencies: ["GlossCore"]),
+        .target(name: "GlossMap", dependencies: [
+            "GlossCore",
+            .product(name: "SwiftSyntax", package: "swift-syntax"),
+            .product(name: "SwiftParser", package: "swift-syntax"),
+            .product(name: "SwiftIDEUtils", package: "swift-syntax")
+        ]),
         .target(name: "GlossPage", dependencies: ["GlossCore", "GlossMap"]),
         .executableTarget(name: "gloss", dependencies: ["GlossCore", "GlossPage"]),
         .executableTarget(name: "GlossApp", dependencies: ["GlossCore", "GlossMap"]),

@@ -289,6 +289,21 @@ final class InterfaceTests: XCTestCase {
         XCTAssertEqual(paths["s-m-App"], ["s-types", "s-modules", "s-m-App"])
     }
 
+    func testHighlightColorsBySyntaxAndTellsProjectTypesApart() {
+        let code = "@MainActor public func total(of lines: [Line], limit: Int = 10) throws -> Price"
+        let runs = Highlight.runs(code, projectTypes: ["Line", "Price"])
+        XCTAssertEqual(runs.map(\.text).joined(), code, "Runs spell the source exactly.")
+        let kinds = Dictionary(runs.map { ($0.text.trimmingCharacters(in: .whitespaces), $0.kind) }, uniquingKeysWith: { first, _ in first })
+        XCTAssertEqual(kinds["@MainActor"], .attribute)
+        XCTAssertEqual(kinds["total"], .declaration)
+        XCTAssertEqual(kinds["Line"], .projectType)
+        XCTAssertEqual(kinds["Int"], .type)
+        XCTAssertEqual(kinds["10"], .number)
+        XCTAssertEqual(kinds["Price"], .projectType)
+        XCTAssertEqual(runs.first { $0.text.contains("func") }?.kind, .keyword)
+        XCTAssertEqual(Highlight.runs("public var rendered: String { get }").first { $0.kind == .declaration }?.text, "rendered")
+    }
+
     func testZoomingOutClimbsFolderModuleAndOverview() {
         let small = Atlas(Interface.build(sources: [
             ("Sources/Shop/Cart.swift", "public struct Cart {}"),

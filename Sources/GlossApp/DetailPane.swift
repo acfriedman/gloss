@@ -194,7 +194,7 @@ struct TypeView: View {
         VStack(alignment: .leading, spacing: 10) {
             Eyebrow(text: "\(node.module) · \(Wording.kind(of: node))")
             if let head = group.head {
-                Text(head.declaration)
+                Code(runs: Highlight.runs(of: head.contract))
                     .font(.system(.title3, design: .monospaced).weight(.semibold))
                 if let summary = head.summary { DocText(text: summary).font(.title3) }
                 ForEach(head.notes, id: \.self) { note in DocText(text: note) }
@@ -304,7 +304,7 @@ struct MemberRow: View {
         } label: {
             VStack(alignment: .leading, spacing: 3) {
                 HStack(alignment: .firstTextBaseline, spacing: 6) {
-                    Text(member.declaration)
+                    Code(runs: Highlight.runs(of: member.contract))
                         .font(.system(.callout, design: .monospaced))
                         .lineLimit(isOpen ? nil : 2)
                     if !member.findings.isEmpty {

@@ -58,7 +58,9 @@ The same three panes as the page, in a native window: the list, one type's text,
 the access level, zoom, and body dependencies in the toolbar (zoom is also ⌘= and ⌘-). Hovering a box
 on the map or a row in the list previews it in the details pane over the selection, and lights it on
 the map; moving into the pane keeps the preview to read, and moving away returns to the selection.
-Hovering a chip in the pane lights its box. It reads the
+Hovering a chip in the pane lights its box. Declarations are colored as Xcode's default themes color
+them, from swift-syntax's own classification (`Highlight` in `GlossMap`), with the types the scanned
+sources declare told apart from the types they only use. It reads the
 folder's `Sources` directory when it has one, ⌘R reads it again, and the next launch reopens the
 last folder. A member's file and line open in Xcode. The folder takes a flag because AppKit reads a
 bare path argument as a document to open and then opens no window.

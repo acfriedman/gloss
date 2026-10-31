@@ -126,8 +126,8 @@ Type views are built in the page from compact JSON that gloss embeds, so a large
 stays small (swift-syntax, at 19,000 declarations, is about 13 MB). gloss decides everything the
 views show; the page's script only fills templates from that data.
 
-Access filtering defaults to public when the sources declare anything public, and to internal
-otherwise.
+Access filtering defaults to internal, in the page and the app alike, so every module's own types
+show, including an app's, whose types are never public.
 
 The page loads nothing and stamps no time, so it works offline as a CI artifact and the same
 sources always render the same bytes. It shows only what the JSON holds. The command always exits 0;

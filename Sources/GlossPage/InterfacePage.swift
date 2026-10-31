@@ -24,8 +24,7 @@ public enum InterfacePage {
         let scopesOf = atlas.levelsDrawing(scopes)
         let owed = zip(interface.contracts, interface.assessments).filter { $0.1.requiresDoc }.map(\.0)
         let findings = interface.assessments.reduce(0) { $0 + $1.findings.count }
-        let hasPublic = interface.contracts.contains { Contract.rank($0.access) >= 3 }
-        func pressed(_ min: Int) -> String { String(min == (hasPublic ? 3 : 1)) }
+        func pressed(_ min: Int) -> String { String(min == Atlas.defaultMinimumRank) }
         var html = """
         <!doctype html>
         <html lang="en">

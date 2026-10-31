@@ -46,7 +46,7 @@ final class Workspace {
 
     var includeBody = false { didSet { redraw() } }
     /// The narrowest access shown, as ``GlossCore/Contract/rank(_:)``: 3 for public, 1 for internal, 0 for all.
-    var minimumRank = 3 { didSet { redraw() } }
+    var minimumRank = Atlas.defaultMinimumRank { didSet { redraw() } }
     var search = ""
     var findingsOnly = false
     /// The chip under the pointer, whose box the map lights instead of what the details pane shows.

@@ -113,6 +113,7 @@ final class InterfaceTests: XCTestCase {
         let html = InterfacePage.render(interface, title: "Shop")
         XCTAssertTrue(html.contains("href=\"#g-Shop-Cart\""))
         XCTAssertTrue(html.contains("id=\"map\""))
+        XCTAssertTrue(html.contains("data-min=\"1\" aria-pressed=\"true\""), "The page opens on internal, as the app does.")
         XCTAssertFalse(html.contains("<lines>"), "Doc text reaches the page only escaped, inside the page data.")
         XCTAssertEqual(html, InterfacePage.render(interface, title: "Shop"), "Rendering must be deterministic.")
     }

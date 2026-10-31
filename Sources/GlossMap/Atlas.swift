@@ -91,6 +91,10 @@ public struct Atlas: Sendable {
         rolledSignature = Self.roll(edges, byID: byID, includeBody: false)
     }
 
+    /// The access level a view opens on, as ``GlossCore/Contract/rank(_:)``: internal, so every
+    /// module's own types show, an app's included, whose types are never public.
+    public static let defaultMinimumRank = 1
+
     /// The contracts a node shows.
     ///
     /// - Parameter id: A node id.

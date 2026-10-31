@@ -290,9 +290,9 @@ extension InterfacePage {
         var html = """
         <section class="stage" id="map" aria-label="Dependency map">
         <header class="stage-head">
-        <div class="stage-top"><button type="button" class="pane-toggle" id="expand-left" hidden>Show list</button><p class="eyebrow">Dependency map</p>
+        <div class="stage-top"><p class="eyebrow">Dependency map</p>
         <div class="zoom" role="group" aria-label="Zoom"><button type="button" id="zoom-out" aria-label="Zoom out" title="Zoom out to the wider level (−)">−</button><button type="button" id="zoom-in" aria-label="Zoom in" title="Zoom in to a narrower level, down to the selected type and its neighbors (+)">+</button></div></div>
-        <p class="lede">An arrow points from a box to one it depends on. Hover a box to preview it on the right; select it to keep it there. Zoom in to isolate the selected type with only its neighbors. Dashed boxes lie outside this level; select one to step into it.</p>
+        <p class="lede">An arrow points from a box to one it depends on. Hover a box to preview its details; select it to keep it there. Zoom in to isolate the selected type with only its neighbors. Dashed boxes lie outside this level; select one to step into it.</p>
         <label class="check"><input type="checkbox" id="map-body"> Include dependencies used only inside bodies</label>
         </header>
 
@@ -353,7 +353,7 @@ extension InterfacePage {
 
     // MARK: Scope views
 
-    /// The right pane's views for the map's wider levels: the module overview, each module, and each
+    /// The details pane's views for the map's wider levels: the module overview, each module, and each
     /// folder drawn as its own level.
     ///
     /// - Parameters:

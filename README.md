@@ -58,12 +58,14 @@ a dependency graph of types. A module's top-level statements count as one `top-l
 an executable's entry point appears in the graph. Names no scanned source declares are kept on the
 mention but are not graph nodes.
 
-The page is three panes on one screen: every type listed on the left, the dependency map in the
-middle, and the text of one type on the right. Nothing navigates away, so the map stays in view.
-The list collapses, and both dividers drag (or step with the arrow keys) to resize; sizes are kept
-in the browser, and double-clicking a divider restores its default.
+The page is three panes on one screen: every type listed on the left, the text of one type in the
+middle, and the dependency map on the right, where it takes whatever width the other two leave.
+Nothing navigates away, so the map stays in view. A toolbar across the top holds what applies to
+every pane: the access level, and the button that hides or shows the list, which stays in the same
+place either way. Both dividers drag (or step with the arrow keys) to resize; sizes are kept in the
+browser, and double-clicking a divider restores its default.
 
-- **Start here** is what the right pane shows first: each module's front door, meaning root types
+- **Start here** is what the details pane shows first: each module's front door, meaning root types
   used from another module and root types nothing else in their module uses.
 - **The map** shows root types, nested types folded in, with signature dependencies by default and
   body-only dependencies behind a toggle. Layout happens in Swift, so it is plain SVG. It reads at
@@ -77,7 +79,7 @@ in the browser, and double-clicking a divider restores its default.
   module, a folder, and last to **focus**, which isolates the selected type with only what uses it
   (above) and what it depends on (below), at most 24 of each. Selecting a neighbor while focused
   re-centers on it, so a reader can walk the graph one type at a time; zooming out climbs back.
-- **Hovering** a box on the map or a name in the list previews that type in the right pane and lights
+- **Hovering** a box on the map or a name in the list previews that type in the details pane and lights
   it and its neighbors on the map; moving away returns to the selection, and moving into the pane
   keeps the preview while you read. **Selecting** keeps it, and updates the address so back,
   forward, and refresh work. Hovering a type chip in the pane lights that type on the map.

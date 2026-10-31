@@ -73,6 +73,10 @@ in the browser, and double-clicking a divider restores its default.
   dashed boxes that step into their own level, and one still over 30 draws its most connected
   boxes and lists the rest. Selecting a module or folder moves the map to it; selecting a type keeps
   the current level when it draws that type, and otherwise moves to the widest level that does.
+- **Zoom** buttons (and the `+` and `-` keys) step between levels: in from the module overview to a
+  module, a folder, and last to **focus**, which isolates the selected type with only what uses it
+  (above) and what it depends on (below), at most 24 of each. Selecting a neighbor while focused
+  re-centers on it, so a reader can walk the graph one type at a time; zooming out climbs back.
 - **Hovering** a box on the map or a name in the list previews that type in the right pane and lights
   it and its neighbors on the map; moving away returns to the selection, and moving into the pane
   keeps the preview while you read. **Selecting** keeps it, and updates the address so back,

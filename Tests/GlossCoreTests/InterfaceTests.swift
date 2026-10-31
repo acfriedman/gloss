@@ -260,6 +260,24 @@ final class InterfaceTests: XCTestCase {
                       "What a folder depends on outside it is drawn as a boundary box.")
     }
 
+    func testZoomingOutClimbsFolderModuleAndOverview() {
+        let small = InterfacePage.Site(Interface.build(sources: [
+            ("Sources/Shop/Cart.swift", "public struct Cart {}"),
+            ("Sources/App/main.swift", "print(Cart())")
+        ]))
+        let scopes = InterfacePage.mapScopes(small)
+        let parents = Dictionary(uniqueKeysWithValues: scopes.map { ($0.id, InterfacePage.parentScope($0, in: scopes)) })
+        XCTAssertEqual(parents["s-types"], "s-modules")
+        XCTAssertEqual(parents["s-m-Shop"], "s-modules")
+        XCTAssertEqual(parents["s-modules"], .some(nil), "The module overview is the widest level.")
+        let big = InterfacePage.Site(Interface.build(sources: (0..<20).flatMap { [
+            ("Sources/Big/Models/M\($0).swift", "struct M\($0) {}"),
+            ("Sources/Big/Views/V\($0).swift", "struct V\($0) { var model: M\($0) }")
+        ] }))
+        let levels = InterfacePage.mapScopes(big)
+        XCTAssertEqual(levels.map { InterfacePage.parentScope($0, in: levels) }, [nil, "s-m-Big", "s-m-Big"])
+    }
+
     func testLevelsOverTheBudgetListTheLeastConnected() {
         let types = (0..<35).map { ("Sources/Flat/T\($0).swift", $0 < 10 ? "struct T\($0) { var next: T\($0 + 1) }" : "struct T\($0) {}") }
         let site = InterfacePage.Site(Interface.build(sources: types))

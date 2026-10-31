@@ -543,6 +543,12 @@ public enum InterfacePage {
     .pane-toggle:hover { border-color: var(--accent); }
     .brand-top, .stage-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
     .stage-top { justify-content: flex-start; }
+    .zoom { margin-left: auto; display: inline-flex; border: 1px solid var(--rule); border-radius: 6px; overflow: hidden; background: var(--surface); }
+    .zoom button { font: 600 16px/1 var(--font-ui); width: 34px; height: 30px; color: var(--accent); background: none; border: 0; cursor: pointer; }
+    .zoom button + button { border-left: 1px solid var(--rule); }
+    .zoom button:hover:not(:disabled) { background: var(--accent-soft); }
+    .zoom button:disabled { color: var(--faint); cursor: default; }
+    .crumb-button { font: inherit; color: var(--accent); background: none; border: 0; padding: 0; cursor: pointer; }
     .sidebar { background: var(--panel); display: flex; flex-direction: column; gap: 18px;
       padding-block: 22px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: 14px; }
     .stage { display: grid; gap: 14px; align-content: start; padding-block: 22px 32px; padding-inline: 28px; }
@@ -968,6 +974,7 @@ public enum InterfacePage {
           var node = data.nodes[position];
           typeView.innerHTML = renderType(position);
           typeView.dataset.root = node.r;
+          typeView.dataset.node = node.id;
           typeView.dataset.scopes = (node.sc || []).join(" ");
           rendered.id = id;
           applyRows(typeView);
@@ -976,10 +983,137 @@ public enum InterfacePage {
       }
       function known(id) { return !!views[id] || byAnchor[id] !== undefined; }
 
+      // Focus: the selected type with only what uses it, above, and what it depends on, below. It is
+      // laid out here because it follows the selection; selecting a neighbor re-centers it.
+      var focusFrom = null;
+      var focusIndex = null;
+      function boxWidth(label, detail) { return Math.max(label.length * 7.3, detail.length * 6) + 24; }
+      function rowsOf(items, limit) {
+        var rows = [[]];
+        var used = 0;
+        items.forEach(function (item) {
+          var needed = item.w + (rows[rows.length - 1].length ? 18 : 0);
+          if (used + needed > limit && rows[rows.length - 1].length) { rows.push([]); used = 0; needed = item.w; }
+          used += needed;
+          rows[rows.length - 1].push(item);
+        });
+        return rows[0].length ? rows : [];
+      }
+      function renderFocus(position) {
+        focusIndex = position;
+        var node = data.nodes[position];
+        var withBody = document.getElementById("map-body").checked;
+        var keep = function (pair) { return (withBody || pair[1] !== BODY) && rank[data.nodes[pair[0]].x] >= state.min; };
+        var signatureFirst = function (a, b) { return (a[1] === BODY) - (b[1] === BODY); };
+        var incoming = (node.i || []).filter(keep).sort(signatureFirst);
+        var outgoing = (node.o || []).filter(keep).sort(signatureFirst);
+        var cap = 24;
+        var hidden = Math.max(0, incoming.length - cap) + Math.max(0, outgoing.length - cap);
+        var item = function (pair) {
+          var other = data.nodes[pair[0]];
+          var detail = words(pair[1]) + (other.m !== node.m ? " · " + other.m : "");
+          return { node: other, detail: detail, body: pair[1] === BODY, w: boxWidth(other.l, detail) };
+        };
+        var above = rowsOf(incoming.slice(0, cap).map(item), 900);
+        var below = rowsOf(outgoing.slice(0, cap).map(item), 900);
+        var center = { node: node, detail: node.k, w: boxWidth(node.l, node.k) };
+        var rowWidth = function (row) { return row.reduce(function (sum, box) { return sum + box.w; }, 0) + 18 * Math.max(row.length - 1, 0); };
+        var width = Math.max(center.w, Math.max.apply(null, above.concat(below).map(rowWidth).concat([0]))) + 12;
+        var y = 6;
+        var place = function (row) {
+          var x = 6 + (width - 12 - rowWidth(row)) / 2;
+          row.forEach(function (box) { box.x = x; box.y = y; x += box.w + 18; });
+          y += 38 + 14;
+        };
+        above.forEach(place);
+        if (above.length) y += 40;
+        place([center]);
+        if (below.length) y += 40;
+        below.forEach(place);
+        var height = y - 14 + 6;
+        var f = function (value) { return Math.round(value * 10) / 10; };
+        var curve = function (x1, y1, x2, y2) { var mid = (y1 + y2) / 2; return "M" + f(x1) + "," + f(y1) + " C" + f(x1) + "," + f(mid) + " " + f(x2) + "," + f(mid) + " " + f(x2) + "," + f(y2); };
+        var flatAbove = [].concat.apply([], above);
+        var flatBelow = [].concat.apply([], below);
+        var spread = function (index, count) { return center.x + (index + 1) * center.w / (count + 1); };
+        var edges = flatAbove.map(function (box, index) {
+          return '<path class="edge' + (box.body ? " body" : "") + '" d="' + curve(box.x + box.w / 2, box.y + 38, spread(index, flatAbove.length), center.y)
+            + '" data-from="' + esc(box.node.id) + '" data-to="' + esc(node.id) + '" marker-end="url(#arrow-focus)"><title>' + esc(box.node.l + " " + box.detail + " " + node.l) + "</title></path>";
+        }).concat(flatBelow.map(function (box, index) {
+          return '<path class="edge' + (box.body ? " body" : "") + '" d="' + curve(spread(index, flatBelow.length), center.y + 38, box.x + box.w / 2, box.y)
+            + '" data-from="' + esc(node.id) + '" data-to="' + esc(box.node.id) + '" marker-end="url(#arrow-focus)"><title>' + esc(node.l + " " + box.detail + " " + box.node.l) + "</title></path>";
+        }));
+        var boxes = flatAbove.concat([center], flatBelow).map(function (box) {
+          var classes = (box === center ? " current" : "") + (box.node.f ? " dirty" : "") + (rank[box.node.x] === 0 ? " private" : "");
+          return '<a class="node' + classes + '" href="#' + box.node.a + '" data-id="' + esc(box.node.id) + '"><rect x="' + f(box.x) + '" y="' + f(box.y)
+            + '" width="' + f(box.w) + '" height="38" rx="5"/><text class="label" x="' + f(box.x + 12) + '" y="' + f(box.y + 16) + '">' + esc(box.node.l)
+            + '</text><text class="detail" x="' + f(box.x + 12) + '" y="' + f(box.y + 30) + '">' + esc(box.detail) + "</text></a>";
+        });
+        var map = scopeMaps.focus;
+        map.querySelector(".figure").innerHTML = '<svg class="graph" viewBox="0 0 ' + f(width) + " " + f(height) + '" width="' + f(width) + '" height="' + f(height)
+          + '" role="img" aria-label="' + esc(node.l) + ' and its neighbors"><defs><marker id="arrow-focus" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="arrowhead" d="M0,1 L9,5 L0,9 z"/></marker></defs><g class="edges">'
+          + edges.join("") + '</g><g class="nodes">' + boxes.join("") + "</g></svg>";
+        var from = focusFrom && scopeMaps[focusFrom] ? scopeMaps[focusFrom].dataset.label : "Map";
+        map.querySelector(".crumbs").innerHTML = '<button type="button" class="crumb-button" data-zoom-out>' + esc(from) + '</button><span class="sep">›</span><span aria-current="page">' + esc(node.l) + " and its neighbors</span>";
+        var scope = withBody ? "" : " through a signature";
+        var users = incoming.length ? (incoming.length === 1 ? "1 type uses it" : incoming.length + " types use it") + scope : "Nothing uses it" + scope;
+        var needs = outgoing.length ? "it depends on " + outgoing.length : "it depends on nothing scanned";
+        map.querySelector(".caption").textContent = users + "; " + needs + (hidden ? ". " + hidden + " more are not drawn; the panel lists them all." : ".");
+      }
+
+      // Zoom steps one level at a time: in from the module overview to a module, a folder, and the
+      // selected type's focus; out the same way back.
+      var zoomIn = document.getElementById("zoom-in");
+      var zoomOut = document.getElementById("zoom-out");
+      function parentOf(id) {
+        if (id === "focus") return focusFrom;
+        return scopeMaps[id] && scopeMaps[id].dataset.parent || null;
+      }
+      function isAncestor(wider, narrower) {
+        for (var step = parentOf(narrower); step; step = parentOf(step)) { if (step === wider) return true; }
+        return false;
+      }
+      function zoomInTarget() {
+        var view = mount(selected);
+        if (view === typeView) {
+          if (currentScope === "focus") return null;
+          var ladder = (view.dataset.scopes || "").split(" ").filter(Boolean).concat(["focus"]);
+          var at = ladder.indexOf(currentScope);
+          if (at >= 0) return ladder[at + 1];
+          for (var index = 0; index < ladder.length - 1; index++) { if (isAncestor(currentScope, ladder[index])) return ladder[index]; }
+          return "focus";
+        }
+        var own = view.dataset.scope;
+        return own && own !== currentScope && isAncestor(currentScope, own) ? own : null;
+      }
+      function zoomOutTarget() { return parentOf(currentScope); }
+      function updateZoom() {
+        zoomIn.disabled = !zoomInTarget();
+        zoomOut.disabled = !zoomOutTarget();
+        zoomIn.title = zoomIn.disabled ? "Select a type to zoom in on it" : "Zoom in to a narrower level, down to the selected type and its neighbors (+)";
+      }
+      function zoom(target) {
+        if (!target) return;
+        showScope(target);
+        light(shownView.dataset.root || null, shownView.dataset.node);
+      }
+      zoomIn.addEventListener("click", function () { zoom(zoomInTarget()); });
+      zoomOut.addEventListener("click", function () { zoom(zoomOutTarget()); });
+      stage.addEventListener("click", function (event) {
+        if (event.target.closest("[data-zoom-out]")) zoom(zoomOutTarget());
+      });
+      document.addEventListener("keydown", function (event) {
+        if (event.metaKey || event.ctrlKey || event.altKey || /^(INPUT|TEXTAREA|SELECT)$/.test(event.target.tagName)) return;
+        if (event.key === "+" || event.key === "=") { zoom(zoomInTarget()); event.preventDefault(); }
+        else if (event.key === "-" || event.key === "_") { zoom(zoomOutTarget()); event.preventDefault(); }
+      });
+
       // Lights a type on the map: its box, its edges, and its neighbors; everything else dims.
-      function light(root) {
+      function light(root, exact) {
         document.querySelectorAll(".graph").forEach(function (graph) {
-          var target = root && graph.querySelector('.node[data-id="' + CSS.escape(root) + '"]');
+          var target = exact && graph.querySelector('.node[data-id="' + CSS.escape(exact) + '"]');
+          if (target) root = exact;
+          else target = root && graph.querySelector('.node[data-id="' + CSS.escape(root) + '"]');
           graph.classList.toggle("focusing", !!target);
           var near = {};
           graph.querySelectorAll(".edge").forEach(function (edge) {
@@ -997,18 +1131,26 @@ public enum InterfacePage {
         shownView = mount(id);
         Object.keys(views).forEach(function (key) { views[key].classList.toggle("active", views[key] === shownView); });
         typeView.classList.toggle("active", typeView === shownView);
-        light(shownView.dataset.root || null);
+        light(shownView.dataset.root || null, shownView.dataset.node);
         document.querySelectorAll(".index a.previewed").forEach(function (link) { link.classList.remove("previewed"); });
       }
       // The selection decides the map level: a module or folder view draws its own level; a type keeps
       // the current level when that level draws it, and otherwise moves to the widest one that does.
       function showScope(id) {
+        if (id === "focus") {
+          var position = byAnchor[selected];
+          if (position === undefined) return;
+          if (currentScope !== "focus") focusFrom = currentScope;
+          renderFocus(position);
+        }
         if (!scopeMaps[id]) return;
         currentScope = id;
         Object.keys(scopeMaps).forEach(function (key) { scopeMaps[key].hidden = key !== id; });
+        updateZoom();
       }
       function scopeFor(view) {
         if (view.dataset.scope) return view.dataset.scope;
+        if (currentScope === "focus" && view === typeView) return "focus";
         var list = (view.dataset.scopes || "").split(" ").filter(Boolean);
         if (!list.length || list.indexOf(currentScope) >= 0) return currentScope;
         return list[0];
@@ -1022,6 +1164,7 @@ public enum InterfacePage {
         document.querySelectorAll("[data-link]").forEach(function (link) {
           link.setAttribute("aria-current", String(link.dataset.link === selected));
         });
+        updateZoom();
         panel.scrollTop = 0;
         if (!reveal) return;
         var root = shownView.dataset.root;
@@ -1091,6 +1234,7 @@ public enum InterfacePage {
           list.previousElementSibling.hidden = !list.querySelector("[data-group]:not([hidden])");
         });
         applyRows(document);
+        if (currentScope === "focus" && focusIndex !== null) renderFocus(focusIndex);
       }
       // Hides what the access and findings filters exclude inside one part of the page.
       function applyRows(root) {
@@ -1202,7 +1346,8 @@ public enum InterfacePage {
         document.querySelectorAll("[data-map]").forEach(function (variant) {
           variant.hidden = (variant.dataset.map === "all") !== mapBody.checked;
         });
-        light(shownView ? shownView.dataset.root || null : null);
+        if (currentScope === "focus" && focusIndex !== null) renderFocus(focusIndex);
+        light(shownView ? shownView.dataset.root || null : null, shownView ? shownView.dataset.node : null);
       });
     })();
     """

@@ -290,14 +290,16 @@ extension InterfacePage {
         var html = """
         <section class="stage" id="map" aria-label="Dependency map">
         <header class="stage-head">
-        <div class="stage-top"><button type="button" class="pane-toggle" id="expand-left" hidden>Show list</button><p class="eyebrow">Dependency map</p></div>
-        <p class="lede">An arrow points from a box to one it depends on. Hover a box to preview it on the right; select it to keep it there. Dashed boxes lie outside this level; select one to step into it.</p>
+        <div class="stage-top"><button type="button" class="pane-toggle" id="expand-left" hidden>Show list</button><p class="eyebrow">Dependency map</p>
+        <div class="zoom" role="group" aria-label="Zoom"><button type="button" id="zoom-out" aria-label="Zoom out" title="Zoom out to the wider level (−)">−</button><button type="button" id="zoom-in" aria-label="Zoom in" title="Zoom in to a narrower level, down to the selected type and its neighbors (+)">+</button></div></div>
+        <p class="lede">An arrow points from a box to one it depends on. Hover a box to preview it on the right; select it to keep it there. Zoom in to isolate the selected type with only its neighbors. Dashed boxes lie outside this level; select one to step into it.</p>
         <label class="check"><input type="checkbox" id="map-body"> Include dependencies used only inside bodies</label>
         </header>
 
         """
         for (index, scope) in scopes.enumerated() {
-            html += "<div class=\"scope-map\" data-scope-map=\"\(scope.id)\"\(index == 0 ? "" : " hidden")>"
+            let parent = parentScope(scope, in: scopes).map { " data-parent=\"\($0)\"" } ?? ""
+            html += "<div class=\"scope-map\" data-scope-map=\"\(scope.id)\" data-label=\"\(escape(scope.crumbs.last?.label ?? ""))\"\(parent)\(index == 0 ? "" : " hidden")>"
             html += "<nav class=\"crumbs\" aria-label=\"Map level\">"
             html += scope.crumbs.enumerated().map { offset, crumb in
                 offset == scope.crumbs.count - 1
@@ -327,7 +329,26 @@ extension InterfacePage {
             }
             html += "</div>\n"
         }
+        html += "<div class=\"scope-map\" data-scope-map=\"focus\" hidden><nav class=\"crumbs\" aria-label=\"Map level\"></nav>"
+        html += "<ul class=\"legend\"><li><span class=\"swatch\"></span>Uses it, above; it depends on, below</li></ul>"
+        html += "<div class=\"figure\"></div><p class=\"caption\"></p></div>\n"
         return html + "</section>\n"
+    }
+
+    /// The level a level zooms out to: the module overview for all types and for each module, and the
+    /// module for each of its folders.
+    ///
+    /// - Parameters:
+    ///   - scope: The level.
+    ///   - scopes: Every level.
+    /// - Returns: The parent level's id, or `nil` for the widest level.
+    static func parentScope(_ scope: MapScope, in scopes: [MapScope]) -> String? {
+        let ids = Set(scopes.map(\.id))
+        if scope.id == "s-types" || scope.id.hasPrefix("s-m-") { return ids.contains("s-modules") ? "s-modules" : nil }
+        if scope.id.hasPrefix("s-f-"), let module = scopes.last(where: { $0.id.hasPrefix("s-m-") && scope.crumbs.map(\.view).contains($0.view) }) {
+            return module.id
+        }
+        return nil
     }
 
     // MARK: Scope views

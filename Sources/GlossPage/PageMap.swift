@@ -82,7 +82,6 @@ extension InterfacePage {
         <div class="stage-top"><p class="eyebrow">Dependency map</p>
         <div class="zoom" role="group" aria-label="Zoom"><button type="button" id="zoom-out" aria-label="Zoom out" title="Zoom out to the wider level (−)">−</button><button type="button" id="zoom-in" aria-label="Zoom in" title="Zoom in to a narrower level, down to the selected type and its neighbors (+)">+</button></div></div>
         <p class="lede">An arrow points from a box to one it depends on. Hover a box to preview its details; select it to keep it there. Zoom in to isolate the selected type with only its neighbors. Dashed boxes lie outside this level; select one to step into it.</p>
-        <label class="check"><input type="checkbox" id="map-body"> Include dependencies used only inside bodies</label>
         </header>
 
         """
@@ -97,16 +96,15 @@ extension InterfacePage {
                     : "<a href=\"#\(view(of: crumb, in: scopes))\">\(escape(crumb.label))</a>"
             }.joined(separator: "<span class=\"sep\">›</span>")
             html += "</nav>"
-            for includeBody in [false, true] {
-                let figure = atlas.figure(scope, includeBody: includeBody)
+            do {
+                let figure = atlas.figure(scope, includeBody: true)
                 let layout = GraphLayout.layered(figure.items, figure.links)
-                html += "<div class=\"map-variant\" data-map=\"\(includeBody ? "all" : "interface")\"\(includeBody ? " hidden" : "")>"
+                html += "<div class=\"map-variant\">"
                 html += "<ul class=\"legend\"><li><span class=\"swatch\"></span>In a signature</li>"
-                if includeBody { html += "<li><span class=\"swatch body\"></span>Only inside a body</li>" }
+                html += "<li><span class=\"swatch body\"></span>Only inside a body</li>"
                 if figure.items.contains(where: { $0.flags.contains(.boundary) }) { html += "<li><span class=\"swatch box\"></span>Outside this level</li>" }
                 html += "</ul>"
-                let marker = scope.id + (includeBody ? "-all" : "")
-                html += "<div class=\"figure\">\(svg(layout, atlas: atlas, label: "Dependency map: \(scope.label)", marker: marker))</div>"
+                html += "<div class=\"figure\">\(svg(layout, atlas: atlas, label: "Dependency map: \(scope.label)", marker: scope.id))</div>"
                 html += "<p class=\"caption\">\(figure.items.count) boxes, \(figure.links.count) dependencies.</p>"
                 if !figure.loose.isEmpty {
                     html += "<p class=\"loose\"><span class=\"term\">Not connected</span>" + figure.loose.map { unitChip($0, atlas: atlas) }.joined() + "</p>"

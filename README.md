@@ -55,21 +55,21 @@ swift run GlossApp --root path/to/YourPackage
 ```
 
 The same three panes as the page, in a native window: the list, one type's text, and the map, with
-the access level, zoom, and body dependencies in the toolbar (zoom is also ⌘= and ⌘-). The list is
-an outline: each module as its source folders hold it, at full depth, with nested types under the
-type that declares them. Modules start open and folders and nested types closed, so a large module
-opens as its top folders; searching or filtering opens whatever holds a match, and selecting a type
-from the map or a chip opens the rows around it. Each map opens centered and shrunk to fit the pane,
-never past its natural size; a pinch or the magnifier in its corner zooms, clicking the percentage
-fits it again, and a new level or focus fits again. Hovering a box on the map or a row in the list
-previews it in the details pane over the selection, and lights it on the map; moving into the pane
-keeps the preview to read, and moving away returns to the selection. Hovering a chip in the pane
-lights its box. Declarations are colored as Xcode's default themes color them, from swift-syntax's
-own classification (`Highlight` in `GlossMap`), with the types the scanned sources declare told
-apart from the types they only use. It reads the folder's `Sources` directory when it has one, ⌘R
-reads it again, and the next launch reopens the last folder. A member's file and line open in Xcode.
-The folder takes a flag because AppKit reads a bare path argument as a document to open and then
-opens no window.
+the access level and zoom in the toolbar (zoom is also ⌘= and ⌘-). The list is an outline: each
+module as its source folders hold it, at full depth, with nested types under the type that declares
+them. Modules start open and folders and nested types closed, so a large module opens as its top
+folders; searching or filtering opens whatever holds a match, and selecting a type from the map or a
+chip opens the rows around it. Each map opens centered and shrunk to fit the pane, never past its
+natural size; a pinch or the magnifier in its corner zooms, clicking the percentage fits it again,
+and a new level or focus fits again. Hovering a box on the map or a row in the list previews it in
+the details pane over the selection, and lights it on the map; moving into the pane keeps the
+preview to read, and moving away returns to the selection. Hovering a chip in the pane lights its
+box. Declarations are colored as Xcode's default themes color them, from swift-syntax's own
+classification (`Highlight` in `GlossMap`), with the types the scanned sources declare told apart
+from the types they only use. It reads the folder's `Sources` directory when it has one, ⌘R reads it
+again, and the next launch reopens the last folder. A member's file and line open in Xcode. The
+folder takes a flag because AppKit reads a bare path argument as a document to open and then opens
+no window.
 
 For reviews from a script, `GLOSS_SNAPSHOT=out.png` writes the window to a PNG once the sources are
 read and quits; `GLOSS_SELECT` selects a node id (or `module:Name`) first, `GLOSS_ZOOM` zooms in
@@ -105,8 +105,8 @@ browser, and double-clicking a divider restores its default.
 
 - **Overview** is what the details pane shows first: each module's entry points, meaning root types
   used from another module and root types nothing else in their module uses.
-- **The map** shows root types, nested types folded in, with signature dependencies by default and
-  body-only dependencies behind a toggle. Layout happens in Swift, so it is plain SVG. It reads at
+- **The map** shows root types, nested types folded in, with every dependency: signature ones solid,
+  and ones used only inside bodies dashed. Layout happens in Swift, so it is plain SVG. It reads at
   levels: all types, all modules, one module, and one folder. It opens on all types when they fit
   30 boxes, and otherwise on the module overview. A module over 30 types that spans several
   folders is drawn as its folders, each a level of its own. A level draws what lies outside it as
@@ -122,7 +122,7 @@ browser, and double-clicking a divider restores its default.
   keeps the preview while you read. **Selecting** keeps it, and updates the address so back,
   forward, and refresh work. Hovering a type chip in the pane lights that type on the map.
 - **A type** reads top to bottom: what uses it, the type, what it conforms to, holds, takes,
-  returns, and throws through its signatures, the types it nests, and, folded, what its bodies use.
+  returns, and throws through its signatures, the types it nests, and what its bodies use.
 - **A member** is one line (`(source: String) → [Diagnostic]` plus the first sentence of its
   summary) that opens to its full contract and the types it uses. Overrides start folded. Members
   with findings start open when the whole interface has 100 findings or fewer, and more than two

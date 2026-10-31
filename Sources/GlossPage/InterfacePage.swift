@@ -420,12 +420,9 @@ public enum InterfacePage {
     .flow .core { padding: 10px 0 10px 18px; position: relative; }
     .flow .core::before { content: ""; position: absolute; left: -7px; top: 50%; margin-top: -6px; width: 12px; height: 12px; border-radius: 50%; background: var(--accent); }
     .flow .core code { font: 600 15px var(--font-code); color: var(--accent); background: var(--accent-soft); padding: 4px 10px; border-radius: 5px; }
-    .flow .inside > summary { grid-column: 1 / -1; display: grid; grid-template-columns: 84px minmax(0, 1fr); gap: 4px 12px; align-items: baseline; list-style: none; }
-    .flow .inside > summary::-webkit-details-marker { display: none; }
     .reveal { color: var(--accent); font-size: 13px; }
     .reveal::after { content: " ▸"; }
-    .inside[open] .reveal::after { content: " ▾"; }
-    .flow .inside > .chips { grid-column: 2; }
+    details[open] > summary .reveal::after { content: " ▾"; }
     .chips { display: flex; flex-wrap: wrap; gap: 6px; min-width: 0; }
     .more-chips { display: contents; }
     .more-chips > summary { list-style: none; font-size: 12px; align-self: center; }
@@ -504,8 +501,7 @@ public enum InterfacePage {
       .stage { border-top: 1px solid var(--rule); padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
       .panel { padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
       .preview-note { display: none !important; }
-      .flow .band, .flow .inside > summary { grid-template-columns: minmax(0, 1fr); }
-      .flow .inside > .chips { grid-column: 1; }
+      .flow .band { grid-template-columns: minmax(0, 1fr); }
       .member-body { padding-left: 10px; }
     }
     @media (prefers-reduced-motion: reduce) { .graph .edge, .graph .node { transition: none; } }
@@ -702,8 +698,7 @@ public enum InterfacePage {
         if (node.n) html += '<div class="band"><span class="role">nests</span><div class="chips">' + node.n.map(function (child) { return chip(child, { short: true }); }).join("") + "</div></div>";
         var inside = outgoing.filter(function (pair) { return pair[1] === BODY; });
         if (inside.length) {
-          html += '<details class="band inside"><summary><span class="role">inside</span><span class="reveal">Uses ' + inside.length + " more type" + (inside.length === 1 ? "" : "s")
-            + ' inside its bodies</span></summary><div class="chips">' + capped(inside.map(function (pair) { return chip(pair[0], { dashed: true }); })) + "</div></details>";
+          html += '<div class="band"><span class="role">inside</span><div class="chips">' + capped(inside.map(function (pair) { return chip(pair[0], { dashed: true }); })) + "</div></div>";
         }
         return html + "</div></section>";
       }
@@ -763,8 +758,7 @@ public enum InterfacePage {
       function renderFocus(position) {
         focusIndex = position;
         var node = data.nodes[position];
-        var withBody = document.getElementById("map-body").checked;
-        var keep = function (pair) { return (withBody || pair[1] !== BODY) && rank[data.nodes[pair[0]].x] >= state.min; };
+        var keep = function (pair) { return rank[data.nodes[pair[0]].x] >= state.min; };
         var signatureFirst = function (a, b) { return (a[1] === BODY) - (b[1] === BODY); };
         var incoming = (node.i || []).filter(keep).sort(signatureFirst);
         var outgoing = (node.o || []).filter(keep).sort(signatureFirst);
@@ -816,8 +810,7 @@ public enum InterfacePage {
           + edges.join("") + '</g><g class="nodes">' + boxes.join("") + "</g></svg>";
         var from = focusFrom && scopeMaps[focusFrom] ? scopeMaps[focusFrom].dataset.label : "Map";
         map.querySelector(".crumbs").innerHTML = '<button type="button" class="crumb-button" data-zoom-out>' + esc(from) + '</button><span class="sep">›</span><span aria-current="page">' + esc(node.l) + " and its neighbors</span>";
-        var scope = withBody ? "" : " through a signature";
-        var users = incoming.length ? (incoming.length === 1 ? "1 type uses it" : incoming.length + " types use it") + scope : "Nothing uses it" + scope;
+        var users = incoming.length ? (incoming.length === 1 ? "1 type uses it" : incoming.length + " types use it") : "Nothing uses it";
         var needs = outgoing.length ? "it depends on " + outgoing.length : "it depends on nothing scanned";
         map.querySelector(".caption").textContent = users + "; " + needs + (hidden ? ". " + hidden + " more are not drawn; the panel lists them all." : ".");
       }
@@ -1102,14 +1095,6 @@ public enum InterfacePage {
       });
       window.addEventListener("resize", function () { layoutPanes(false); });
 
-      var mapBody = document.getElementById("map-body");
-      mapBody.addEventListener("change", function () {
-        document.querySelectorAll("[data-map]").forEach(function (variant) {
-          variant.hidden = (variant.dataset.map === "all") !== mapBody.checked;
-        });
-        if (currentScope === "focus" && focusIndex !== null) renderFocus(focusIndex);
-        light(shownView ? shownView.dataset.root || null : null, shownView ? shownView.dataset.node : null);
-      });
     })();
     """
 }

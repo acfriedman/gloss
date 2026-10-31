@@ -39,8 +39,6 @@ struct GlossApp: App {
                 Button("Zoom Out") { workspace.zoom(to: workspace.zoomOutTarget) }
                     .keyboardShortcut("-")
                     .disabled(workspace.zoomOutTarget == nil)
-                Toggle("Include Body Dependencies", isOn: $workspace.includeBody)
-                    .keyboardShortcut("b")
                 Divider()
             }
         }

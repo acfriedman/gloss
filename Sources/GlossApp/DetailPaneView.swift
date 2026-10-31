@@ -232,15 +232,7 @@ struct FlowView: View {
             if !nested.isEmpty {
                 ChipBlockView(title: "Nests", units: nested.map { .type($0.id) }, atlas: atlas)
             }
-            if !insideOnly.isEmpty {
-                DisclosureGroup {
-                    ChipBlockView(title: "", units: insideOnly.map { .type($0.to) }, atlas: atlas)
-                        .padding(.top, 6)
-                } label: {
-                    Text("Uses \(insideOnly.count) more type\(insideOnly.count == 1 ? "" : "s") inside its bodies")
-                        .font(.callout).foregroundStyle(.secondary)
-                }
-            }
+            ChipBlockView(title: "Uses inside its bodies", units: insideOnly.map { .type($0.to) }, atlas: atlas)
         }
     }
 }

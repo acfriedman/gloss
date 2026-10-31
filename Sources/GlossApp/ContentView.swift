@@ -41,8 +41,6 @@ struct ContentView: View {
                         .disabled(workspace.zoomInTarget == nil)
                         .help("Zoom in, down to the selected type and its neighbors (⌘=)")
                 }
-                Toggle(isOn: $workspace.includeBody) { Label("Bodies", systemImage: "curlybraces") }
-                    .help("Include dependencies used only inside bodies (⌘B)")
                 Button { workspace.reload() } label: { Label("Reload", systemImage: "arrow.clockwise") }
                     .help("Read the sources again (⌘R)")
                     .disabled(workspace.root == nil || workspace.isLoading)

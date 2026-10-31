@@ -45,7 +45,6 @@ final class Workspace {
     private(set) var drawing = Drawing()
     private var focusFrom: String?
 
-    var includeBody = false { didSet { redraw() } }
     /// The narrowest access shown, as ``GlossCore/Contract/rank(_:)``: 3 for public, 1 for internal, 0 for all.
     var minimumRank = Atlas.defaultMinimumRank { didSet { redraw() } }
     var search = ""
@@ -348,11 +347,10 @@ final class Workspace {
             return
         }
         if scopeID == Self.focus, case .type(let id) = selection, let node = atlas.byID[id],
-           let focus = atlas.focus(on: id, includeBody: includeBody, minimumRank: minimumRank) {
+           let focus = atlas.focus(on: id, includeBody: true, minimumRank: minimumRank) {
             let from = scopes.first { $0.id == focusFrom } ?? scopes.first
-            let through = includeBody ? "" : " through a signature"
-            let users = focus.incoming == 0 ? "Nothing uses it" + through
-                : (focus.incoming == 1 ? "1 type uses it" : "\(focus.incoming) types use it") + through
+            let users = focus.incoming == 0 ? "Nothing uses it"
+                : focus.incoming == 1 ? "1 type uses it" : "\(focus.incoming) types use it"
             let needs = focus.outgoing == 0 ? "it depends on nothing scanned" : "it depends on \(focus.outgoing)"
             let hidden = focus.hidden > 0 ? ". \(focus.hidden) more are not drawn; the details list them all." : "."
             drawing = Drawing(layout: focus.layout,
@@ -364,7 +362,7 @@ final class Workspace {
             drawing = Drawing()
             return
         }
-        let figure = atlas.figure(scope, includeBody: includeBody)
+        let figure = atlas.figure(scope, includeBody: true)
         drawing = Drawing(layout: GraphLayout.layered(figure.items, figure.links),
                           crumbs: scope.path.compactMap { id in scopes.first { $0.id == id }.map { ($0.id, $0.label) } },
                           caption: "\(figure.items.count) boxes, \(figure.links.count) dependencies.",

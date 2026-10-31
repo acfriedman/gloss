@@ -6,7 +6,7 @@ import SwiftUI
 ///
 /// Each figure opens centered and shrunk to fit the pane, never past its natural size. A pinch or the
 /// magnify control zooms from there, and a new figure fits again.
-struct MapPane: View {
+struct MapPaneView: View {
     @Environment(Workspace.self) private var workspace
     /// The reader's magnification, or `nil` to fit the figure to the pane.
     @State private var zoom: CGFloat?
@@ -38,7 +38,7 @@ struct MapPane: View {
             GeometryReader { proxy in
                 let scale = zoom ?? Self.fit(drawing.layout, in: proxy.size)
                 ScrollView([.horizontal, .vertical]) {
-                    MapCanvas(layout: drawing.layout, lit: workspace.litID, scale: scale)
+                    MapCanvasView(layout: drawing.layout, lit: workspace.litID, scale: scale)
                         .padding(Self.inset)
                         .frame(minWidth: proxy.size.width, minHeight: proxy.size.height)
                 }
@@ -53,7 +53,7 @@ struct MapPane: View {
                         .onEnded { _ in pinchStart = nil }
                 )
                 .overlay(alignment: .bottomTrailing) {
-                    Magnifier(scale: scale, isFitted: zoom == nil) { zoom = $0 }
+                    MagnifierView(scale: scale, isFitted: zoom == nil) { zoom = $0 }
                         .padding(12)
                 }
             }
@@ -61,8 +61,8 @@ struct MapPane: View {
                 Divider()
                 ScrollView {
                     VStack(alignment: .leading, spacing: 12) {
-                        ChipBlock(title: "Not connected", units: drawing.loose, atlas: atlas)
-                        ChipBlock(title: "Least connected, not drawn", units: drawing.overflow, atlas: atlas)
+                        ChipBlockView(title: "Not connected", units: drawing.loose, atlas: atlas)
+                        ChipBlockView(title: "Least connected, not drawn", units: drawing.overflow, atlas: atlas)
                     }
                     .padding(16)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -98,14 +98,14 @@ struct MapPane: View {
 }
 
 /// The map's magnification: smaller, the current scale, which fits the figure again, and larger.
-struct Magnifier: View {
+struct MagnifierView: View {
     var scale: CGFloat
     var isFitted: Bool
     var zoom: (CGFloat?) -> Void
 
     var body: some View {
         HStack(spacing: 2) {
-            Button { zoom(MapPane.clamp(scale / 1.25)) } label: { Image(systemName: "minus").frame(width: 22, height: 20) }
+            Button { zoom(MapPaneView.clamp(scale / 1.25)) } label: { Image(systemName: "minus").frame(width: 22, height: 20) }
                 .help("Smaller")
             Button { zoom(nil) } label: {
                 Text("\(Int((scale * 100).rounded()))%")
@@ -114,7 +114,7 @@ struct Magnifier: View {
             }
             .help(isFitted ? "Fitted to the pane" : "Fit to the pane")
             .foregroundStyle(isFitted ? .secondary : .primary)
-            Button { zoom(MapPane.clamp(scale * 1.25)) } label: { Image(systemName: "plus").frame(width: 22, height: 20) }
+            Button { zoom(MapPaneView.clamp(scale * 1.25)) } label: { Image(systemName: "plus").frame(width: 22, height: 20) }
                 .help("Larger")
         }
         .buttonStyle(.borderless)
@@ -129,7 +129,7 @@ struct Magnifier: View {
 /// One placed figure at a scale: edges drawn on a canvas under the boxes, the lit box's edges and
 /// neighbors standing out and the rest dimmed. Everything is drawn at the scale rather than stretched,
 /// so text stays sharp at any magnification.
-struct MapCanvas: View {
+struct MapCanvasView: View {
     @Environment(Workspace.self) private var workspace
     var layout: GraphLayout
     var lit: String?
@@ -152,7 +152,7 @@ struct MapCanvas: View {
             }
             .frame(width: layout.width * scale, height: layout.height * scale)
             ForEach(Array(layout.boxes.enumerated()), id: \.offset) { _, box in
-                MapBox(box: box, scale: scale, isCurrent: isLighting && box.item.id == lit,
+                MapBoxView(box: box, scale: scale, isCurrent: isLighting && box.item.id == lit,
                        isDimmed: isLighting && !near.contains(box.item.id) && box.item.id != lit)
                     .offset(x: box.x * scale, y: box.y * scale)
             }
@@ -203,7 +203,7 @@ struct MapCanvas: View {
 }
 
 /// One box on the map: a type, a module, or a folder, selecting it when clicked.
-struct MapBox: View {
+struct MapBoxView: View {
     @Environment(Workspace.self) private var workspace
     var box: GraphLayout.Box
     var scale: CGFloat

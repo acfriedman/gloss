@@ -4,7 +4,7 @@ import SwiftUI
 
 /// The list: the overview, then each module as its source folders hold it, every module, folder,
 /// and enclosing type opening and closing on its own.
-struct ListPane: View {
+struct ListPaneView: View {
     @Environment(Workspace.self) private var workspace
 
     var body: some View {
@@ -24,7 +24,7 @@ struct ListPane: View {
                     ForEach(atlas.modules, id: \.self) { module in
                         Section(isExpanded: workspace.expansion(ofModule: module)) {
                             ForEach(workspace.outline(of: module)) { item in
-                                OutlineRow(item: item, atlas: atlas)
+                                OutlineRowView(item: item, atlas: atlas)
                             }
                         } header: {
                             Button { workspace.select(.module(module)) } label: {
@@ -43,12 +43,12 @@ struct ListPane: View {
             }
         }
         .searchable(text: $workspace.search, placement: .sidebar, prompt: "Find a type or member")
-        .safeAreaInset(edge: .bottom) { Summary() }
+        .safeAreaInset(edge: .bottom) { SummaryView() }
     }
 }
 
 /// One outline row: a folder, or a type, opening onto what it holds when it holds anything.
-struct OutlineRow: View {
+struct OutlineRowView: View {
     @Environment(Workspace.self) private var workspace
     var item: OutlineItem
     var atlas: Atlas
@@ -59,7 +59,7 @@ struct OutlineRow: View {
         } else {
             DisclosureGroup(isExpanded: workspace.expansion(of: item.id)) {
                 ForEach(item.children) { child in
-                    OutlineRow(item: child, atlas: atlas)
+                    OutlineRowView(item: child, atlas: atlas)
                 }
             } label: {
                 label
@@ -82,7 +82,7 @@ struct OutlineRow: View {
             .contentShape(Rectangle())
             .onTapGesture { open.wrappedValue.toggle() }
         case .type(let node):
-            TypeRow(node: node, atlas: atlas)
+            TypeRowView(node: node, atlas: atlas)
                 .modifier(RowHover(target: .type(node.id)))
                 .tag(Workspace.Selection.type(node.id))
                 .id(Workspace.Selection.type(node.id))
@@ -91,7 +91,7 @@ struct OutlineRow: View {
 }
 
 /// One type in the list: its short name, a mark when it has findings, and its member count.
-struct TypeRow: View {
+struct TypeRowView: View {
     var node: Graph.Node
     var atlas: Atlas
 
@@ -139,7 +139,7 @@ extension RowHover: ViewModifier {
 }
 
 /// The size of the interface under the list, and the findings filter.
-struct Summary: View {
+struct SummaryView: View {
     @Environment(Workspace.self) private var workspace
 
     var body: some View {
@@ -150,12 +150,12 @@ struct Summary: View {
             VStack(alignment: .leading, spacing: 8) {
                 Grid(alignment: .leading, horizontalSpacing: 16, verticalSpacing: 6) {
                     GridRow {
-                        Stat(title: "Declarations", value: "\(interface.contracts.filter { Contract.rank($0.access) >= 1 }.count)")
-                        Stat(title: "Public", value: "\(interface.contracts.filter { Contract.rank($0.access) >= 3 }.count)")
+                        StatView(title: "Declarations", value: "\(interface.contracts.filter { Contract.rank($0.access) >= 1 }.count)")
+                        StatView(title: "Public", value: "\(interface.contracts.filter { Contract.rank($0.access) >= 3 }.count)")
                     }
                     GridRow {
-                        Stat(title: "Documented", value: "\(owed.filter(\.isDocumented).count)/\(owed.count)")
-                        Stat(title: "Findings", value: "\(findings)", tint: findings == 0 ? .green : .red)
+                        StatView(title: "Documented", value: "\(owed.filter(\.isDocumented).count)/\(owed.count)")
+                        StatView(title: "Findings", value: "\(findings)", tint: findings == 0 ? .green : .red)
                     }
                 }
                 Toggle("Only types with findings", isOn: $workspace.findingsOnly)
@@ -170,7 +170,7 @@ struct Summary: View {
 }
 
 /// One labeled number in the summary.
-struct Stat: View {
+struct StatView: View {
     var title: String
     var value: String
     var tint: Color = .primary

@@ -10,16 +10,16 @@ struct ContentView: View {
         Group {
             if workspace.atlas != nil {
                 NavigationSplitView {
-                    ListPane()
+                    ListPaneView()
                         .navigationSplitViewColumnWidth(min: 180, ideal: 240, max: 420)
                 } content: {
-                    DetailPane()
+                    DetailPaneView()
                         .navigationSplitViewColumnWidth(min: 320, ideal: 440, max: 760)
                 } detail: {
-                    MapPane()
+                    MapPaneView()
                 }
             } else {
-                EmptyState()
+                EmptyStateView()
             }
         }
         .navigationTitle(workspace.name)
@@ -52,7 +52,7 @@ struct ContentView: View {
 }
 
 /// What the window shows before a package is open, while it is read, or when it cannot be.
-struct EmptyState: View {
+struct EmptyStateView: View {
     @Environment(Workspace.self) private var workspace
 
     var body: some View {

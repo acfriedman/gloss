@@ -3,7 +3,7 @@ import GlossMap
 import SwiftUI
 
 /// Swift source colored the way Xcode's default themes color it, from the shared highlighter.
-struct Code: View {
+struct CodeView: View {
     var runs: [Highlight.Run]
 
     var body: some View {

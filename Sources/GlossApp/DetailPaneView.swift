@@ -6,12 +6,12 @@ import SwiftUI
 ///
 /// A preview is laid over the selection rather than replacing it, so when the preview ends the
 /// selection is back where the reader left it: scrolled to the same place, members still open.
-struct DetailPane: View {
+struct DetailPaneView: View {
     @Environment(Workspace.self) private var workspace
 
     var body: some View {
         ZStack(alignment: .top) {
-            DetailPage(target: workspace.selection)
+            DetailPageView(target: workspace.selection)
                 .id(workspace.selection)
             if let preview = workspace.preview {
                 VStack(spacing: 0) {
@@ -28,7 +28,7 @@ struct DetailPane: View {
                     .padding(.vertical, 8)
                     .background(.bar)
                     Divider()
-                    DetailPage(target: preview)
+                    DetailPageView(target: preview)
                 }
                 .id(preview)
             }
@@ -38,7 +38,7 @@ struct DetailPane: View {
 }
 
 /// One page of the details pane, scrolled from its top.
-struct DetailPage: View {
+struct DetailPageView: View {
     @Environment(Workspace.self) private var workspace
     var target: Workspace.Selection
 
@@ -47,7 +47,7 @@ struct DetailPage: View {
             VStack(alignment: .leading, spacing: 24) {
                 if let atlas = workspace.atlas {
                     switch target {
-                    case .overview: Overview(atlas: atlas)
+                    case .overview: OverviewView(atlas: atlas)
                     case .modules: ModulesView(atlas: atlas)
                     case .module(let module): ModuleView(atlas: atlas, module: module)
                     case .folder(let module, let folder): FolderView(atlas: atlas, module: module, folder: folder)
@@ -67,19 +67,19 @@ struct DetailPage: View {
 // MARK: Levels
 
 /// The overview: each module's entry points, the types other code reaches first.
-struct Overview: View {
+struct OverviewView: View {
     @Environment(Workspace.self) private var workspace
     var atlas: Atlas
 
     var body: some View {
-        Heading(title: "Overview")
+        HeadingView(title: "Overview")
         ForEach(atlas.modules, id: \.self) { module in
             let entries = atlas.entryPoints(in: module).filter(workspace.isShown)
             if !entries.isEmpty {
                 VStack(alignment: .leading, spacing: 10) {
-                    Eyebrow(text: module)
+                    EyebrowView(text: module)
                     ForEach(entries, id: \.id) { node in
-                        Card(atlas: atlas, node: node)
+                        CardView(atlas: atlas, node: node)
                     }
                 }
             }
@@ -88,7 +88,7 @@ struct Overview: View {
 }
 
 /// A type on the overview: its kind, name, first sentence, and who uses it.
-struct Card: View {
+struct CardView: View {
     @Environment(Workspace.self) private var workspace
     var atlas: Atlas
     var node: Graph.Node
@@ -105,7 +105,7 @@ struct Card: View {
                 Text(Wording.kind(of: node).uppercased())
                     .font(.system(size: 9.5, weight: .semibold)).tracking(0.6).foregroundStyle(.secondary)
                 Text(atlas.label(node)).font(.system(.body, design: .monospaced).weight(.semibold))
-                if let summary { DocText(text: summary).foregroundStyle(.primary) }
+                if let summary { DocTextView(text: summary).foregroundStyle(.primary) }
                 if !facts.isEmpty { Text(facts.joined(separator: " · ")).font(.caption).foregroundStyle(.secondary) }
             }
             .padding(12)
@@ -125,7 +125,7 @@ struct ModulesView: View {
     var atlas: Atlas
 
     var body: some View {
-        Heading(eyebrow: "Modules", title: "\(atlas.modules.count) modules",
+        HeadingView(eyebrow: "Modules", title: "\(atlas.modules.count) modules",
                 lede: "Each module with the modules it depends on. Select one to draw its types.")
         ForEach(atlas.modules, id: \.self) { module in
             let uses = atlas.dependencies(ofModule: module).uses
@@ -153,12 +153,12 @@ struct ModuleView: View {
     var body: some View {
         let (uses, usedBy) = atlas.dependencies(ofModule: module)
         let folders = atlas.folders(in: module)
-        Heading(eyebrow: "Module", title: module, lede: atlas.summary(of: atlas.types(in: module)))
-        ChipBlock(title: "Entry points", units: atlas.entryPoints(in: module).map { .type($0.id) }, atlas: atlas)
-        ChipBlock(title: "Depends on", units: uses.map { .module($0) }, atlas: atlas)
-        ChipBlock(title: "Used by", units: usedBy.map { .module($0) }, atlas: atlas)
-        if folders.count > 1 { ChipBlock(title: "Folders", units: folders.map { .folder(module, $0) }, atlas: atlas) }
-        ChipBlock(title: "Types", units: atlas.types(in: module).map { .type($0.id) }, atlas: atlas)
+        HeadingView(eyebrow: "Module", title: module, lede: atlas.summary(of: atlas.types(in: module)))
+        ChipBlockView(title: "Entry points", units: atlas.entryPoints(in: module).map { .type($0.id) }, atlas: atlas)
+        ChipBlockView(title: "Depends on", units: uses.map { .module($0) }, atlas: atlas)
+        ChipBlockView(title: "Used by", units: usedBy.map { .module($0) }, atlas: atlas)
+        if folders.count > 1 { ChipBlockView(title: "Folders", units: folders.map { .folder(module, $0) }, atlas: atlas) }
+        ChipBlockView(title: "Types", units: atlas.types(in: module).map { .type($0.id) }, atlas: atlas)
     }
 }
 
@@ -171,10 +171,10 @@ struct FolderView: View {
     var body: some View {
         let (uses, usedBy) = atlas.dependencies(ofFolder: folder, in: module)
         let members = atlas.types(inFolder: folder, of: module)
-        Heading(eyebrow: "\(module) · folder", title: Wording.folderLabel(folder), lede: atlas.summary(of: members))
-        ChipBlock(title: "Depends on", units: uses, atlas: atlas)
-        ChipBlock(title: "Used by", units: usedBy, atlas: atlas)
-        ChipBlock(title: "Types", units: members.map { .type($0.id) }, atlas: atlas)
+        HeadingView(eyebrow: "\(module) · folder", title: Wording.folderLabel(folder), lede: atlas.summary(of: members))
+        ChipBlockView(title: "Depends on", units: uses, atlas: atlas)
+        ChipBlockView(title: "Used by", units: usedBy, atlas: atlas)
+        ChipBlockView(title: "Types", units: members.map { .type($0.id) }, atlas: atlas)
     }
 }
 
@@ -190,28 +190,28 @@ struct TypeView: View {
         let group = atlas.group(node.id)
         let (incoming, outgoing, nested) = atlas.neighbors(of: node)
         VStack(alignment: .leading, spacing: 10) {
-            Eyebrow(text: "\(node.module) · \(Wording.kind(of: node))")
+            EyebrowView(text: "\(node.module) · \(Wording.kind(of: node))")
             if let head = group.head {
-                Code(runs: Highlight.runs(of: head.contract))
+                CodeView(runs: Highlight.runs(of: head.contract))
                     .font(.system(.title3, design: .monospaced).weight(.semibold))
-                if let summary = head.summary { DocText(text: summary).font(.title3) }
-                ForEach(head.notes, id: \.self) { note in DocText(text: note) }
-                Findings(findings: head.findings)
-                SourceLink(file: head.file, line: head.line)
+                if let summary = head.summary { DocTextView(text: summary).font(.title3) }
+                ForEach(head.notes, id: \.self) { note in DocTextView(text: note) }
+                FindingsView(findings: head.findings)
+                SourceLinkView(file: head.file, line: head.line)
             } else {
                 Text(atlas.label(node)).font(.system(.title3, design: .monospaced).weight(.semibold))
                 Text(node.keyword == "extension" ? "Extends a type no scanned source declares." : "Declarations at file scope.")
                     .foregroundStyle(.secondary)
             }
         }
-        Flow(atlas: atlas, node: node, incoming: incoming, outgoing: outgoing, nested: nested)
-        Members(atlas: atlas, members: group.members.filter { Contract.rank($0.access) >= workspace.minimumRank })
+        FlowView(atlas: atlas, node: node, incoming: incoming, outgoing: outgoing, nested: nested)
+        MembersView(atlas: atlas, members: group.members.filter { Contract.rank($0.access) >= workspace.minimumRank })
     }
 }
 
 /// What flows into and out of a type, read top to bottom: what uses it, then what it conforms to,
 /// holds, takes, returns, and throws, then what it uses only inside its bodies.
-struct Flow: View {
+struct FlowView: View {
     var atlas: Atlas
     var node: Graph.Node
     var incoming: [Graph.Edge]
@@ -223,18 +223,18 @@ struct Flow: View {
                                                (.returns, "Returns"), (.throws, "Throws")]
         let insideOnly = outgoing.filter { $0.roles == [.body] }
         VStack(alignment: .leading, spacing: 14) {
-            Eyebrow(text: "Flow")
-            ChipBlock(title: "Used by", units: incoming.map { .type($0.from) }, atlas: atlas,
+            EyebrowView(text: "Flow")
+            ChipBlockView(title: "Used by", units: incoming.map { .type($0.from) }, atlas: atlas,
                       notes: incoming.map { Wording.words($0.roles) })
             ForEach(roles, id: \.0) { role, title in
-                ChipBlock(title: title, units: outgoing.filter { $0.roles.contains(role) }.map { .type($0.to) }, atlas: atlas)
+                ChipBlockView(title: title, units: outgoing.filter { $0.roles.contains(role) }.map { .type($0.to) }, atlas: atlas)
             }
             if !nested.isEmpty {
-                ChipBlock(title: "Nests", units: nested.map { .type($0.id) }, atlas: atlas)
+                ChipBlockView(title: "Nests", units: nested.map { .type($0.id) }, atlas: atlas)
             }
             if !insideOnly.isEmpty {
                 DisclosureGroup {
-                    ChipBlock(title: "", units: insideOnly.map { .type($0.to) }, atlas: atlas)
+                    ChipBlockView(title: "", units: insideOnly.map { .type($0.to) }, atlas: atlas)
                         .padding(.top, 6)
                 } label: {
                     Text("Uses \(insideOnly.count) more type\(insideOnly.count == 1 ? "" : "s") inside its bodies")
@@ -247,7 +247,7 @@ struct Flow: View {
 
 /// A type's members, grouped by what a caller does with them; overrides fold away, since their
 /// contract is the inherited one.
-struct Members: View {
+struct MembersView: View {
     var atlas: Atlas
     var members: [Atlas.Reviewed]
 
@@ -261,10 +261,10 @@ struct Members: View {
         ]
         ForEach(sections.filter { !$0.1.isEmpty }, id: \.0) { title, list in
             VStack(alignment: .leading, spacing: 2) {
-                Eyebrow(text: "\(title) · \(list.count)")
+                EyebrowView(text: "\(title) · \(list.count)")
                     .padding(.bottom, 6)
                 ForEach(Array(list.enumerated()), id: \.offset) { _, member in
-                    MemberRow(member: member)
+                    MemberRowView(member: member)
                     Divider()
                 }
             }
@@ -273,7 +273,7 @@ struct Members: View {
 }
 
 /// One member: its declaration and first sentence, unfolding to its whole contract.
-struct MemberRow: View {
+struct MemberRowView: View {
     var member: Atlas.Reviewed
     @State private var isOpen = false
 
@@ -281,28 +281,28 @@ struct MemberRow: View {
         let brief = member.summary.map(Wording.firstSentence)
         DisclosureGroup(isExpanded: $isOpen) {
             VStack(alignment: .leading, spacing: 8) {
-                if let summary = member.summary, summary != brief { DocText(text: summary) }
+                if let summary = member.summary, summary != brief { DocTextView(text: summary) }
                 if !member.parameters.isEmpty {
-                    Terms(title: "Parameters", rows: member.parameters.map { ($0.name, $0.doc ?? "Undocumented.", $0.doc == nil) })
+                    TermsView(title: "Parameters", rows: member.parameters.map { ($0.name, $0.doc ?? "Undocumented.", $0.doc == nil) })
                 }
-                if let returns = member.returns { Terms(title: "Returns", rows: [(member.returnType ?? "", returns, false)]) }
-                if let throwsDoc = member.throwsDoc { Terms(title: "Throws", rows: [(member.throwsClause ?? "throws", throwsDoc, false)]) }
+                if let returns = member.returns { TermsView(title: "Returns", rows: [(member.returnType ?? "", returns, false)]) }
+                if let throwsDoc = member.throwsDoc { TermsView(title: "Throws", rows: [(member.throwsClause ?? "throws", throwsDoc, false)]) }
                 ForEach(Array(member.callouts.enumerated()), id: \.offset) { _, callout in
-                    Terms(title: callout.keyword, rows: [("", callout.text, false)])
+                    TermsView(title: callout.keyword, rows: [("", callout.text, false)])
                 }
-                ForEach(member.notes, id: \.self) { note in DocText(text: note) }
+                ForEach(member.notes, id: \.self) { note in DocTextView(text: note) }
                 if let exemption = member.exemption {
                     Text("Exempt: \(exemption)").font(.caption).foregroundStyle(.secondary)
                 }
-                Findings(findings: member.findings)
-                SourceLink(file: member.file, line: member.line)
+                FindingsView(findings: member.findings)
+                SourceLinkView(file: member.file, line: member.line)
             }
             .padding(.leading, 4)
             .padding(.bottom, 8)
         } label: {
             VStack(alignment: .leading, spacing: 3) {
                 HStack(alignment: .firstTextBaseline, spacing: 6) {
-                    Code(runs: Highlight.runs(of: member.contract))
+                    CodeView(runs: Highlight.runs(of: member.contract))
                         .font(.system(.callout, design: .monospaced))
                         .lineLimit(isOpen ? nil : 2)
                     if !member.findings.isEmpty {
@@ -310,7 +310,7 @@ struct MemberRow: View {
                     }
                 }
                 if let brief {
-                    DocText(text: brief).font(.callout).foregroundStyle(.secondary)
+                    DocTextView(text: brief).font(.callout).foregroundStyle(.secondary)
                 } else if member.requiresDoc {
                     Text("Undocumented").font(.callout).foregroundStyle(.red)
                 }
@@ -323,14 +323,14 @@ struct MemberRow: View {
 // MARK: Pieces
 
 /// A view's heading: a small label, a title, and one line of context.
-struct Heading: View {
+struct HeadingView: View {
     var eyebrow: String?
     var title: String
     var lede: String?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            if let eyebrow { Eyebrow(text: eyebrow) }
+            if let eyebrow { EyebrowView(text: eyebrow) }
             Text(title).font(.system(.title, design: .serif).italic())
             if let lede { Text(lede).foregroundStyle(.secondary) }
         }
@@ -338,7 +338,7 @@ struct Heading: View {
 }
 
 /// A small uppercase label over a section.
-struct Eyebrow: View {
+struct EyebrowView: View {
     var text: String
 
     var body: some View {
@@ -350,7 +350,7 @@ struct Eyebrow: View {
 }
 
 /// Doc text with its code spans set in code.
-struct DocText: View {
+struct DocTextView: View {
     var text: String
 
     var body: some View {
@@ -361,19 +361,19 @@ struct DocText: View {
 }
 
 /// A titled list of names and what each one means, for parameters, returns, throws, and callouts.
-struct Terms: View {
+struct TermsView: View {
     var title: String
     var rows: [(term: String, text: String, missing: Bool)]
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Eyebrow(text: title)
+            EyebrowView(text: title)
             ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
                 HStack(alignment: .firstTextBaseline, spacing: 10) {
                     if !row.term.isEmpty {
                         Text(row.term).font(.system(.callout, design: .monospaced))
                     }
-                    DocText(text: row.text).font(.callout).foregroundStyle(row.missing ? .red : .primary)
+                    DocTextView(text: row.text).font(.callout).foregroundStyle(row.missing ? .red : .primary)
                 }
             }
         }
@@ -381,7 +381,7 @@ struct Terms: View {
 }
 
 /// The findings the linter made on one declaration.
-struct Findings: View {
+struct FindingsView: View {
     var findings: [Assessment.Finding]
 
     var body: some View {
@@ -402,7 +402,7 @@ struct Findings: View {
 }
 
 /// Where a declaration is written, opening it in Xcode.
-struct SourceLink: View {
+struct SourceLinkView: View {
     @Environment(Workspace.self) private var workspace
     var file: String
     var line: Int
@@ -418,7 +418,7 @@ struct SourceLink: View {
 }
 
 /// A titled row of chips, or nothing when there are none.
-struct ChipBlock: View {
+struct ChipBlockView: View {
     var title: String
     var units: [MapScope.Unit]
     var atlas: Atlas
@@ -436,7 +436,7 @@ struct ChipBlock: View {
                 }
                 Wrap(spacing: 6) {
                     ForEach(Array(units.enumerated()), id: \.offset) { index, unit in
-                        Chip(unit: unit, atlas: atlas, note: index < notes.count ? notes[index] : nil)
+                        ChipView(unit: unit, atlas: atlas, note: index < notes.count ? notes[index] : nil)
                     }
                 }
             }
@@ -445,7 +445,7 @@ struct ChipBlock: View {
 }
 
 /// A link to a type, module, or folder that lights its box on the map while hovered.
-struct Chip: View {
+struct ChipView: View {
     @Environment(Workspace.self) private var workspace
     var unit: MapScope.Unit
     var atlas: Atlas

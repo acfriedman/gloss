@@ -160,8 +160,8 @@ extension InterfacePage {
             units[id] = unit
             if scope.isInside(unit), insideSet.insert(unit).inserted { inside.append(unit) }
         }
-        func fold(_ links: [Site.Rolled]) -> [(from: MapScope.Unit, to: MapScope.Unit, roles: [Contract.Mention.Role])] {
-            var result: [(from: MapScope.Unit, to: MapScope.Unit, roles: [Contract.Mention.Role])] = []
+        func fold(_ links: [Site.Rolled]) -> [(from: MapScope.Unit, to: MapScope.Unit, roles: [Mention.Role])] {
+            var result: [(from: MapScope.Unit, to: MapScope.Unit, roles: [Mention.Role])] = []
             var index: [[MapScope.Unit]: Int] = [:]
             for link in links {
                 guard let from = units[link.from], let to = units[link.to], from != to,

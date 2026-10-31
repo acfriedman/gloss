@@ -23,8 +23,8 @@ public enum InterfacePage {
         for scope in scopes {
             for id in figure(scope, site: site, includeBody: true).shown { scopesOf[id, default: []].append(scope.id) }
         }
-        let owed = interface.contracts.filter(\.requiresDoc)
-        let findings = interface.contracts.reduce(0) { $0 + $1.findings.count }
+        let owed = zip(interface.contracts, interface.assessments).filter { $0.1.requiresDoc }.map(\.0)
+        let findings = interface.assessments.reduce(0) { $0 + $1.findings.count }
         let hasPublic = interface.contracts.contains { Contract.rank($0.access) >= 3 }
         func pressed(_ min: Int) -> String { String(min == (hasPublic ? 3 : 1)) }
         var html = """
@@ -99,10 +99,27 @@ public enum InterfacePage {
 
     /// The interface arranged for the page: nodes, the contracts each one shows, and lookups between them.
     struct Site {
+        /// A contract with the linter's assessment of it. The model and the lint meet here, in the view,
+        /// and nowhere earlier; a contract's own fields read through as the reviewed value's.
+        @dynamicMemberLookup
+        struct Reviewed {
+            var contract: Contract
+            var assessment: Assessment
+
+            /// Reads a contract field through the reviewed value, so view code reads both halves alike.
+            ///
+            /// - Parameter path: A field of the contract.
+            /// - Returns: The contract's value for it.
+            subscript<Value>(dynamicMember path: KeyPath<Contract, Value>) -> Value { contract[keyPath: path] }
+            var findings: [Assessment.Finding] { assessment.findings }
+            var requiresDoc: Bool { assessment.requiresDoc }
+            var exemption: String? { assessment.exemption }
+        }
+
         /// The contracts one node shows: the type's own declaration, if scanned, and its members.
         struct Group {
-            var head: Contract?
-            var members: [Contract] = []
+            var head: Reviewed?
+            var members: [Reviewed] = []
             var findingCount: Int { (head?.findings.count ?? 0) + members.reduce(0) { $0 + $1.findings.count } }
         }
 
@@ -110,7 +127,7 @@ public enum InterfacePage {
         struct Rolled {
             var from: String
             var to: String
-            var roles: [Contract.Mention.Role]
+            var roles: [Mention.Role]
         }
 
         var nodes: [Graph.Node]
@@ -140,12 +157,13 @@ public enum InterfacePage {
                 if seenModules.insert(node.module).inserted { modules.append(node.module) }
                 if node.root == node.id { rootIDs.append(node.id) }
             }
-            for contract in interface.contracts {
+            for (contract, assessment) in zip(interface.contracts, interface.assessments) {
                 let id = Graph.id(contract.module, Graph.key(of: contract))
+                let reviewed = Reviewed(contract: contract, assessment: assessment)
                 if contract.opensScope {
-                    groups[id, default: Group()].head = contract
+                    groups[id, default: Group()].head = reviewed
                 } else {
-                    groups[id, default: Group()].members.append(contract)
+                    groups[id, default: Group()].members.append(reviewed)
                 }
             }
             for edge in edges {
@@ -273,7 +291,7 @@ public enum InterfacePage {
                 guard let at = index[key] else { continue }
                 for role in roles where !result[at].roles.contains(role) { result[at].roles.append(role) }
             }
-            let order = Contract.Mention.Role.allCases
+            let order = Mention.Role.allCases
             return result.map { edge in
                 var edge = edge
                 edge.roles.sort { order.firstIndex(of: $0)! < order.firstIndex(of: $1)! }
@@ -307,7 +325,7 @@ public enum InterfacePage {
     // MARK: Words
 
     /// Words for each role, read as "the source … the target".
-    static let roleWords: [Contract.Mention.Role: String] = [
+    static let roleWords: [Mention.Role: String] = [
         .conformance: "conforms to", .property: "holds", .parameter: "takes",
         .returns: "returns", .throws: "throws", .body: "uses"
     ]
@@ -316,7 +334,7 @@ public enum InterfacePage {
     ///
     /// - Parameter roles: The roles of one edge.
     /// - Returns: `holds · takes`, and the like.
-    static func words(_ roles: [Contract.Mention.Role]) -> String {
+    static func words(_ roles: [Mention.Role]) -> String {
         roles.compactMap { roleWords[$0] }.joined(separator: " · ")
     }
 
@@ -359,7 +377,7 @@ public enum InterfacePage {
                 let group = site.groups[node.id] ?? Site.Group()
                 let summary = group.head?.summary.map(firstSentence)
                     ?? (node.keyword == "file" ? "The module's file-scope code: for an executable, its entry point." : nil)
-                let operations = group.members.filter { isCallable($0) && Contract.rank($0.access) >= 1 && !$0.isOverride }.count
+                let operations = group.members.filter { isCallable($0.keyword) && Contract.rank($0.access) >= 1 && !$0.isOverride }.count
                 let users = links.filter { $0.to == node.id }.compactMap { site.byID[$0.from] }
                 html += "<a class=\"card\" href=\"#\(site.anchor(node.id))\">"
                 html += "<span class=\"card-kind\">\(escape(node.keyword == "file" ? "file scope" : node.keyword))</span>"
@@ -391,12 +409,12 @@ public enum InterfacePage {
         return "<a class=\"chip\(dirty ? " dirty" : "")\" href=\"#\(site.anchor(node.id))\" data-id=\"\(escape(node.id))\" data-root=\"\(escape(node.root))\" data-access=\"\(access)\">\(escape(site.label(node)))</a>"
     }
 
-    /// Whether a contract is something a caller invokes.
+    /// Whether a declaration is something a caller invokes.
     ///
-    /// - Parameter contract: Any contract.
+    /// - Parameter keyword: The declaration's introducing keyword.
     /// - Returns: `true` for functions, initializers, subscripts, and macros.
-    static func isCallable(_ contract: Contract) -> Bool {
-        ["func", "init", "subscript", "macro"].contains(contract.keyword)
+    static func isCallable(_ keyword: String) -> Bool {
+        ["func", "init", "subscript", "macro"].contains(keyword)
     }
 
     // MARK: Figures

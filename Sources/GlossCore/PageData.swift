@@ -104,9 +104,9 @@ extension InterfacePage {
     /// The bit each role sets in an edge's role mask, in model order.
     ///
     /// - Parameter roles: The roles of one edge.
-    /// - Returns: A mask with bit `n` set for the `n`th role of ``Contract/Mention/Role/allCases``.
-    static func roleMask(_ roles: [GlossCore.Contract.Mention.Role]) -> Int {
-        let all = GlossCore.Contract.Mention.Role.allCases
+    /// - Returns: A mask with bit `n` set for the `n`th role of ``Mention/Role/allCases``.
+    static func roleMask(_ roles: [Mention.Role]) -> Int {
+        let all = Mention.Role.allCases
         return roles.reduce(0) { mask, role in mask | (1 << (all.firstIndex(of: role) ?? 0)) }
     }
 
@@ -127,7 +127,7 @@ extension InterfacePage {
             data.files.append(path)
             return data.files.count - 1
         }
-        func contract(_ contract: GlossCore.Contract, owner: String) -> Int {
+        func contract(_ contract: Site.Reviewed, owner: String) -> Int {
             var uses: [[Int]] = []
             var position: [String: Int] = [:]
             for mention in contract.mentions {

@@ -2,15 +2,37 @@ import Foundation
 import SwiftParser
 import SwiftSyntax
 
-/// Walks one Swift file and reports every doc-comment violation in it.
+/// Reads every declaration in one Swift file, with its doc comment and what its syntax says about it.
 ///
-/// The visitor only adapts syntax nodes into `Declaration` values; the rules live in `Rules` so the
-/// two can evolve independently.
-public final class Checker: SyntaxVisitor {
+/// Reading is the one pass over the syntax tree. What it produces feeds two consumers that never meet
+/// here: ``Linter`` checks the doc comments against ``Rules``, and ``Interface`` builds the contract
+/// model and its dependency graph.
+public final class DeclarationReader: SyntaxVisitor {
+    /// One declaration as read: what the rules need, its doc comment, and what the model needs.
+    public struct Entry: Sendable {
+        public var declaration: Declaration
+        public var doc: DocComment?
+        public var details: Details
+    }
+
+    /// What the syntax says about a declaration beyond what the rules need: its kind, scope, access,
+    /// header, types, effects, and the type names it mentions.
+    public struct Details: Sendable {
+        public var keyword: String
+        public var mentions: [Mention]
+        public var container: [String]
+        public var access: String
+        public var header: String
+        public var parameterTypes: [(type: String, hasDefault: Bool)]
+        public var returnType: String?
+        public var valueType: String?
+        public var throwsClause: String?
+        public var isAsync: Bool
+    }
+
     private let file: String
     private let converter: SourceLocationConverter
-    private var findings: [Diagnostic] = []
-    private var recorded: [Contract] = []
+    private var entries: [Entry] = []
     private var conformanceDepth = 0
     private var privateDepth = 0
     private var scopes: [Scope] = []
@@ -27,32 +49,18 @@ public final class Checker: SyntaxVisitor {
 
     private static let accessLevels: Set<String> = ["open", "public", "package", "internal", "fileprivate", "private"]
 
-    /// Lints the source text of one file. Parsing happens here so callers hand over text, not trees.
+    /// Reads the source text of one file. Parsing happens here so callers hand over text, not trees.
     ///
     /// - Parameters:
     ///   - source: The file's contents.
-    ///   - file: The path reported in diagnostics.
-    /// - Returns: Violations in source order.
-    public static func check(source: String, file: String) -> [Diagnostic] {
-        walk(source: source, file: file).findings.sorted { ($0.line, $0.column, $0.rule.rawValue) < ($1.line, $1.column, $1.rule.rawValue) }
-    }
-
-    /// Reads the contract of every declaration in one file, with the findings each one carries. Private
-    /// declarations are included; the view decides what to hide.
-    ///
-    /// - Parameters:
-    ///   - source: The file's contents.
-    ///   - file: The path the contracts report.
-    /// - Returns: Contracts in source order, each with its module left empty.
-    public static func contracts(source: String, file: String) -> [Contract] {
-        walk(source: source, file: file).recorded
-    }
-
-    private static func walk(source: String, file: String) -> Checker {
+    ///   - file: The path every entry reports.
+    /// - Returns: Every declaration in source order, private ones included, and the file's top-level
+    ///   statements as one `top-level code` entry first when it has any.
+    public static func read(source: String, file: String) -> [Entry] {
         let tree = Parser.parse(source: source)
-        let checker = Checker(file: file, converter: SourceLocationConverter(fileName: file, tree: tree))
-        checker.walk(tree)
-        return checker
+        let reader = DeclarationReader(file: file, converter: SourceLocationConverter(fileName: file, tree: tree))
+        reader.walk(tree)
+        return reader.entries
     }
 
     private init(file: String, converter: SourceLocationConverter) {
@@ -75,21 +83,21 @@ public final class Checker: SyntaxVisitor {
     }
 
     // A script's top-level statements are its entry point. They are not declarations, so they are kept
-    // as one `top-level code` contract that carries their mentions into the graph.
+    // as one `top-level code` entry that carries their mentions into the graph; no rule applies to it.
     override public func visit(_ node: SourceFileSyntax) -> SyntaxVisitorContinueKind {
         let statements = node.statements.filter { !$0.item.is(DeclSyntax.self) }
         guard let first = statements.first else { return .visitChildren }
-        var mentions: [Contract.Mention] = []
+        var mentions: [Mention] = []
         for statement in statements {
             for name in Mentions.names(in: statement) where !mentions.contains(where: { $0.name == name }) {
-                mentions.append(Contract.Mention(name: name, role: .body))
+                mentions.append(Mention(name: name, role: .body))
             }
         }
         let line = converter.location(for: first.positionAfterSkippingLeadingTrivia).line
         let declaration = Declaration(kind: .other, name: "top-level code", file: file, line: line, column: 1)
-        let facts = Contract.Facts(keyword: "code", mentions: mentions, container: [], access: "internal",
-                                   header: "top-level code", parameterTypes: [], returnType: nil, valueType: nil, throwsClause: nil, isAsync: false)
-        recorded.append(Contract.make(declaration, doc: nil, facts: facts, findings: []))
+        let details = Details(keyword: "code", mentions: mentions, container: [], access: "internal",
+                              header: "top-level code", parameterTypes: [], returnType: nil, valueType: nil, throwsClause: nil, isAsync: false)
+        entries.append(Entry(declaration: declaration, doc: nil, details: details))
         return .visitChildren
     }
 
@@ -277,10 +285,7 @@ public final class Checker: SyntaxVisitor {
         } else if isMemberwise {
             declaration.exemption = .memberwiseInit
         }
-        let doc = DocComment.leading(node, converter: converter)
-        let found = Rules.check(declaration, doc: doc)
-        findings += found
-        let facts = Contract.Facts(
+        let details = Details(
             keyword: Header.keyword(of: node),
             mentions: Mentions.collect(node, parameters: parameters, returnType: returnType, effects: effects),
             container: scopes.map(\.name),
@@ -292,7 +297,7 @@ public final class Checker: SyntaxVisitor {
             throwsClause: effects?.throwsClause?.trimmedDescription,
             isAsync: effects?.asyncSpecifier != nil
         )
-        recorded.append(Contract.make(declaration, doc: doc, facts: facts, findings: found))
+        entries.append(Entry(declaration: declaration, doc: DocComment.leading(node, converter: converter), details: details))
     }
 
     /// Reads a `// gloss:exempt <reason>` line from the trivia directly above a declaration.

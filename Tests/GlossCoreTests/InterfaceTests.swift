@@ -4,7 +4,7 @@ import XCTest
 /// Pins the contract model and the page against literal sources, so what the view can show is a visible diff.
 final class InterfaceTests: XCTestCase {
     private func contracts(_ source: String) -> [Contract] {
-        Checker.contracts(source: source, file: "Sources/Shop/Cart.swift")
+        DeclarationReader.read(source: source, file: "Sources/Shop/Cart.swift").map(Contract.make)
     }
 
     func testFunctionContractCarriesTypesDocsAndEffects() throws {
@@ -39,7 +39,6 @@ final class InterfaceTests: XCTestCase {
         XCTAssertEqual(add.summary, "Adds an item. Adding is idempotent per SKU.")
         XCTAssertEqual(add.callouts, [.init(keyword: "Note", text: "Prices are not rechecked.")])
         XCTAssertEqual(add.notes, ["Lines are kept in insertion order."])
-        XCTAssertEqual(add.findings, [])
     }
 
     func testAccessFollowsExtensionsProtocolsAndEnums() {
@@ -78,11 +77,20 @@ final class InterfaceTests: XCTestCase {
         XCTAssertEqual(contracts(source).last?.access, "internal")
     }
 
-    func testFindingsAttachToTheirDeclaration() throws {
-        let contract = try XCTUnwrap(contracts("func total() -> Int { 0 }").first)
-        XCTAssertEqual(contract.findings.map(\.rule), ["missing-doc"])
-        XCTAssertFalse(contract.isDocumented)
-        XCTAssertTrue(contract.requiresDoc)
+    func testAssessmentsSitBesideTheirContracts() throws {
+        let interface = Interface.build(sources: [("Sources/Shop/Cart.swift", "func total() -> Int { 0 }\n/// Adds.\nfunc add() {}")])
+        XCTAssertEqual(interface.contracts.map(\.name), ["total", "add"])
+        XCTAssertEqual(interface.assessments.map { $0.findings.map(\.rule) }, [["missing-doc"], []])
+        XCTAssertEqual(interface.assessments.map(\.requiresDoc), [true, true])
+        XCTAssertFalse(interface.contracts[0].isDocumented)
+    }
+
+    func testReadingFeedsLintAndModelAlike() {
+        let source = "/// Adds.\nfunc add(_ x: Int) {}"
+        let entries = DeclarationReader.read(source: source, file: "T.swift")
+        XCTAssertEqual(entries.map(\.declaration.name), ["add"])
+        XCTAssertEqual(Linter.check(source: source, file: "T.swift").map(\.rule), [.parameterMissing])
+        XCTAssertEqual(entries.map(Contract.make).first?.parameters.map(\.type), ["Int"])
     }
 
     func testModuleComesFromTheSwiftPMLayout() {
@@ -136,9 +144,9 @@ final class InterfaceTests: XCTestCase {
             ("Sources/Shop/Cart.swift", "/// A cart.\npublic struct Cart {}"),
             ("Sources/shop/main.swift", "let cart = 1\nif cart > 0 { print(Cart()) }")
         ])
-        let code = try XCTUnwrap(interface.contracts.first { $0.keyword == "code" })
-        XCTAssertEqual(code.name, "top-level code")
-        XCTAssertFalse(code.requiresDoc)
+        let index = try XCTUnwrap(interface.contracts.firstIndex { $0.keyword == "code" })
+        XCTAssertEqual(interface.contracts[index].name, "top-level code")
+        XCTAssertFalse(interface.assessments[index].requiresDoc)
         XCTAssertTrue(interface.graph.edges.contains { $0.from == "shop/" && $0.to == "Shop/Cart" && $0.roles == [.body] })
     }
 

@@ -23,8 +23,8 @@ public struct Graph: Sendable, Equatable, Codable {
     public struct Edge: Sendable, Equatable, Codable {
         public var from: String
         public var to: String
-        /// The roles in ``Contract/Mention/Role`` order; an edge made only of `body` is implementation.
-        public var roles: [Contract.Mention.Role]
+        /// The roles in ``Mention/Role`` order; an edge made only of `body` is implementation.
+        public var roles: [Mention.Role]
         /// The qualified names of the declarations whose mentions make this edge.
         public var via: [String]
     }
@@ -121,7 +121,7 @@ public struct Graph: Sendable, Equatable, Codable {
                 if !edges[edge].via.contains(contract.qualifiedName) { edges[edge].via.append(contract.qualifiedName) }
             }
         }
-        let order = Contract.Mention.Role.allCases
+        let order = Mention.Role.allCases
         for edge in edges.indices {
             edges[edge].roles.sort { order.firstIndex(of: $0)! < order.firstIndex(of: $1)! }
         }

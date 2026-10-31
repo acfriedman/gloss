@@ -29,6 +29,14 @@ Each finding is one line in compiler format, so Xcode and GitHub Actions render 
 Sources/App/Cart.swift:82:1: error: `total` returns a value but has no `- Returns:` entry; ... [returns-missing]
 ```
 
+## Design
+
+One pass reads the source; two consumers use what it reads and never meet each other.
+`DeclarationReader` walks each file once and produces, per declaration, what the rules need, its doc
+comment, and the details the interface model needs. `Linter` runs `Rules` over those to produce
+diagnostics, and `Contract` and `Graph` build the model from them. `Interface` sets contracts and
+assessments side by side, and `InterfacePage` joins them only to render.
+
 ## Interface
 
 ```bash
@@ -37,8 +45,9 @@ swift run -c release gloss interface Sources --html interface.html --json interf
 
 `gloss interface` reads the same sources and exports each declaration's contract: its signature
 without the body, effective access level, enclosing type, parameter types, return type, throws
-clause, and the doc comment read as summary, parameter entries, returns, throws, callouts, and notes,
-plus any findings. `--json` writes it as data (`schema` marks the shape's version); `--html` writes
+clause, and the doc comment read as summary, parameter entries, returns, throws, callouts, and notes.
+Beside each contract, at the same index in `assessments`, is what the linter concluded about it:
+whether a doc is required, why the declaration is exempt if it is, and its findings. `--json` writes it as data (`schema` marks the shape's version); `--html` writes
 a self-contained page. With neither flag, JSON goes to standard output. `--title` names the page;
 it defaults to the current directory's name.
 

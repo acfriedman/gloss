@@ -1,5 +1,31 @@
 import SwiftSyntax
 
+/// A type name the declaration mentions, and where: in its signature or in its body.
+///
+/// Mentions are what the dependency graph is drawn from. The name is kept as written; `resolved` is
+/// the graph node it names, or `nil` when no scanned source declares it.
+public struct Mention: Sendable, Equatable, Codable {
+    /// Where a mention appears, which says how the declaration depends on the type.
+    public enum Role: String, Sendable, Codable, CaseIterable {
+        /// In an inheritance clause: the type conforms to it or inherits from it.
+        case conformance
+        /// In a property's type, or in an unannotated property's initial value.
+        case property
+        /// In a parameter's type.
+        case parameter
+        /// In the return type.
+        case returns
+        /// In a typed `throws(E)` clause.
+        case `throws`
+        /// Anywhere in a body: implementation, not interface.
+        case body
+    }
+
+    public var name: String
+    public var role: Role
+    public var resolved: String?
+}
+
 /// Collects the type names a declaration mentions, tagged with where each appears.
 ///
 /// Only capitalized names are collected, which is how Swift spells types. Whether a name is one of the
@@ -18,12 +44,12 @@ enum Mentions {
         parameters: FunctionParameterListSyntax?,
         returnType: TypeSyntax?,
         effects: FunctionEffectSpecifiersSyntax?
-    ) -> [Contract.Mention] {
-        var mentions: [Contract.Mention] = []
-        func add(_ syntax: (some SyntaxProtocol)?, _ role: Contract.Mention.Role) {
+    ) -> [Mention] {
+        var mentions: [Mention] = []
+        func add(_ syntax: (some SyntaxProtocol)?, _ role: Mention.Role) {
             guard let syntax else { return }
             for name in names(in: syntax) where !mentions.contains(where: { $0.name == name && $0.role == role }) {
-                mentions.append(Contract.Mention(name: name, role: role))
+                mentions.append(Mention(name: name, role: role))
             }
         }
         let syntax = Syntax(node)

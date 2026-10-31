@@ -85,14 +85,14 @@ if interfaceMode {
             exit(73)
         }
     }
-    let findings = interface.contracts.reduce(0) { $0 + $1.findings.count }
+    let findings = interface.assessments.reduce(0) { $0 + $1.findings.count }
     FileHandle.standardError.write(Data("\(interface.contracts.count) declarations, \(findings) findings in \(sources.count) files\n".utf8))
     exit(0)
 }
 
 var diagnostics: [Diagnostic] = []
 for (file, source) in sources {
-    diagnostics += Checker.check(source: source, file: file)
+    diagnostics += Linter.check(source: source, file: file)
 }
 
 if !summaryOnly {

@@ -4,7 +4,7 @@ import XCTest
 /// Pins each rule against a literal doc comment, so a message or threshold change is a visible diff.
 final class RulesTests: XCTestCase {
     private func lint(_ source: String) -> [Rule] {
-        Checker.check(source: source, file: "T.swift").map(\.rule)
+        Linter.check(source: source, file: "T.swift").map(\.rule)
     }
 
     func testConformingFunctionIsClean() {

@@ -4,8 +4,14 @@ import AppKit
 ///
 /// Set `GLOSS_SNAPSHOT` to the output path. `GLOSS_SELECT` names what to select first: a node id such
 /// as `GlossCore/Linter`, or `module:Name`. `GLOSS_ZOOM` is how many times to zoom in after that, and
-/// `GLOSS_PREVIEW` names a node to preview as if the pointer rested on it.
+/// `GLOSS_PREVIEW` names a node to preview as if the pointer rested on it. A snapshot run leaves the
+/// folder the next launch reopens alone.
 extension Workspace {
+    /// Whether this run only takes a snapshot, and so must not change what the reader's next launch opens.
+    static var isSnapshotting: Bool {
+        ProcessInfo.processInfo.environment["GLOSS_SNAPSHOT"] != nil
+    }
+
     /// Takes the snapshot the environment asks for, once the interface is read; does nothing otherwise.
     func snapshotIfAsked() {
         let environment = ProcessInfo.processInfo.environment

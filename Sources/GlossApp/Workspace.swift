@@ -110,7 +110,7 @@ final class Workspace {
     ///
     /// - Parameter url: The package folder.
     func open(_ url: URL) {
-        UserDefaults.standard.set(url.path, forKey: Self.lastFolderKey)
+        if !Self.isSnapshotting { UserDefaults.standard.set(url.path, forKey: Self.lastFolderKey) }
         root = url
         name = url.lastPathComponent
         selection = .overview

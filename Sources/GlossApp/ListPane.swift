@@ -22,6 +22,7 @@ struct ListPane: View {
                         ForEach(rows, id: \.id) { node in
                             TypeRow(node: node, atlas: atlas)
                                 .tag(Workspace.Selection?.some(.type(node.id)))
+                                .onHover { $0 ? workspace.hoverBegan(.type(node.id)) : workspace.hoverEnded() }
                         }
                     } header: {
                         Button { workspace.select(.module(module)) } label: {
@@ -29,6 +30,7 @@ struct ListPane: View {
                         }
                         .buttonStyle(.plain)
                         .help("Show \(module) and draw its types")
+                        .onHover { $0 ? workspace.hoverBegan(.module(module)) : workspace.hoverEnded() }
                     }
                 }
             }

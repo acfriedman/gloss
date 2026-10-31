@@ -3,14 +3,50 @@ import GlossMap
 import SwiftUI
 
 /// The middle pane: the text of whatever is selected, from the start page down to one type's members.
+///
+/// A preview is laid over the selection rather than replacing it, so when the preview ends the
+/// selection is back where the reader left it: scrolled to the same place, members still open.
 struct DetailPane: View {
     @Environment(Workspace.self) private var workspace
+
+    var body: some View {
+        ZStack(alignment: .top) {
+            DetailPage(target: workspace.selection)
+                .id(workspace.selection)
+            if let preview = workspace.preview {
+                VStack(spacing: 0) {
+                    HStack(spacing: 8) {
+                        Image(systemName: "eye")
+                        Text("Previewing. Click it to keep it here.")
+                        Spacer()
+                        Button("Keep") { workspace.select(preview) }
+                            .controlSize(.small)
+                    }
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 24)
+                    .padding(.vertical, 8)
+                    .background(.bar)
+                    Divider()
+                    DetailPage(target: preview)
+                }
+                .id(preview)
+            }
+        }
+        .onHover { workspace.detailsHovered($0) }
+    }
+}
+
+/// One page of the details pane, scrolled from its top.
+struct DetailPage: View {
+    @Environment(Workspace.self) private var workspace
+    var target: Workspace.Selection
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
                 if let atlas = workspace.atlas {
-                    switch workspace.selection {
+                    switch target {
                     case .start: StartView(atlas: atlas)
                     case .modules: ModulesView(atlas: atlas)
                     case .module(let module): ModuleView(atlas: atlas, module: module)

@@ -49,8 +49,12 @@ final class Workspace {
     var minimumRank = 3 { didSet { redraw() } }
     var search = ""
     var findingsOnly = false
-    /// The box or chip under the pointer, which the map lights instead of the selection.
+    /// The chip under the pointer, whose box the map lights instead of what the details pane shows.
     var hovered: String?
+    /// What hovering a box or a list row shows in the details pane in place of the selection.
+    private(set) var preview: Selection?
+    private var showing: Task<Void, Never>?
+    private var hiding: Task<Void, Never>?
 
     /// The defaults key of the last folder opened, which the next launch reopens.
     private static let lastFolderKey = "lastFolder"
@@ -170,6 +174,9 @@ final class Workspace {
     /// A module or folder draws its own level. A type keeps the current level when that level draws it,
     /// re-centers the focus when focused, and otherwise moves to the widest level that draws it.
     func select(_ target: Selection) {
+        showing?.cancel()
+        hiding?.cancel()
+        preview = nil
         selection = target
         scopeID = scope(for: target)
         redraw()
@@ -179,10 +186,69 @@ final class Workspace {
     ///
     /// - Parameter unit: A type, module, or folder box.
     func select(unit: MapScope.Unit) {
+        select(Self.selection(of: unit))
+    }
+
+    /// What selecting a box shows.
+    ///
+    /// - Parameter unit: A type, module, or folder box.
+    /// - Returns: The matching selection.
+    static func selection(of unit: MapScope.Unit) -> Selection {
         switch unit {
-        case .type(let id): select(.type(id))
-        case .module(let module): select(.module(module))
-        case .folder(let module, let folder): select(.folder(module, folder))
+        case .type(let id): .type(id)
+        case .module(let module): .module(module)
+        case .folder(let module, let folder): .folder(module, folder)
+        }
+    }
+
+    // MARK: Previewing
+
+    /// What the details pane shows: the preview while there is one, and otherwise the selection.
+    var shown: Selection {
+        preview ?? selection
+    }
+
+    /// Starts previewing something once the pointer has rested on it, so passing over boxes on the way
+    /// elsewhere does not flicker the details pane. While a preview shows, the next one follows faster.
+    ///
+    /// - Parameter target: What a hovered box or list row stands for.
+    func hoverBegan(_ target: Selection) {
+        hiding?.cancel()
+        showing?.cancel()
+        let delay = preview == nil ? 140 : 40
+        showing = Task { [weak self] in
+            try? await Task.sleep(for: .milliseconds(delay))
+            guard !Task.isCancelled, let self else { return }
+            preview = target == selection ? nil : target
+        }
+    }
+
+    /// Returns the details pane to the selection shortly after the pointer leaves a box or list row,
+    /// unless it moves into the details pane first.
+    func hoverEnded() {
+        showing?.cancel()
+        endPreviewSoon()
+    }
+
+    /// Keeps a preview while the pointer is in the details pane, so it can be read, and ends it when
+    /// the pointer leaves.
+    ///
+    /// - Parameter inside: `true` when the pointer entered the pane, `false` when it left.
+    func detailsHovered(_ inside: Bool) {
+        if inside {
+            showing?.cancel()
+            hiding?.cancel()
+        } else if preview != nil {
+            endPreviewSoon()
+        }
+    }
+
+    private func endPreviewSoon() {
+        hiding?.cancel()
+        hiding = Task { [weak self] in
+            try? await Task.sleep(for: .milliseconds(180))
+            guard !Task.isCancelled, let self else { return }
+            preview = nil
         }
     }
 
@@ -262,10 +328,11 @@ final class Workspace {
         redraw()
     }
 
-    /// The box the map lights: the hovered one, or else the selection as the current level draws it.
+    /// The box the map lights: a hovered chip's, or else what the details pane shows, as the current
+    /// level draws it.
     var litID: String? {
         if let hovered { return hovered }
-        switch selection {
+        switch shown {
         case .start, .modules: return nil
         case .module(let module): return MapScope.Unit.module(module).id
         case .folder(let module, let folder): return MapScope.Unit.folder(module, folder).id

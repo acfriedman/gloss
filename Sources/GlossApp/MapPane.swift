@@ -134,7 +134,7 @@ struct MapBox: View {
         .opacity(isDimmed ? 0.4 : flags.contains(.private) ? 0.7 : 1)
         .contentShape(shape)
         .onTapGesture { workspace.select(unit: box.item.unit) }
-        .onHover { workspace.hovered = $0 ? box.item.id : nil }
+        .onHover { $0 ? workspace.hoverBegan(Workspace.selection(of: box.item.unit)) : workspace.hoverEnded() }
         .help(box.item.flags.contains(.boundary) ? "Outside this level; select to step into it" : box.item.label)
     }
 }

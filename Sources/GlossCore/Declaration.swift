@@ -5,7 +5,7 @@
 public struct Declaration: Sendable, Equatable {
     /// The syntactic category of a declaration, which decides which rules apply. Callables get the
     /// markup rules; types, properties, and cases get only the summary rules once documented.
-    public enum Kind: String, Sendable {
+    public enum Kind: String, Sendable, Codable {
         case function, initializer, `subscript`, type, property, enumCase, other
     }
 

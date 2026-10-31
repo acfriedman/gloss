@@ -29,6 +29,38 @@ Each finding is one line in compiler format, so Xcode and GitHub Actions render 
 Sources/App/Cart.swift:82:1: error: `total` returns a value but has no `- Returns:` entry; ... [returns-missing]
 ```
 
+## Interface
+
+```bash
+swift run -c release gloss interface Sources --html interface.html --json interface.json
+```
+
+`gloss interface` reads the same sources and exports each declaration's contract: its signature
+without the body, effective access level, enclosing type, parameter types, return type, throws
+clause, and the doc comment read as summary, parameter entries, returns, throws, callouts, and notes,
+plus any findings. `--json` writes it as data (`schema` marks the shape's version); `--html` writes
+a self-contained page. With neither flag, JSON goes to standard output. `--title` names the page;
+it defaults to the current directory's name.
+
+Each declaration also records the type names it mentions and where: an inheritance clause, a
+property, a parameter, the return type, a typed `throws`, or a body. Names are resolved the way
+Swift looks them up (innermost enclosing type first, then outward, then other scanned modules) into
+a dependency graph of types. A module's top-level statements count as one `top-level code` entry, so
+an executable's entry point appears in the graph. Names no scanned source declares are kept on the
+mention but are not graph nodes.
+
+The page has a sidebar that lists every type and shows one view at a time. The first view is the
+dependency map, with nested types folded into their parent. Each type's view shows its declaration
+and doc, a focused graph (what depends on it on the left, what it depends on on the right, each edge
+labeled holds, takes, returns, throws, conforms, or uses), and its members with their docs and the
+types each one uses. Solid edges come from signatures; dashed edges come only from bodies. The
+sidebar filters by access level, name, and findings. Graph layout happens in Swift, so the figures
+are plain SVG.
+
+The page loads nothing and stamps no time, so it works offline as a CI artifact and the same
+sources always render the same bytes. It shows only what the JSON holds. The command always exits 0;
+the lint command is the gate.
+
 ## Rules
 
 | Code | Fires when |

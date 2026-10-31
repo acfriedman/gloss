@@ -27,6 +27,8 @@ public struct DocStructure: Sendable, Equatable {
     public var callouts: [Callout]
     /// The first top-level callout that appears after prose, if the markup block was split.
     public var calloutAfterProse: Callout?
+    /// Prose lines outside the summary and the markup block, in source order: the notes.
+    public var notes: [DocLine] = []
 
     /// Every callout keyword Apple's symbol-documentation markup recognizes, lowercased.
     public static let knownKeywords: Set<String> = [
@@ -46,6 +48,7 @@ public struct DocStructure: Sendable, Equatable {
         var summary: [DocLine] = []
         var callouts: [Callout] = []
         var calloutAfterProse: Callout?
+        var notes: [DocLine] = []
         var index = 0
         let lines = doc.lines
 
@@ -85,8 +88,9 @@ public struct DocStructure: Sendable, Equatable {
             }
             inCallout = false
             seenProseAfterSummary = true
+            notes.append(line)
         }
-        return DocStructure(summary: summary, callouts: callouts, calloutAfterProse: calloutAfterProse)
+        return DocStructure(summary: summary, callouts: callouts, calloutAfterProse: calloutAfterProse, notes: notes)
     }
 
     /// Reads a top-level `- Keyword:` / `- Keyword argument:` line. Only known keywords and the

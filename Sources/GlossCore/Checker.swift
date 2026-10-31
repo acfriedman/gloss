@@ -10,8 +10,22 @@ public final class Checker: SyntaxVisitor {
     private let file: String
     private let converter: SourceLocationConverter
     private var findings: [Diagnostic] = []
+    private var recorded: [Contract] = []
     private var conformanceDepth = 0
     private var privateDepth = 0
+    private var scopes: [Scope] = []
+
+    /// One enclosing type or extension: its name and the access its members take when they name none.
+    private struct Scope {
+        var name: String
+        /// The access members default to: an extension's own modifier, or a protocol's access for its
+        /// requirements; `nil` means `internal`.
+        var memberAccess: String?
+        /// The access an enum's cases share, which is the enum's own.
+        var caseAccess: String?
+    }
+
+    private static let accessLevels: Set<String> = ["open", "public", "package", "internal", "fileprivate", "private"]
 
     /// Lints the source text of one file. Parsing happens here so callers hand over text, not trees.
     ///
@@ -20,10 +34,25 @@ public final class Checker: SyntaxVisitor {
     ///   - file: The path reported in diagnostics.
     /// - Returns: Violations in source order.
     public static func check(source: String, file: String) -> [Diagnostic] {
+        walk(source: source, file: file).findings.sorted { ($0.line, $0.column, $0.rule.rawValue) < ($1.line, $1.column, $1.rule.rawValue) }
+    }
+
+    /// Reads the contract of every declaration in one file, with the findings each one carries. Private
+    /// declarations are included; the view decides what to hide.
+    ///
+    /// - Parameters:
+    ///   - source: The file's contents.
+    ///   - file: The path the contracts report.
+    /// - Returns: Contracts in source order, each with its module left empty.
+    public static func contracts(source: String, file: String) -> [Contract] {
+        walk(source: source, file: file).recorded
+    }
+
+    private static func walk(source: String, file: String) -> Checker {
         let tree = Parser.parse(source: source)
         let checker = Checker(file: file, converter: SourceLocationConverter(fileName: file, tree: tree))
         checker.walk(tree)
-        return checker.findings.sorted { ($0.line, $0.column, $0.rule.rawValue) < ($1.line, $1.column, $1.rule.rawValue) }
+        return checker
     }
 
     private init(file: String, converter: SourceLocationConverter) {
@@ -35,12 +64,33 @@ public final class Checker: SyntaxVisitor {
     override public func visit(_ node: ExtensionDeclSyntax) -> SyntaxVisitorContinueKind {
         if node.inheritanceClause != nil { conformanceDepth += 1 }
         if Self.isPrivate(node.modifiers) { privateDepth += 1 }
+        scopes.append(Scope(name: node.extendedType.trimmedDescription, memberAccess: Self.explicitAccess(node.modifiers)))
         return .visitChildren
     }
 
     override public func visitPost(_ node: ExtensionDeclSyntax) {
         if node.inheritanceClause != nil { conformanceDepth -= 1 }
         if Self.isPrivate(node.modifiers) { privateDepth -= 1 }
+        scopes.removeLast()
+    }
+
+    // A script's top-level statements are its entry point. They are not declarations, so they are kept
+    // as one `top-level code` contract that carries their mentions into the graph.
+    override public func visit(_ node: SourceFileSyntax) -> SyntaxVisitorContinueKind {
+        let statements = node.statements.filter { !$0.item.is(DeclSyntax.self) }
+        guard let first = statements.first else { return .visitChildren }
+        var mentions: [Contract.Mention] = []
+        for statement in statements {
+            for name in Mentions.names(in: statement) where !mentions.contains(where: { $0.name == name }) {
+                mentions.append(Contract.Mention(name: name, role: .body))
+            }
+        }
+        let line = converter.location(for: first.positionAfterSkippingLeadingTrivia).line
+        let declaration = Declaration(kind: .other, name: "top-level code", file: file, line: line, column: 1)
+        let facts = Contract.Facts(keyword: "code", mentions: mentions, container: [], access: "internal",
+                                   header: "top-level code", parameterTypes: [], returnType: nil, throwsClause: nil, isAsync: false)
+        recorded.append(Contract.make(declaration, doc: nil, facts: facts, findings: []))
+        return .visitChildren
     }
 
     override public func visitPost(_ node: ClassDeclSyntax) { leaveType(node.modifiers) }
@@ -60,7 +110,8 @@ public final class Checker: SyntaxVisitor {
                parameters: node.signature.parameterClause.parameters,
                returnType: node.signature.returnClause?.type,
                throwsErrors: node.signature.effectSpecifiers?.throwsClause != nil,
-               modifiers: node.modifiers)
+               modifiers: node.modifiers,
+               effects: node.signature.effectSpecifiers)
         return .skipChildren
     }
 
@@ -79,6 +130,7 @@ public final class Checker: SyntaxVisitor {
                returnType: nil,
                throwsErrors: node.signature.effectSpecifiers?.throwsClause != nil,
                modifiers: node.modifiers,
+               effects: node.signature.effectSpecifiers,
                isMemberwise: Self.isMemberwise(node))
         return .skipChildren
     }
@@ -153,17 +205,35 @@ public final class Checker: SyntaxVisitor {
     private func type(_ node: some DeclSyntaxProtocol, _ nameToken: TokenSyntax, _ modifiers: DeclModifierListSyntax) -> SyntaxVisitorContinueKind {
         record(node, kind: .type, name: nameToken.text, at: nameToken, parameters: nil, returnType: nil,
                throwsErrors: false, modifiers: modifiers)
+        guard !node.is(TypeAliasDeclSyntax.self) else { return .visitChildren }
         if Self.isPrivate(modifiers) { privateDepth += 1 }
+        let access = effectiveAccess(modifiers, kind: .type)
+        scopes.append(Scope(name: nameToken.text,
+                            memberAccess: node.is(ProtocolDeclSyntax.self) ? access : nil,
+                            caseAccess: node.is(EnumDeclSyntax.self) ? access : nil))
         return .visitChildren
     }
 
-    // Typealiases have no members, so only the five container kinds balance `privateDepth`.
+    // Typealiases have no members, so only the five container kinds balance `privateDepth` and `scopes`.
     private func leaveType(_ modifiers: DeclModifierListSyntax) {
         if Self.isPrivate(modifiers) { privateDepth -= 1 }
+        scopes.removeLast()
     }
 
     private static func isPrivate(_ modifiers: DeclModifierListSyntax) -> Bool {
         modifiers.contains { $0.name.text == "private" || $0.name.text == "fileprivate" }
+    }
+
+    // `private(set)` and its kin narrow only the setter, so a modifier with a detail is not the access level.
+    private static func explicitAccess(_ modifiers: DeclModifierListSyntax) -> String? {
+        modifiers.first { accessLevels.contains($0.name.text) && $0.detail == nil }?.name.text
+    }
+
+    private func effectiveAccess(_ modifiers: DeclModifierListSyntax, kind: Declaration.Kind) -> String {
+        if let explicit = Self.explicitAccess(modifiers) { return explicit }
+        if kind == .enumCase, let access = scopes.last?.caseAccess { return access }
+        if let access = scopes.last?.memberAccess { return access }
+        return privateDepth > 0 ? "private" : "internal"
     }
 
     private func record(
@@ -175,6 +245,7 @@ public final class Checker: SyntaxVisitor {
         returnType: TypeSyntax?,
         throwsErrors: Bool,
         modifiers: DeclModifierListSyntax,
+        effects: FunctionEffectSpecifiersSyntax? = nil,
         isMemberwise: Bool = false
     ) {
         let location = converter.location(for: anchor.positionAfterSkippingLeadingTrivia)
@@ -207,7 +278,20 @@ public final class Checker: SyntaxVisitor {
             declaration.exemption = .memberwiseInit
         }
         let doc = DocComment.leading(node, converter: converter)
-        findings += Rules.check(declaration, doc: doc)
+        let found = Rules.check(declaration, doc: doc)
+        findings += found
+        let facts = Contract.Facts(
+            keyword: Header.keyword(of: node),
+            mentions: Mentions.collect(node, parameters: parameters, returnType: returnType, effects: effects),
+            container: scopes.map(\.name),
+            access: effectiveAccess(modifiers, kind: kind),
+            header: Header.text(of: node),
+            parameterTypes: (parameters ?? []).map { ($0.type.trimmedDescription + ($0.ellipsis?.text ?? ""), $0.defaultValue != nil) },
+            returnType: returnType?.trimmedDescription,
+            throwsClause: effects?.throwsClause?.trimmedDescription,
+            isAsync: effects?.asyncSpecifier != nil
+        )
+        recorded.append(Contract.make(declaration, doc: doc, facts: facts, findings: found))
     }
 
     /// Reads a `// gloss:exempt <reason>` line from the trivia directly above a declaration.

@@ -22,6 +22,7 @@ struct ContentView: View {
                 EmptyStateView()
             }
         }
+        .tint(Palette.accent)
         .navigationTitle(workspace.name)
         .navigationSubtitle(workspace.subtitle)
         .toolbar {

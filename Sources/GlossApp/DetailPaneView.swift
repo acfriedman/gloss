@@ -298,13 +298,13 @@ struct MemberRowView: View {
                         .font(.system(.callout, design: .monospaced))
                         .lineLimit(isOpen ? nil : 2)
                     if !member.findings.isEmpty {
-                        Circle().fill(.red).frame(width: 6, height: 6)
+                        Circle().fill(Palette.danger).frame(width: 6, height: 6)
                     }
                 }
                 if let brief {
                     DocTextView(text: brief).font(.callout).foregroundStyle(.secondary)
                 } else if member.requiresDoc {
-                    Text("Undocumented").font(.callout).foregroundStyle(.red)
+                    Text("Undocumented").font(.callout).foregroundStyle(Palette.danger)
                 }
             }
             .padding(.vertical, 6)
@@ -365,7 +365,7 @@ struct TermsView: View {
                     if !row.term.isEmpty {
                         Text(row.term).font(.system(.callout, design: .monospaced))
                     }
-                    DocTextView(text: row.text).font(.callout).foregroundStyle(row.missing ? .red : .primary)
+                    DocTextView(text: row.text).font(.callout).foregroundStyle(row.missing ? Palette.danger : .primary)
                 }
             }
         }
@@ -384,11 +384,11 @@ struct FindingsView: View {
                         Text(finding.rule).font(.system(.caption, design: .monospaced).weight(.semibold))
                         Text(finding.message).font(.callout)
                     }
-                    .foregroundStyle(.red)
+                    .foregroundStyle(Palette.danger)
                 }
             }
             .padding(8)
-            .background(RoundedRectangle(cornerRadius: 6).fill(.red.opacity(0.08)))
+            .background(RoundedRectangle(cornerRadius: 6).fill(Palette.danger.opacity(0.08)))
         }
     }
 }
@@ -439,6 +439,7 @@ struct ChipBlockView: View {
 /// A link to a type, module, or folder that lights its box on the map while hovered.
 struct ChipView: View {
     @Environment(Workspace.self) private var workspace
+    @State private var isHovered = false
     var unit: MapScope.Unit
     var atlas: Atlas
     var note: String?
@@ -451,12 +452,16 @@ struct ChipView: View {
                 .font(.system(.callout, design: .monospaced))
                 .padding(.horizontal, 7)
                 .padding(.vertical, 3)
-                .background(RoundedRectangle(cornerRadius: 5).fill(dirty ? Color.red.opacity(0.12) : Color.accentColor.opacity(0.1)))
-                .foregroundStyle(dirty ? Color.red : Color.accentColor)
+                .foregroundStyle(isHovered ? Palette.accent : .primary)
+                .background(RoundedRectangle(cornerRadius: 4).fill(Palette.surface))
+                .overlay(RoundedRectangle(cornerRadius: 4).strokeBorder(isHovered ? Palette.accent : dirty ? Palette.danger : Palette.line))
         }
         .buttonStyle(.plain)
         .help(note ?? atlas.label(of: unit))
-        .onHover { workspace.hovered = $0 ? lights : nil }
+        .onHover { inside in
+            isHovered = inside
+            workspace.hovered = inside ? lights : nil
+        }
     }
 }
 

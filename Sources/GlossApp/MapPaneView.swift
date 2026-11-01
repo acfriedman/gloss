@@ -71,7 +71,7 @@ struct MapPaneView: View {
                 .fixedSize(horizontal: false, vertical: true)
             }
         }
-        .background(Color(nsColor: .underPageBackgroundColor))
+        .background(Palette.background)
         .onChange(of: drawing.layout) { zoom = nil }
     }
 
@@ -143,7 +143,7 @@ struct MapCanvasView: View {
             Canvas { context, _ in
                 for curve in layout.curves {
                     let isLit = isLighting && (curve.link.from == lit || curve.link.to == lit)
-                    let color: Color = isLit ? .accentColor : .secondary.opacity(isLighting ? 0.25 : 0.55)
+                    let color: Color = isLit ? Palette.accent : Palette.edge.opacity(isLighting ? 0.2 : 0.75)
                     let style = StrokeStyle(lineWidth: (isLit ? 1.8 : 1.2) * weight, dash: curve.link.dashed ? [4 * weight, 3 * weight] : [])
                     context.stroke(Self.path(curve.points, scale: scale), with: .color(color), style: style)
                     context.fill(Self.arrowhead(curve, scale: scale, size: weight), with: .color(color))
@@ -212,7 +212,7 @@ struct MapBoxView: View {
     var body: some View {
         let flags = box.item.flags
         let shape = RoundedRectangle(cornerRadius: 5 * scale)
-        let stroke: Color = isCurrent ? .accentColor : flags.contains(.dirty) ? .red : .secondary.opacity(0.6)
+        let stroke: Color = isCurrent ? Palette.accent : flags.contains(.dirty) ? Palette.danger : Palette.line
         VStack(alignment: .leading, spacing: 1 * scale) {
             Text(box.item.label)
                 .font(.system(size: 12 * scale, weight: .semibold, design: .monospaced))
@@ -223,7 +223,7 @@ struct MapBoxView: View {
         .lineLimit(1)
         .padding(.leading, 12 * scale)
         .frame(width: box.width * scale, height: GraphLayout.boxHeight * scale, alignment: .leading)
-        .background(shape.fill(isCurrent ? Color.accentColor.opacity(0.18) : flags.contains(.scope) ? Color.secondary.opacity(0.08) : Color(nsColor: .textBackgroundColor)))
+        .background(shape.fill(isCurrent ? Palette.accentSoft : flags.contains(.boundary) ? Color.clear : flags.contains(.scope) ? Palette.panel : Palette.surface))
         .overlay(shape.strokeBorder(stroke, style: StrokeStyle(lineWidth: isCurrent ? 2 : 1, dash: flags.contains(.boundary) ? [4, 3] : [])))
         .opacity(isDimmed ? 0.4 : flags.contains(.private) ? 0.7 : 1)
         .contentShape(shape)

@@ -102,7 +102,7 @@ struct TypeRowView: View {
                 .font(.system(.body, design: .monospaced))
                 .lineLimit(1)
             if group.findingCount > 0 {
-                Circle().fill(.red).frame(width: 6, height: 6)
+                Circle().fill(Palette.danger).frame(width: 6, height: 6)
                     .help("\(group.findingCount) findings")
             }
             Spacer(minLength: 4)
@@ -155,7 +155,7 @@ struct SummaryView: View {
                     }
                     GridRow {
                         StatView(title: "Documented", value: "\(owed.filter(\.isDocumented).count)/\(owed.count)")
-                        StatView(title: "Findings", value: "\(findings)", tint: findings == 0 ? .green : .red)
+                        StatView(title: "Findings", value: "\(findings)", tint: findings == 0 ? Palette.ok : Palette.danger)
                     }
                 }
                 Toggle("Only types with findings", isOn: $workspace.findingsOnly)

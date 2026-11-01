@@ -276,7 +276,8 @@ struct MapBoxView: View {
         .lineLimit(1)
         .padding(.leading, 12 * scale)
         .frame(width: box.width * scale, height: GraphLayout.boxHeight * scale, alignment: .leading)
-        .background(shape.fill(isCurrent ? Palette.accentSoft : flags.contains(.boundary) ? Color.clear : flags.contains(.scope) ? Palette.panel : Palette.surface))
+        // Every box is opaque, dashed ones included, so edges passing behind never show through the text.
+        .background(shape.fill(isCurrent ? Palette.accentSoft : flags.contains(.scope) ? Palette.panel : Palette.surface))
         .overlay(shape.strokeBorder(stroke, style: StrokeStyle(lineWidth: isCurrent ? 2 : 1, dash: flags.contains(.boundary) ? [4, 3] : [])))
         .opacity(isDimmed ? 0.4 : flags.contains(.private) ? 0.7 : 1)
         .contentShape(shape)

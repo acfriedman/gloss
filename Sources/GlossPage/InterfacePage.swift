@@ -388,7 +388,7 @@ public enum InterfacePage {
     .graph .node:hover rect, .graph .node:focus-visible rect { stroke: var(--accent); stroke-width: 1.5; }
     .graph .node.dirty rect { stroke: var(--danger); }
     .graph .node.scope rect { fill: var(--panel); stroke-width: 1.5; }
-    .graph .node.boundary rect { fill: transparent; stroke-dasharray: 5 3; }
+    .graph .node.boundary rect { stroke-dasharray: 5 3; }
     .graph .node.boundary .label { fill: var(--muted); }
     .graph .node.private { opacity: 0.6; }
     .graph.focusing .edge { opacity: 0.1; }

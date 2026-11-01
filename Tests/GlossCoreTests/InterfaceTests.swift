@@ -305,6 +305,25 @@ final class InterfaceTests: XCTestCase {
         XCTAssertEqual(Highlight.runs("public var rendered: String { get }").first { $0.kind == .declaration }?.text, "rendered")
     }
 
+    func testQuickOpenFindsTypesByWordStartsAndRanksExactNamesFirst() {
+        let atlas = Atlas(Interface.build(sources: [("Sources/App/Views.swift", """
+        struct DetailPaneView {}
+        struct DetailPageView {}
+        struct DependencyPicker {}
+        struct Atlas { struct Reviewed {} }
+        struct Layout {}
+        struct GraphLayout {}
+        """)]))
+        func names(_ query: String) -> [String] { atlas.quickOpen(query).map(\.name) }
+        XCTAssertEqual(names("dpv").prefix(2), ["DetailPaneView", "DetailPageView"], "Word starts beat scattered letters.")
+        XCTAssertEqual(names("atlas").first, "Atlas", "An exact name ranks above a type nested in it.")
+        XCTAssertEqual(names("layout").prefix(2), ["Layout", "GraphLayout"])
+        XCTAssertEqual(names("reviewed"), ["Atlas.Reviewed"], "Nested types are found by their own name.")
+        XCTAssertEqual(atlas.quickOpen("dpv").first?.matched, [0, 6, 10], "The matched letters are the word starts.")
+        XCTAssertEqual(names(""), [])
+        XCTAssertEqual(names("zzz"), [])
+    }
+
     func testPropertyWrapperArgumentsCountAsWhatThePropertyHolds() {
         let interface = Interface.build(sources: [("Sources/App/Screen.swift", """
         final class Store {}

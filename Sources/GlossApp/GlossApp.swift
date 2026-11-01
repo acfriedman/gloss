@@ -28,6 +28,9 @@ struct GlossApp: App {
             CommandGroup(replacing: .newItem) {
                 Button("Open Folder…") { workspace.chooseFolder() }
                     .keyboardShortcut("o")
+                Button("Open Quickly…") { workspace.isQuickOpenShown = true }
+                    .keyboardShortcut("o", modifiers: [.command, .shift])
+                    .disabled(workspace.atlas == nil)
                 Button("Reload") { workspace.reload() }
                     .keyboardShortcut("r")
                     .disabled(workspace.root == nil)

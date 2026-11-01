@@ -22,7 +22,23 @@ struct ContentView: View {
                 EmptyStateView()
             }
         }
+        .overlay {
+            // The field sits a little above the middle and results grow down from it, so the panel
+            // reads as centered without jumping as the results change.
+            if workspace.isQuickOpenShown {
+                GeometryReader { proxy in
+                    ZStack(alignment: .top) {
+                        Color.clear
+                            .contentShape(Rectangle())
+                            .onTapGesture { workspace.isQuickOpenShown = false }
+                        QuickOpenView()
+                            .padding(.top, max(48, proxy.size.height * 0.3))
+                    }
+                }
+            }
+        }
         .tint(Palette.accent)
+        .task { workspace.start() }
         .navigationTitle(workspace.name)
         .navigationSubtitle(workspace.subtitle)
         .toolbar {

@@ -49,6 +49,8 @@ final class Workspace {
     var minimumRank = Atlas.defaultMinimumRank { didSet { redraw() } }
     var search = ""
     var findingsOnly = false
+    /// Whether Open Quickly is showing over the window.
+    var isQuickOpenShown = false
     /// Which panes the window shows: all three, or the details and the map with the list hidden.
     var columns = NavigationSplitViewVisibility.all
     /// The chip under the pointer, whose box the map lights instead of what the details pane shows.
@@ -61,7 +63,12 @@ final class Workspace {
     /// The defaults key of the last folder opened, which the next launch reopens.
     private static let lastFolderKey = "lastFolder"
 
-    /// Opens the folder named by `--root <folder>`, or else the folder opened last, if either exists.
+    /// The folder to open once the window appears.
+    private var launchFolder: URL?
+
+    /// Chooses the folder named by `--root <folder>`, or else the folder opened last, if either exists.
+    /// Reading waits for ``start()``, since SwiftUI may build the app, and with it a workspace, more
+    /// than once, and only the workspace the window keeps should read anything.
     ///
     /// - Parameter arguments: The process arguments, the executable first.
     init(arguments: [String]) {
@@ -74,7 +81,14 @@ final class Workspace {
                 var isDirectory: ObjCBool = false
                 return FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory) && isDirectory.boolValue
             }
-        if let folder { open(folder) }
+        launchFolder = folder
+    }
+
+    /// Opens the launch folder, once.
+    func start() {
+        guard let folder = launchFolder else { return }
+        launchFolder = nil
+        open(folder)
     }
 
     // MARK: Loading
@@ -183,6 +197,15 @@ final class Workspace {
         if case .type(let id) = target { reveal(id) }
         scopeID = scope(for: target)
         redraw()
+    }
+
+    /// Selects a type and zooms the map to it and its neighbors, from whatever level was showing;
+    /// zooming out returns to the widest level that draws the type.
+    ///
+    /// - Parameter id: A node id.
+    func focus(on id: String) {
+        select(.type(id))
+        zoom(to: Self.focus)
     }
 
     /// Selects what a box on the map stands for.

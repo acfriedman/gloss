@@ -329,6 +329,18 @@ final class InterfaceTests: XCTestCase {
         XCTAssertEqual(users.layout.boxes.first { $0.item.label == "Cart" }?.item.detail, "struct · +2 above")
     }
 
+    func testReachStartsAtANestedTypeItself() throws {
+        let atlas = Atlas(Interface.build(sources: [("Sources/Map/Layout.swift", """
+        struct Layout { var boxes: [Box]; struct Box { var item: Item }; struct Item { var unit: Unit } }
+        struct Unit {}
+        """)]))
+        let box = try XCTUnwrap(atlas.reach(from: "Map/Layout.Box", toward: .dependencies, minimumRank: 0))
+        XCTAssertEqual(box.layout.boxes.map(\.item.label), ["Layout.Box", "Layout.Item", "Unit"],
+                       "A nested type reaches from itself, not from the type it is nested in.")
+        let layout = try XCTUnwrap(atlas.reach(from: "Map/Layout", toward: .dependencies, minimumRank: 0))
+        XCTAssertTrue(layout.layout.boxes.contains { $0.item.label == "Layout.Box" }, "A type's own nested types are among what it depends on.")
+    }
+
     func testReachKeepsTheMostConnectedWhenOneStepIsOverTheBudget() throws {
         let fields = (0..<8).map { "var f\($0): T\($0)" }.joined(separator: "; ")
         let types = (0..<8).map { "struct T\($0) {}" }.joined(separator: "\n")

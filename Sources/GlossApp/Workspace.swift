@@ -422,14 +422,14 @@ final class Workspace {
             guard scopeID == Self.focus else { return atlas?.byID[id]?.root }
             if focusMode == .neighbors { return id }
             // A reach is about the whole tree, so the root is marked, not lit; a previewed box still lights.
-            return preview == nil ? nil : atlas?.byID[id]?.root
+            return preview == nil ? nil : id
         }
     }
 
     /// The box a reach grows from, drawn as the current one without dimming the rest; `nil` outside a reach.
     var anchorID: String? {
         guard scopeID == Self.focus, focusMode != .neighbors, case .type(let id) = selection else { return nil }
-        return atlas?.byID[id]?.root
+        return id
     }
 
     private func redraw() {
@@ -441,7 +441,7 @@ final class Workspace {
            let reach = atlas.reach(from: id, toward: focusMode == .below ? .dependencies : .users,
                                    depth: reachDepth, minimumRank: minimumRank) {
             let from = scopes.first { $0.id == focusFrom } ?? scopes.first
-            let root = atlas.byID[node.root].map(atlas.label) ?? atlas.label(node)
+            let root = atlas.label(node)
             let what = focusMode == .below ? "all it depends on" : "all that uses it"
             let cut = reach.drawn < reach.total ? " · dashed boxes continue" : ""
             drawing = Drawing(layout: reach.layout,

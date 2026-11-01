@@ -31,7 +31,7 @@ extension Atlas {
     /// budget, or exactly the steps asked for.
     ///
     /// - Parameters:
-    ///   - id: Any node; a nested type reaches from the root type it folds into.
+    ///   - id: Any node, nested types included; the reach starts at that type itself.
     ///   - direction: Toward what the type depends on, or toward what uses it.
     ///   - depth: The steps to draw, at least 1; `nil` draws the most whole steps that fit `budget`.
     ///   - minimumRank: The narrowest access, as ``GlossCore/Contract/rank(_:)``, a type needs to be
@@ -39,17 +39,18 @@ extension Atlas {
     ///   - budget: The most boxes an automatic depth draws, the root included.
     /// - Returns: The drawing and how much of the reach it shows, or `nil` for an unknown id.
     ///
-    /// Types fold into their roots and every dependency counts, signature and body alike, as on the
-    /// map's levels. Only the edges from one step to the next are drawn, which show how each type leads
+    /// Every type is its own box, nested ones included, as in the focus, so a nested type reaches from
+    /// itself and a type's own nested types are among what it depends on. Every dependency counts,
+    /// signature and body alike. Only the edges from one step to the next are drawn, which show how each type leads
     /// back to the root. A type at the last drawn step that leads further is drawn as a boundary box
     /// whose detail counts its next step not drawn. When the first step alone is over the budget, its most
     /// connected types are drawn and the rest are listed as ``Reach/overflow``.
     public func reach(from id: String, toward direction: ReachDirection, depth: Int? = nil,
                       minimumRank: Int, budget: Int = mapBudget) -> Reach? {
-        guard let start = byID[id], let root = byID[start.root] else { return nil }
+        guard let root = byID[id] else { return nil }
         var next: [String: [String]] = [:]
         var degree: [String: Int] = [:]
-        for link in rolled(includeBody: true) {
+        for link in edges {
             let (from, to) = direction == .dependencies ? (link.from, link.to) : (link.to, link.from)
             next[from, default: []].append(to)
             degree[link.from, default: 0] += 1
@@ -106,7 +107,7 @@ extension Atlas {
         // the others between drawn types are real but would bury that.
         var step: [String: Int] = [:]
         for (index, layer) in layers.enumerated() { for id in layer { step[id] = index } }
-        let links = rolled(includeBody: true).filter { link in
+        let links = edges.filter { link in
             guard drawnSet.contains(link.from), drawnSet.contains(link.to), let from = step[link.from], let to = step[link.to] else { return false }
             return direction == .dependencies ? to == from + 1 : from == to + 1
         }.map { link in

@@ -28,7 +28,10 @@ struct ListPaneView: View {
                             }
                         } header: {
                             Button { workspace.select(.module(module)) } label: {
-                                Text(module)
+                                HStack(spacing: 6) {
+                                    ModuleDotView(module: module)
+                                    Text(module)
+                                }
                             }
                             .buttonStyle(.plain)
                             .help("Show \(module) and draw its types")

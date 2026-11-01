@@ -381,6 +381,16 @@ final class InterfaceTests: XCTestCase {
         XCTAssertLessThan(atlas?.y ?? 0, store?.y ?? 0)
     }
 
+    func testModuleColorsAreStableAndDistinct() {
+        let modules = ["GlossCore", "GlossMap", "GlossPage", "GlossApp", "gloss"]
+        let slots = Atlas.colorSlots(for: modules)
+        XCTAssertEqual(Set(slots.values).count, modules.count, "No two modules share a color while slots last.")
+        XCTAssertEqual(slots, Atlas.colorSlots(for: modules.reversed()), "Order of appearance does not matter.")
+        XCTAssertEqual(Atlas.colorSlots(for: ["GlossCore"])["GlossCore"], Atlas.colorSlots(for: ["GlossCore", "Zebra"])["GlossCore"],
+                       "Adding a module that does not collide leaves the others' colors alone.")
+        XCTAssertTrue(slots.values.allSatisfy { (0..<Atlas.moduleColorCount).contains($0) })
+    }
+
     func testSplitBandsMergeWhereSplittingSavesNothing() {
         func item(_ id: String, _ group: String) -> GraphLayout.Item {
             GraphLayout.Item(unit: .type(id), label: id, detail: "struct", group: group)

@@ -121,7 +121,11 @@ browser, and double-clicking a divider restores its default.
   used from another module and root types nothing else in their module uses.
 - **The map** shows root types, nested types folded in, with every dependency: signature ones solid,
   and ones used only inside bodies dashed. A figure of types from two or more modules draws each
-  module as a lane: a soft container holding that module's boxes on every row, named at its top. Layout happens in Swift, so it is plain SVG. It reads at
+  module as a lane: a soft container holding that module's boxes on every row, named at its top.
+- **Module colors**: every module has its own color, from a hash of its name (`Atlas.colorSlots`),
+  so it is the same on every run, in the page and in the app, and after unrelated edits; two
+  modules that hash alike are told apart. The color tints the module's lanes and its module and
+  folder boxes, and marks its name in the list. Types stay neutral. Layout happens in Swift, so it is plain SVG. It reads at
   levels: all types, all modules, one module, and one folder. It opens on all types when they fit
   30 boxes, and otherwise on the module overview. A module over 30 types that spans several
   folders is drawn as its folders, each a level of its own. A level draws what lies outside it as

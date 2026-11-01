@@ -80,7 +80,10 @@ struct OverviewView: View {
             let entries = atlas.entryPoints(in: module).filter(workspace.isShown)
             if !entries.isEmpty {
                 VStack(alignment: .leading, spacing: 10) {
-                    EyebrowView(text: module)
+                    HStack(spacing: 6) {
+                        ModuleDotView(module: module)
+                        EyebrowView(text: module)
+                    }
                     ForEach(entries, id: \.id) { node in
                         CardView(atlas: atlas, node: node)
                     }
@@ -347,6 +350,20 @@ struct HeadingView: View {
             if let eyebrow { EyebrowView(text: eyebrow) }
             Text(title).font(.system(.title, design: .serif).italic())
             if let lede { Text(lede).foregroundStyle(.secondary) }
+        }
+    }
+}
+
+/// A dot in a module's color, the cue that ties its name in the list and the details to its lanes and
+/// boxes on the map.
+struct ModuleDotView: View {
+    @Environment(Workspace.self) private var workspace
+    /// The module whose color the dot shows; a module the atlas does not know draws nothing.
+    var module: String
+
+    var body: some View {
+        if let slot = workspace.atlas?.moduleColors[module] {
+            Circle().fill(Palette.moduleInk(slot)).frame(width: 7, height: 7)
         }
     }
 }

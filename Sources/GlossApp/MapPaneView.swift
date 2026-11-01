@@ -66,7 +66,8 @@ struct MapPaneView: View {
             GeometryReader { proxy in
                 let scale = zoom ?? Self.fit(drawing.layout, in: proxy.size)
                 ScrollView([.horizontal, .vertical]) {
-                    MapCanvasView(layout: drawing.layout, lit: workspace.litID, anchor: workspace.anchorID, scale: scale)
+                    MapCanvasView(layout: drawing.layout, lit: workspace.litID, anchor: workspace.anchorID, scale: scale,
+                                  colors: workspace.atlas?.moduleColors ?? [:])
                         .padding(Self.inset)
                         .frame(minWidth: proxy.size.width, minHeight: proxy.size.height)
                 }
@@ -170,6 +171,8 @@ struct MapCanvasView: View {
     var anchor: String?
     /// The figure's magnification, 1 for its natural size; line weights follow it, held between 0.6 and 1.5.
     var scale: CGFloat
+    /// Each module's color slot, which tints its lanes and its module and folder boxes.
+    var colors: [String: Int] = [:]
 
     var body: some View {
         let litEdges = layout.curves.filter { $0.link.from == lit || $0.link.to == lit }
@@ -182,12 +185,18 @@ struct MapCanvasView: View {
                 for lane in layout.lanes {
                     let rect = CGRect(x: lane.x * scale, y: lane.y * scale, width: lane.width * scale, height: lane.height * scale)
                     let shape = Path(roundedRect: rect, cornerRadius: 10 * scale)
-                    context.fill(shape, with: .color(lane.isEmphasized ? Palette.accentSoft : Palette.panel))
-                    context.stroke(shape, with: .color(Palette.line.opacity(0.5)), lineWidth: 1)
+                    let slot = colors[lane.name]
+                    context.fill(shape, with: .color(slot.map(Palette.moduleTint) ?? Palette.panel))
+                    // The focused type's module is outlined in its own color; the others only tinted.
+                    if lane.isEmphasized, let slot {
+                        context.stroke(shape, with: .color(Palette.moduleInk(slot)), lineWidth: 1.5)
+                    } else {
+                        context.stroke(shape, with: .color(Palette.line.opacity(0.5)), lineWidth: 1)
+                    }
                     let name = Text(lane.name.uppercased())
                         .font(.system(size: 10 * scale, weight: .semibold))
                         .tracking(0.8 * scale)
-                        .foregroundColor(lane.isEmphasized ? Palette.accent : Palette.edge)
+                        .foregroundColor(slot.map(Palette.moduleInk) ?? Palette.edge)
                     context.draw(name, at: CGPoint(x: rect.minX + 12 * scale, y: rect.minY + 9 * scale), anchor: .topLeading)
                 }
                 for curve in layout.curves {
@@ -201,11 +210,24 @@ struct MapCanvasView: View {
             .frame(width: layout.width * scale, height: layout.height * scale)
             ForEach(Array(layout.boxes.enumerated()), id: \.offset) { _, box in
                 MapBoxView(box: box, scale: scale, isCurrent: (isLighting && box.item.id == lit) || box.item.id == anchor,
-                       isDimmed: isLighting && !near.contains(box.item.id) && box.item.id != lit)
+                       isDimmed: isLighting && !near.contains(box.item.id) && box.item.id != lit,
+                       tint: Self.module(of: box.item.unit).flatMap { colors[$0] }.map(Palette.moduleTint))
                     .offset(x: box.x * scale, y: box.y * scale)
             }
         }
         .frame(width: layout.width * scale, height: layout.height * scale, alignment: .topLeading)
+    }
+
+    /// The module a module or folder box stands for, which colors it; types stay neutral.
+    ///
+    /// - Parameter unit: What a box stands for.
+    /// - Returns: The module's name, or `nil` for a type.
+    static func module(of unit: MapScope.Unit) -> String? {
+        switch unit {
+        case .type: nil
+        case .module(let module): module
+        case .folder(let module, _): module
+        }
     }
 
     /// The curve through an edge's anchors, leaving each bottom and entering the next top vertically.
@@ -261,6 +283,8 @@ struct MapBoxView: View {
     var isCurrent: Bool
     /// Whether another box is lit and this one is not its neighbor, which fades it.
     var isDimmed: Bool
+    /// The module's tint for a module or folder box, or `nil` for a type, which stays neutral.
+    var tint: Color?
 
     var body: some View {
         let flags = box.item.flags
@@ -277,7 +301,7 @@ struct MapBoxView: View {
         .padding(.leading, 12 * scale)
         .frame(width: box.width * scale, height: GraphLayout.boxHeight * scale, alignment: .leading)
         // Every box is opaque, dashed ones included, so edges passing behind never show through the text.
-        .background(shape.fill(isCurrent ? Palette.accentSoft : flags.contains(.scope) ? Palette.panel : Palette.surface))
+        .background(shape.fill(isCurrent ? Palette.accentSoft : flags.contains(.scope) ? (tint ?? Palette.panel) : Palette.surface))
         .overlay(shape.strokeBorder(stroke, style: StrokeStyle(lineWidth: isCurrent ? 2 : 1, dash: flags.contains(.boundary) ? [4, 3] : [])))
         .opacity(isDimmed ? 0.4 : flags.contains(.private) ? 0.7 : 1)
         .contentShape(shape)

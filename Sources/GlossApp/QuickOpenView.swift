@@ -92,6 +92,7 @@ struct QuickOpenRowView: View {
                 Circle().fill(Palette.danger).frame(width: 6, height: 6)
             }
             Spacer(minLength: 12)
+            ModuleDotView(module: node.module)
             Text(place)
                 .font(.caption)
                 .foregroundStyle(.secondary)

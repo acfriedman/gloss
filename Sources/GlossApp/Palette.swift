@@ -1,4 +1,5 @@
 import AppKit
+import GlossMap
 import SwiftUI
 
 /// The page's colors, so the app and the page read alike: a muted indigo accent on a pale tint,
@@ -22,6 +23,24 @@ enum Palette {
     static let danger = adaptive(light: 0xB4321C, dark: 0xFF8A73)
     /// The color of the findings count in the list's summary when there are none.
     static let ok = adaptive(light: 0x2C7A4B, dark: 0x6FCF97)
+
+    /// The soft tint a module's containers and boxes are filled with.
+    ///
+    /// - Parameter slot: The module's color slot; any value wraps into the palette.
+    /// - Returns: A color that follows the appearance.
+    static func moduleTint(_ slot: Int) -> Color {
+        let color = ModulePalette.color(slot)
+        return adaptive(light: color.tintLight, dark: color.tintDark)
+    }
+
+    /// The stronger color a module's name and marks are drawn in.
+    ///
+    /// - Parameter slot: The module's color slot; any value wraps into the palette.
+    /// - Returns: A color that follows the appearance.
+    static func moduleInk(_ slot: Int) -> Color {
+        let color = ModulePalette.color(slot)
+        return adaptive(light: color.inkLight, dark: color.inkDark)
+    }
 
     /// A color that follows the window's appearance.
     ///

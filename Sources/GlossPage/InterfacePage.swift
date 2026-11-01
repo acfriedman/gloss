@@ -34,7 +34,7 @@ public enum InterfacePage {
         <meta name="claude:viewport-fit-sides" content="cover">
         <title>\(escape(title)) interface</title>
         <script>document.documentElement.classList.add("js");</script>
-        <style>\(style)</style>
+        <style>\(style)\(moduleStyle)</style>
         </head>
         <body>
         <header class="toolbar">
@@ -63,7 +63,8 @@ public enum InterfacePage {
 
         """
         for module in atlas.modules {
-            html += "<h2><a href=\"#\(moduleAnchor(module))\" data-link=\"\(moduleAnchor(module))\">\(escape(module))</a></h2><ul>"
+            let dot = atlas.moduleColors[module].map { "<span class=\"mdot m\($0)\"></span>" } ?? ""
+            html += "<h2><a href=\"#\(moduleAnchor(module))\" data-link=\"\(moduleAnchor(module))\">\(dot)\(escape(module))</a></h2><ul>"
             for node in atlas.nodes where node.module == module {
                 let group = atlas.group(node.id)
                 let rank = atlas.rank(of: node)
@@ -175,7 +176,8 @@ public enum InterfacePage {
         if !layout.lanes.isEmpty {
             html += "<g class=\"lanes\">"
             for lane in layout.lanes {
-                html += "<g class=\"lane\(lane.isEmphasized ? " current" : "")\"><rect x=\"\(format(lane.x))\" y=\"\(format(lane.y))\" width=\"\(format(lane.width))\" height=\"\(format(lane.height))\" rx=\"10\"/>"
+                let color = atlas.moduleColors[lane.name].map { " m\($0)" } ?? ""
+                html += "<g class=\"lane\(color)\(lane.isEmphasized ? " current" : "")\"><rect x=\"\(format(lane.x))\" y=\"\(format(lane.y))\" width=\"\(format(lane.width))\" height=\"\(format(lane.height))\" rx=\"10\"/>"
                 html += "<text class=\"lane-label\" x=\"\(format(lane.x + 12))\" y=\"\(format(lane.y + 19))\">\(escape(lane.name.uppercased()))</text></g>"
             }
             html += "</g>"
@@ -188,7 +190,11 @@ public enum InterfacePage {
         html += "</g><g class=\"nodes\">"
         for box in layout.boxes {
             let item = box.item
-            html += "<a class=\"node \(classes(item.flags))\" href=\"#\(link(item.unit, atlas: atlas))\" data-id=\"\(escape(item.id))\">"
+            let color: String = switch item.unit {
+            case .module(let module), .folder(let module, _): atlas.moduleColors[module].map { " m\($0)" } ?? ""
+            case .type: ""
+            }
+            html += "<a class=\"node \(classes(item.flags))\(color)\" href=\"#\(link(item.unit, atlas: atlas))\" data-id=\"\(escape(item.id))\">"
             html += "<rect x=\"\(format(box.x))\" y=\"\(format(box.y))\" width=\"\(format(box.width))\" height=\"\(format(GraphLayout.boxHeight))\" rx=\"5\"/>"
             html += "<text class=\"label\" x=\"\(format(box.x + 12))\" y=\"\(format(box.y + 16))\">\(escape(item.label))</text>"
             html += "<text class=\"detail\" x=\"\(format(box.x + 12))\" y=\"\(format(box.y + 30))\">\(escape(item.detail))</text></a>"
@@ -252,6 +258,25 @@ public enum InterfacePage {
 
 
     // MARK: Assets
+
+    /// Each module color as CSS variables for both themes, and the classes that apply them: a lane's
+    /// tint and name, the focused lane's outline, module and folder boxes, and the sidebar's dots.
+    /// Generated from ``GlossMap/ModulePalette`` so the page and the app color a module alike.
+    static let moduleStyle: String = {
+        let hex = { (value: Int) in "#" + String(value, radix: 16, uppercase: true).leftPadded(to: 6) }
+        let colors = ModulePalette.colors.enumerated()
+        let light = colors.map { "--m\($0.offset)-tint: \(hex($0.element.tintLight)); --m\($0.offset)-ink: \(hex($0.element.inkLight));" }.joined(separator: " ")
+        let dark = colors.map { "--m\($0.offset)-tint: \(hex($0.element.tintDark)); --m\($0.offset)-ink: \(hex($0.element.inkDark));" }.joined(separator: " ")
+        var css = "\n    :root { \(light) }"
+        css += "\n    @media (prefers-color-scheme: dark) { :root:not([data-theme=\"light\"]) { \(dark) } }"
+        css += "\n    :root[data-theme=\"dark\"] { \(dark) }"
+        for (slot, _) in colors {
+            css += "\n    .graph .lane.m\(slot) rect, .graph .node.scope.m\(slot) rect { fill: var(--m\(slot)-tint); }"
+            css += "\n    .graph .lane.m\(slot) .lane-label, .mdot.m\(slot) { fill: var(--m\(slot)-ink); background: var(--m\(slot)-ink); }"
+            css += "\n    .graph .lane.current.m\(slot) rect { stroke: var(--m\(slot)-ink); stroke-width: 1.5; }"
+        }
+        return css + "\n"
+    }()
 
     private static let style = """
     /* Layout: three panes on one screen. The list on the left, the text of one type in the middle, and
@@ -378,9 +403,8 @@ public enum InterfacePage {
     .graph .edge.body { stroke: var(--faint); stroke-dasharray: 4 3; }
     .graph .arrowhead { fill: var(--edge); }
     .graph .lane rect { fill: var(--panel); stroke: var(--rule); }
-    .graph .lane.current rect { fill: var(--accent-soft); }
     .graph .lane-label { font: 600 10px var(--font-ui); letter-spacing: 0.08em; fill: var(--muted); }
-    .graph .lane.current .lane-label { fill: var(--accent); }
+    .mdot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-right: 6px; vertical-align: 1px; }
     .graph .node { transition: opacity 0.15s; }
     .graph .node rect { fill: var(--surface); stroke: var(--line); stroke-width: 1; }
     .graph .node .label { font: 12px var(--font-code); fill: var(--ink); }
@@ -1128,4 +1152,14 @@ public enum InterfacePage {
 
     })();
     """
+}
+
+extension String {
+    /// The string with zeros in front until it is a given length, for fixed-width hex.
+    ///
+    /// - Parameter length: The length to pad to; a longer string is returned whole.
+    /// - Returns: The padded string.
+    func leftPadded(to length: Int) -> String {
+        String(repeating: "0", count: max(0, length - count)) + self
+    }
 }

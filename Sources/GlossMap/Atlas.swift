@@ -64,6 +64,9 @@ public struct Atlas: Sendable {
     public private(set) var modules: [String] = []
     /// The ids of the nodes that are no type's nested type, which the map draws as boxes.
     public private(set) var rootIDs: [String] = []
+    /// Each module's color, as a slot below ``moduleColorCount`` that every front end maps to its own
+    /// palette; see ``colorSlots(for:)``.
+    public private(set) var moduleColors: [String: Int] = [:]
     // Indexes built once, so an interface of thousands of types never rescans every edge per type.
     private var edgesFrom: [String: [Graph.Edge]] = [:]
     private var edgesTo: [String: [Graph.Edge]] = [:]
@@ -113,6 +116,35 @@ public struct Atlas: Sendable {
         }
         rolledWithBody = Self.roll(edges, byID: byID, includeBody: true)
         rolledSignature = Self.roll(edges, byID: byID, includeBody: false)
+        moduleColors = Self.colorSlots(for: modules)
+    }
+
+    /// How many module colors every front end defines.
+    public static let moduleColorCount = ModulePalette.colors.count
+
+    /// Gives each module a color slot from a hash of its name, so a module keeps its color across runs,
+    /// edits, and front ends with nothing stored. Two modules that hash to one slot are told apart: in
+    /// name order, the later takes the next free slot, so a module's color only changes when a new
+    /// module collides with it.
+    ///
+    /// - Parameter modules: The module names.
+    /// - Returns: Each module's slot, from 0 to ``moduleColorCount`` minus 1; distinct while there are no
+    ///   more modules than slots.
+    public static func colorSlots(for modules: [String]) -> [String: Int] {
+        var slots: [String: Int] = [:]
+        var taken = Set<Int>()
+        for module in modules.sorted() {
+            // FNV-1a over the name's bytes: stable across runs and platforms, unlike `hashValue`.
+            var hash: UInt64 = 0xcbf2_9ce4_8422_2325
+            for byte in module.utf8 { hash = (hash ^ UInt64(byte)) &* 0x100_0000_01b3 }
+            var slot = Int(hash % UInt64(moduleColorCount))
+            if taken.count < moduleColorCount {
+                while taken.contains(slot) { slot = (slot + 1) % moduleColorCount }
+            }
+            taken.insert(slot)
+            slots[module] = slot
+        }
+        return slots
     }
 
     /// The access level a view opens on, as ``GlossCore/Contract/rank(_:)``: internal, so every

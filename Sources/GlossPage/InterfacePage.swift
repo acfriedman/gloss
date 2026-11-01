@@ -819,8 +819,14 @@ public enum InterfacePage {
       // selected type's focus; out the same way back.
       var zoomIn = document.getElementById("zoom-in");
       var zoomOut = document.getElementById("zoom-out");
+      // The focus zooms out to the level it was entered from, unless walking its neighbors has moved
+      // it to a type that level does not draw; then to the narrowest level that draws it.
       function parentOf(id) {
-        if (id === "focus") return focusFrom;
+        if (id === "focus") {
+          var drawing = (typeView.dataset.scopes || "").split(" ").filter(Boolean);
+          if (!focusFrom || !drawing.length || drawing.indexOf(focusFrom) >= 0) return focusFrom;
+          return drawing[drawing.length - 1];
+        }
         return scopeMaps[id] && scopeMaps[id].dataset.parent || null;
       }
       function isAncestor(wider, narrower) {

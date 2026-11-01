@@ -200,7 +200,7 @@ final class Workspace {
     }
 
     /// Selects a type and zooms the map to it and its neighbors, from whatever level was showing;
-    /// zooming out returns to the widest level that draws the type.
+    /// zooming out returns to a level that draws the type.
     ///
     /// - Parameter id: A node id.
     func focus(on id: String) {
@@ -313,8 +313,15 @@ final class Workspace {
         }
     }
 
+    // The focus zooms out to the level it was entered from, unless the focus has since moved to a
+    // type that level does not draw; then to the narrowest level that draws it, one step back up the
+    // ladder zooming in climbs.
     private func parent(of scope: String) -> String? {
-        scope == Self.focus ? focusFrom : scopes.first { $0.id == scope }?.parent
+        guard scope == Self.focus else { return scopes.first { $0.id == scope }?.parent }
+        guard case .type(let id) = selection, let root = atlas?.byID[id]?.root,
+              let drawing = levels[root], !drawing.isEmpty else { return focusFrom }
+        if let from = focusFrom, drawing.contains(from) { return from }
+        return drawing.last
     }
 
     private func isAncestor(_ wider: String, of narrower: String) -> Bool {

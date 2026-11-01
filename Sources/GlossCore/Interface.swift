@@ -8,10 +8,13 @@ public struct Interface: Sendable, Equatable, Codable {
     ///
     /// Version 2 moved `requiresDoc`, `exemption`, and `findings` out of each contract into `assessments`.
     public var schema = 2
+    /// The scanned paths, in the order they were read and as they are reported.
     public var files: [String]
+    /// One contract per declaration, in file order and then source order.
     public var contracts: [Contract]
     /// One assessment per contract, at the same index.
     public var assessments: [Assessment]
+    /// The dependency graph drawn from the contracts' mentions.
     public var graph: Graph
 
     /// Reads every source once, then builds the contracts and the assessments from that reading.
@@ -22,13 +25,15 @@ public struct Interface: Sendable, Equatable, Codable {
     public static func build(sources: [(file: String, source: String)]) -> Interface {
         var contracts: [Contract] = []
         var assessments: [Assessment] = []
-        for (file, source) in sources {
+        let readings = sources.map { (file: $0.file, entries: DeclarationReader.read(source: $0.source, file: $0.file)) }
+        let index = SymbolIndex(readings)
+        for (file, entries) in readings {
             let module = Self.module(of: file)
-            for entry in DeclarationReader.read(source: source, file: file) {
+            for entry in entries {
                 var contract = Contract.make(entry)
                 contract.module = module
                 contracts.append(contract)
-                assessments.append(Linter.assess(entry))
+                assessments.append(Linter.assess(entry, index: index))
             }
         }
         let graph = Graph.build(&contracts)

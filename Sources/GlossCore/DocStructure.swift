@@ -2,16 +2,25 @@
 ///
 /// The keyword is kept as written so the capitalization rule can quote it back verbatim.
 public struct Callout: Sendable, Equatable {
+    /// The keyword as written, capitalization included; compare through ``Callout/normalizedKeyword``.
     public var keyword: String
+    /// The name in a `- Parameter name:` callout, or `nil` for every other form.
     public var argument: String?
+    /// The text after the colon, with indented continuation lines joined by spaces; empty for a bare
+    /// `- Parameters:`.
     public var text: String
+    /// The 1-based source line of the callout.
     public var line: Int
+    /// The `- name: text` lines nested under a `- Parameters:` callout; empty for every other keyword.
     public var entries: [Entry]
 
     /// One `- name: text` line nested under `- Parameters:`.
     public struct Entry: Sendable, Equatable {
+        /// The parameter name before the colon, a single word.
         public var name: String
+        /// The description after the colon, with indented continuation lines joined by spaces.
         public var text: String
+        /// The 1-based source line of the entry.
         public var line: Int
     }
 
@@ -23,7 +32,9 @@ public struct Callout: Sendable, Equatable {
 ///
 /// Parsing structure once, up front, lets every rule ask a direct question instead of re-scanning lines.
 public struct DocStructure: Sendable, Equatable {
+    /// The opening lines up to the first blank line or callout; empty when the comment opens with one.
     public var summary: [DocLine]
+    /// Every top-level callout in source order, including any that follow prose.
     public var callouts: [Callout]
     /// The first top-level callout that appears after prose, if the markup block was split.
     public var calloutAfterProse: Callout?
@@ -59,9 +70,17 @@ public struct DocStructure: Sendable, Equatable {
 
         var seenProseAfterSummary = false
         var inCallout = false
+        let code = doc.codeLines
         while index < lines.count {
             let line = lines[index]
             index += 1
+            // Fenced code is quoted text: kept whole as a note, blank lines included, and never a callout.
+            if code.contains(line.line) {
+                inCallout = false
+                seenProseAfterSummary = true
+                notes.append(line)
+                continue
+            }
             if line.text.isBlank { continue }
             if let parsed = Self.callout(in: line) {
                 if seenProseAfterSummary, calloutAfterProse == nil { calloutAfterProse = parsed }
@@ -136,6 +155,8 @@ public struct DocStructure: Sendable, Equatable {
 }
 
 extension StringProtocol {
+    /// The text with leading and trailing whitespace removed.
     var trimmed: String { String(self.drop(while: \.isWhitespace).reversed().drop(while: \.isWhitespace).reversed()) }
+    /// `true` when the text is empty or only whitespace.
     var isBlank: Bool { allSatisfy(\.isWhitespace) }
 }

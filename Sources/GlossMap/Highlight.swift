@@ -11,11 +11,17 @@ import SwiftSyntax
 public enum Highlight {
     /// What a run of source is.
     public enum Kind: Sendable, Equatable {
+        /// Identifiers, operators, punctuation, and whitespace: what an editor leaves uncolored.
         case plain
+        /// A keyword, such as `func`, `public`, or `let`.
         case keyword
+        /// An attribute's `@` and name, such as `@MainActor`, without its arguments.
         case attribute
+        /// A string or regex literal.
         case string
+        /// An integer or floating-point literal.
         case number
+        /// A comment of any form, doc comments included.
         case comment
         /// A type no scanned source declares, such as `String`.
         case type
@@ -27,7 +33,10 @@ public enum Highlight {
 
     /// One stretch of source with one kind.
     public struct Run: Sendable, Equatable {
+        /// The source as written, whitespace included; the runs in order spell the code exactly.
         public var text: String
+        /// What the run is, which decides its color; neighboring runs always differ, since runs of one
+        /// kind merge.
         public var kind: Kind
     }
 

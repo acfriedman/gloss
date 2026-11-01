@@ -5,30 +5,44 @@
 public struct Contract: Sendable, Equatable, Codable {
     /// One parameter with its type as written and the doc entry that describes it.
     public struct Parameter: Sendable, Equatable, Codable {
+        /// The external argument label, or `nil` for `_`.
         public var label: String?
+        /// The internal name; the same as the label when the signature gives only one.
         public var name: String
+        /// The type as written, with the `...` of a variadic parameter kept.
         public var type: String
+        /// `true` when the signature gives the parameter a default value.
         public var hasDefault: Bool
+        /// The text of the doc entry that names this parameter by label or internal name, or `nil` when none
+        /// does.
         public var doc: String?
     }
 
     /// One callout outside the parameter, returns, and throws entries, such as `- Note:`.
     public struct Callout: Sendable, Equatable, Codable {
+        /// The keyword as written, such as `Note` or `Important`.
         public var keyword: String
+        /// The text after the colon, with continuation lines joined by spaces.
         public var text: String
     }
 
+    /// The module the declaration belongs to, named from its path by ``Interface/module(of:)``.
     public var module: String
+    /// The syntactic category, which decides which rules apply to the declaration.
     public var kind: Declaration.Kind
     /// The introducing keyword as written: `func`, `init`, `var`, `struct`, `protocol`, and so on.
     public var keyword: String
+    /// The base name: `init` for initializers, `subscript` for subscripts, and the first name when one `var`
+    /// or `case` declares several.
     public var name: String
     /// The enclosing types and extended types, outermost first; empty at file scope.
     public var container: [String]
     /// The effective access level: `open`, `public`, `package`, `internal`, `fileprivate`, or `private`.
     public var access: String
-    /// The declaration as written, without its body, doc comment, or stored-property initializer.
+    /// The declaration as written, without its body or doc comment, and without a stored property's
+    /// initial value when the property has a type annotation.
     public var declaration: String
+    /// The parameters in signature order; empty for a declaration that takes none or is not callable.
     public var parameters: [Parameter]
     /// The return type as written, or `nil` for `Void` callables and for non-callables.
     public var returnType: String?
@@ -36,18 +50,28 @@ public struct Contract: Sendable, Equatable, Codable {
     public var valueType: String?
     /// The `throws`, `throws(E)`, or `rethrows` clause as written, or `nil` when the callable does not throw.
     public var throwsClause: String?
+    /// `true` for an `async` function or initializer.
     public var isAsync: Bool
     /// `true` for an `override`, whose contract is the inherited one.
     public var isOverride: Bool
+    /// `true` when a doc comment is attached, including a `/** */` one whose text is never read.
     public var isDocumented: Bool
+    /// The summary paragraph on one line, or `nil` when there is no comment or it opens with a blank line or
+    /// a callout.
     public var summary: String?
+    /// The text of the `- Returns:` entry, or `nil` when there is none.
     public var returns: String?
+    /// The text of the `- Throws:` entry, or `nil` when there is none.
     public var throwsDoc: String?
+    /// The callouts other than the parameter, returns, and throws entries, in source order.
     public var callouts: [Callout]
     /// The prose paragraphs below the markup block.
     public var notes: [String]
+    /// The type names the declaration mentions, by role; ``Graph/build(_:)`` resolves each to its node.
     public var mentions: [Mention]
+    /// The path the declaration was read from, as reported.
     public var file: String
+    /// The 1-based source line of the declaration, as its diagnostics report it.
     public var line: Int
 
     /// The container path and name joined with dots, which is how a reader names the symbol.
@@ -112,16 +136,27 @@ public struct Contract: Sendable, Equatable, Codable {
     }
 
     /// Groups note lines into paragraphs: consecutive source lines join with a space, and a gap in line
-    /// numbers, which is where a blank `///` line was, starts a new paragraph.
+    /// numbers, which is where a blank `///` line was, starts a new paragraph. Fenced code is one
+    /// paragraph of its own, its fences included and its lines joined by newlines as written.
     ///
     /// - Parameter lines: The note lines in source order.
-    /// - Returns: One string per paragraph.
+    /// - Returns: One string per paragraph; a code paragraph starts with its opening fence.
     static func paragraphs(_ lines: [DocLine]) -> [String] {
         var paragraphs: [String] = []
         var previous = Int.min
+        let code = DocComment(lines: lines).codeLines
+        var openCode = false
         for line in lines {
-            if line.line == previous + 1, let last = paragraphs.popLast() {
-                paragraphs.append(last + " " + line.text.trimmed)
+            if code.contains(line.line) {
+                if openCode {
+                    paragraphs[paragraphs.count - 1] += "\n" + line.text
+                    if line.text.trimmed.hasPrefix("```") { openCode = false }
+                } else {
+                    paragraphs.append(line.text.trimmed)
+                    openCode = true
+                }
+            } else if line.line == previous + 1, let last = paragraphs.last, !last.hasPrefix("```") {
+                paragraphs[paragraphs.count - 1] = last + " " + line.text.trimmed
             } else {
                 paragraphs.append(line.text.trimmed)
             }

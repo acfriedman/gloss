@@ -25,9 +25,13 @@ public struct GraphLayout: Sendable, Equatable {
 
     /// A box to place: what it stands for, its text, and how it is drawn.
     public struct Item: Sendable, Equatable {
+        /// The type, module, or folder the box stands for, which also gives it its id.
         public var unit: MapScope.Unit
+        /// The name on the box's first line: a type's label, a module name, or a folder label.
         public var label: String
+        /// The smaller line under the name, such as a type's kind and module or a folder's type count.
         public var detail: String
+        /// How the box is drawn; empty for a plain box.
         public var flags: Flags = []
         /// The id links name the box by.
         public var id: String { unit.id }
@@ -49,9 +53,13 @@ public struct GraphLayout: Sendable, Equatable {
 
     /// A dependency to draw from one item to another.
     public struct Link: Sendable, Equatable {
+        /// The id of the dependent box.
         public var from: String
+        /// The id of the box it depends on.
         public var to: String
+        /// `true` for a dependency used only inside bodies, which is drawn dashed.
         public var dashed: Bool
+        /// The edge read as a sentence, such as `Atlas holds Graph`, for a tooltip.
         public var title: String
 
         /// Describes an edge.
@@ -71,40 +79,59 @@ public struct GraphLayout: Sendable, Equatable {
 
     /// A placed box, in points from the figure's top left.
     public struct Box: Sendable, Equatable {
+        /// The item the box draws.
         public var item: Item
+        /// The box's left edge.
         public var x: Double
+        /// The box's top edge; its height is always ``GraphLayout/boxHeight``.
         public var y: Double
+        /// The box's width, from ``GraphLayout/width(of:)``.
         public var width: Double
     }
 
     /// Where an edge passes a row: the column it runs in, and the top and bottom it enters and leaves by.
     public struct Anchor: Sendable, Equatable {
+        /// The column the edge runs in: a box's center, a point spread across a focused box, or a
+        /// placeholder's center.
         public var x: Double
+        /// Where the edge enters the row: the box's top edge, or the row's for a placeholder.
         public var top: Double
+        /// Where the edge leaves the row, ``GraphLayout/boxHeight`` below ``top``.
         public var bottom: Double
     }
 
     /// A drawn edge through its anchors in flow order; `reversed` puts the arrowhead at the start, for
     /// an edge drawn against the flow.
     public struct Curve: Sendable, Equatable {
+        /// The dependency the curve draws.
         public var link: Link
+        /// The anchors from the upper end to the lower: a box at each end, with a placeholder for each
+        /// layer the edge crosses between them.
         public var points: [Anchor]
+        /// `true` for an edge that closes a cycle and so runs up against the flow; its points still run
+        /// downward, so its arrowhead goes at the first one.
         public var reversed: Bool
         /// The curve as SVG path data.
         public var path: String { GraphLayout.downward(through: points) }
     }
 
+    /// The placed boxes, row by row from the top.
     public var boxes: [Box] = []
+    /// The placed edges, one per link that was kept.
     public var curves: [Curve] = []
+    /// The figure's width in points, margins included.
     public var width = 0.0
+    /// The figure's height in points, margins included.
     public var height = 0.0
 
     /// An empty figure, which layouts start from.
     public init() {}
 
+    /// The height of every box, in points; a placeholder takes the same height in its row.
     public static let boxHeight = 38.0
     /// The widest a row of the map may grow before a layer wraps.
     public static let maxRowWidth = 960.0
+    /// The space left clear on each side of the figure, in points.
     public static let margin = 6.0
 
     /// The width a box needs for its text, from the monospace label and the smaller detail line.

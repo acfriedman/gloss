@@ -50,7 +50,9 @@ struct ListPaneView: View {
 /// One outline row: a folder, or a type, opening onto what it holds when it holds anything.
 struct OutlineRowView: View {
     @Environment(Workspace.self) private var workspace
+    /// The folder or type the row shows, with the rows it opens onto.
     var item: OutlineItem
+    /// The arranged interface the type rows read their names, findings, and member counts from.
     var atlas: Atlas
 
     var body: some View {
@@ -92,7 +94,9 @@ struct OutlineRowView: View {
 
 /// One type in the list: its short name, a mark when it has findings, and its member count.
 struct TypeRowView: View {
+    /// The type the row shows, named as it reads under its parent.
     var node: Graph.Node
+    /// The arranged interface the row reads the type's short name, findings, and members from.
     var atlas: Atlas
 
     var body: some View {
@@ -118,6 +122,7 @@ struct TypeRowView: View {
 struct RowHover {
     @Environment(Workspace.self) private var workspace
     @State private var isHovered = false
+    /// What the row stands for, which hovering previews; the row also stays lit while the map previews it.
     var target: Workspace.Selection
 }
 
@@ -171,8 +176,12 @@ struct SummaryView: View {
 
 /// One labeled number in the summary.
 struct StatView: View {
+    /// The name of the number, shown in uppercase above it.
     var title: String
+    /// The number as text, which may be a count or a fraction such as 40/52.
     var value: String
+    /// The color of the number: primary, or for the findings count ``Palette/ok`` when there are none and
+    /// ``Palette/danger`` otherwise.
     var tint: Color = .primary
 
     var body: some View {

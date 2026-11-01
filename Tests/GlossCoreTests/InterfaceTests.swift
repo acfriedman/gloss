@@ -305,6 +305,28 @@ final class InterfaceTests: XCTestCase {
         XCTAssertEqual(Highlight.runs("public var rendered: String { get }").first { $0.kind == .declaration }?.text, "rendered")
     }
 
+    func testNotesKeepFencedCodeAsOneBlock() throws {
+        let source = """
+        /// Parses a name.
+        ///
+        /// Call it like this:
+        ///
+        /// ```swift
+        /// let name = parse("a")
+        ///
+        /// print(name)
+        /// ```
+        func parse(_ text: String) {}
+        """
+        let contract = try XCTUnwrap(contracts(source).first)
+        XCTAssertEqual(contract.notes, ["Call it like this:", "```swift\nlet name = parse(\"a\")\n\nprint(name)\n```"])
+    }
+
+    func testDeadLinksReachTheAssessments() {
+        let interface = Interface.build(sources: [("Sources/Shop/Cart.swift", "/// A cart, unlike ``Basket``.\nstruct Cart {}")])
+        XCTAssertEqual(interface.assessments.flatMap(\.findings).map(\.rule), ["dead-link"])
+    }
+
     func testQuickOpenFindsTypesByWordStartsAndRanksExactNamesFirst() {
         let atlas = Atlas(Interface.build(sources: [("Sources/App/Views.swift", """
         struct DetailPaneView {}

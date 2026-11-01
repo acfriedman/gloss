@@ -4,7 +4,9 @@ import SwiftSyntax
 ///
 /// Keeping the line number per entry lets a rule point at the exact offending line, not the block.
 public struct DocLine: Sendable, Equatable {
+    /// The line with its `///` prefix and one following space removed; deeper indentation is kept.
     public var text: String
+    /// The 1-based source line the text came from.
     public var line: Int
 
     /// Creates a line of comment text tagged with its source line.
@@ -22,8 +24,29 @@ public struct DocLine: Sendable, Equatable {
 ///
 /// Extraction is separate from analysis so the parser can be tested on plain strings.
 public struct DocComment: Sendable, Equatable {
+    /// The comment's `///` lines in source order; empty for a block comment.
     public var lines: [DocLine]
+    /// `true` when the source used `/** */`, which the rules refuse before reading the lines.
     public var isBlockComment: Bool
+
+    /// The source lines of fenced code: each fence of three backticks or more, and everything
+    /// between an opening fence and its close. Code is quoted, not prose, so no rule reads it.
+    public var codeLines: Set<Int> {
+        var lines = Set<Int>()
+        var fence: String?
+        for line in self.lines {
+            let trimmed = line.text.trimmed
+            let run = String(trimmed.prefix { $0 == "`" })
+            if let open = fence {
+                lines.insert(line.line)
+                if run.count >= open.count, trimmed.allSatisfy({ $0 == "`" }) { fence = nil }
+            } else if run.count >= 3 {
+                lines.insert(line.line)
+                fence = run
+            }
+        }
+        return lines
+    }
 
     /// Creates a comment from lines already stripped of their `///` prefixes.
     ///

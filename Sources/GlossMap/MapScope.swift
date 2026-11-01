@@ -8,8 +8,12 @@ import GlossCore
 public struct MapScope: Sendable {
     /// What a root type is drawn as at a level.
     public enum Unit: Hashable, Sendable {
+        /// A type drawn as its own box, by node id.
         case type(String)
+        /// A whole module drawn as one box, by name.
         case module(String)
+        /// One folder of a module drawn as one box: the module name, then the folder name, empty for
+        /// the module's own directory.
         case folder(String, String)
 
         /// The id a box carries, which views name to light it.
@@ -24,14 +28,20 @@ public struct MapScope: Sendable {
 
     /// Which level this is.
     public enum Kind: Hashable, Sendable {
+        /// Every root type at once, offered only when they all fit ``Atlas/mapBudget``.
         case allTypes
+        /// Each module as one box, offered only when there is more than one module.
         case modules
+        /// One module's types, or its folders when it is over the budget and spread across several; the
+        /// value is the module name.
         case module(String)
+        /// One folder's types, for a module its level draws as folders: the module name, then the folder name.
         case folder(String, String)
     }
 
     /// A stable id: `s-types`, `s-modules`, `s-m-Module`, or `s-f-Module-Folder`.
     public var id: String
+    /// What the level draws, and for a module or folder level, which one.
     public var kind: Kind
     /// The level's name in a breadcrumb.
     public var label: String
@@ -47,7 +57,10 @@ public struct MapScope: Sendable {
 
 /// The boxes and edges one level draws in one variant, with whatever it leaves out.
 public struct MapFigure: Sendable {
+    /// The boxes to lay out: connected inside boxes within the budget first, then the boundary boxes
+    /// their edges reach.
     public var items: [GraphLayout.Item] = []
+    /// The edges between those boxes, one per ordered pair, each touching at least one inside box.
     public var links: [GraphLayout.Link] = []
     /// Inside boxes with no edge in this variant, listed under the figure.
     public var loose: [MapScope.Unit] = []

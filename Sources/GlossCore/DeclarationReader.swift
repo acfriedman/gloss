@@ -10,23 +10,40 @@ import SwiftSyntax
 public final class DeclarationReader: SyntaxVisitor {
     /// One declaration as read: what the rules need, its doc comment, and what the model needs.
     public struct Entry: Sendable {
+        /// What the rules check: kind, name, exemption, signature facts, and position.
         public var declaration: Declaration
+        /// The doc comment directly above the declaration, or `nil` when it has none.
         public var doc: DocComment?
+        /// What the contract model needs beyond what the rules check.
         public var details: Details
     }
 
     /// What the syntax says about a declaration beyond what the rules need: its kind, scope, access,
     /// header, types, effects, and the type names it mentions.
     public struct Details: Sendable {
+        /// The introducing keyword as ``Header/keyword(of:)`` reads it, or `code` for top-level code.
         public var keyword: String
+        /// The type names the declaration mentions, each tagged with where it appears; unresolved until
+        /// ``Graph/build(_:)``.
         public var mentions: [Mention]
+        /// The enclosing types and extended types, outermost first; empty at file scope.
         public var container: [String]
+        /// The effective access level, an implicit one taken from the enclosing extension, protocol, or enum,
+        /// else `internal`, or `private` inside a private scope.
         public var access: String
+        /// The one-line declaration from ``Header/text(of:)``, which the contract shows as written.
         public var header: String
+        /// Each parameter's type as written, a variadic's `...` included, and whether it has a default, in
+        /// signature order.
         public var parameterTypes: [(type: String, hasDefault: Bool)]
+        /// The return type as written, `Void` included, or `nil` when the signature has no return clause.
         public var returnType: String?
+        /// A property's type annotation as written, or `nil` when it has none or is not a property.
         public var valueType: String?
+        /// The `throws`, `throws(E)`, or `rethrows` clause of a function or initializer as written, or `nil`
+        /// when it has none.
         public var throwsClause: String?
+        /// `true` when a function or initializer is declared `async`.
         public var isAsync: Bool
     }
 
@@ -36,6 +53,8 @@ public final class DeclarationReader: SyntaxVisitor {
     private var conformanceDepth = 0
     private var privateDepth = 0
     private var scopes: [Scope] = []
+    /// Whether the file has top-level statements, which makes its top-level variables the entry point's.
+    private var isScript = false
 
     /// One enclosing type or extension: its name and the access its members take when they name none.
     private struct Scope {
@@ -84,8 +103,12 @@ public final class DeclarationReader: SyntaxVisitor {
 
     // A script's top-level statements are its entry point. They are not declarations, so they are kept
     // as one `top-level code` entry that carries their mentions into the graph; no rule applies to it.
+    // A script's top-level variables are the entry point's locals, so they join it rather than standing
+    // as declarations that would need docs.
     override public func visit(_ node: SourceFileSyntax) -> SyntaxVisitorContinueKind {
-        let statements = node.statements.filter { !$0.item.is(DeclSyntax.self) }
+        guard node.statements.contains(where: { !$0.item.is(DeclSyntax.self) }) else { return .visitChildren }
+        isScript = true
+        let statements = node.statements.filter { !$0.item.is(DeclSyntax.self) || $0.item.is(VariableDeclSyntax.self) }
         guard let first = statements.first else { return .visitChildren }
         var mentions: [Mention] = []
         for statement in statements {
@@ -195,8 +218,10 @@ public final class DeclarationReader: SyntaxVisitor {
     override public func visit(_ node: ActorDeclSyntax) -> SyntaxVisitorContinueKind { type(node, node.name, node.modifiers) }
     override public func visit(_ node: ProtocolDeclSyntax) -> SyntaxVisitorContinueKind { type(node, node.name, node.modifiers) }
     override public func visit(_ node: TypeAliasDeclSyntax) -> SyntaxVisitorContinueKind { type(node, node.name, node.modifiers) }
+    override public func visit(_ node: AssociatedTypeDeclSyntax) -> SyntaxVisitorContinueKind { type(node, node.name, node.modifiers) }
 
     override public func visit(_ node: VariableDeclSyntax) -> SyntaxVisitorContinueKind {
+        if isScript, scopes.isEmpty { return .skipChildren }
         let name = node.bindings.first?.pattern.trimmedDescription ?? "property"
         record(node, kind: .property, name: name, at: node.bindingSpecifier, parameters: nil, returnType: nil,
                throwsErrors: false, modifiers: node.modifiers)
@@ -213,7 +238,7 @@ public final class DeclarationReader: SyntaxVisitor {
     private func type(_ node: some DeclSyntaxProtocol, _ nameToken: TokenSyntax, _ modifiers: DeclModifierListSyntax) -> SyntaxVisitorContinueKind {
         record(node, kind: .type, name: nameToken.text, at: nameToken, parameters: nil, returnType: nil,
                throwsErrors: false, modifiers: modifiers)
-        guard !node.is(TypeAliasDeclSyntax.self) else { return .visitChildren }
+        guard !node.is(TypeAliasDeclSyntax.self), !node.is(AssociatedTypeDeclSyntax.self) else { return .visitChildren }
         if Self.isPrivate(modifiers) { privateDepth += 1 }
         let access = effectiveAccess(modifiers, kind: .type)
         scopes.append(Scope(name: nameToken.text,
@@ -222,14 +247,15 @@ public final class DeclarationReader: SyntaxVisitor {
         return .visitChildren
     }
 
-    // Typealiases have no members, so only the five container kinds balance `privateDepth` and `scopes`.
+    // Typealiases and associated types have no members, so only the five container kinds balance
+    // `privateDepth` and `scopes`.
     private func leaveType(_ modifiers: DeclModifierListSyntax) {
         if Self.isPrivate(modifiers) { privateDepth -= 1 }
         scopes.removeLast()
     }
 
     private static func isPrivate(_ modifiers: DeclModifierListSyntax) -> Bool {
-        modifiers.contains { $0.name.text == "private" || $0.name.text == "fileprivate" }
+        modifiers.contains { ($0.name.text == "private" || $0.name.text == "fileprivate") && $0.detail == nil }
     }
 
     // `private(set)` and its kin narrow only the setter, so a modifier with a detail is not the access level.
@@ -278,7 +304,8 @@ public final class DeclarationReader: SyntaxVisitor {
         )
         if let reason = Self.exemptMarker(in: node.leadingTrivia) {
             declaration.exemption = .marker(reason: reason)
-        } else if Declaration.knownRequirements.contains(declaration.signature) {
+        } else if Declaration.knownRequirements.contains(declaration.signature)
+                    || (kind == .enumCase && scopes.last?.name == "CodingKeys") {
             declaration.exemption = .knownRequirement
         } else if conformanceDepth > 0 {
             declaration.exemption = .conformanceExtension

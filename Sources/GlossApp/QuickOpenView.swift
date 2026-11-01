@@ -71,7 +71,9 @@ struct QuickOpenView: View {
 /// One result: a badge for its kind, its name with the typed letters drawn bold, and where it lives.
 struct QuickOpenRowView: View {
     @Environment(Workspace.self) private var workspace
+    /// The result the row shows: its kind badge, its name with the typed letters bold, and where it lives.
     var match: QuickOpenMatch
+    /// Whether the arrow keys rest on this row, which Return opens; the row is filled with the soft accent.
     var isChosen: Bool
 
     var body: some View {

@@ -4,6 +4,7 @@ import Foundation
 public enum SourceFiles {
     /// A path that does not exist, so a typo cannot pass as a clean run.
     public struct Missing: Error, Sendable {
+        /// The path that was asked for, exactly as given.
         public var path: String
     }
 

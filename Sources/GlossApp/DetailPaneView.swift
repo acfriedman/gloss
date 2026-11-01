@@ -40,6 +40,8 @@ struct DetailPaneView: View {
 /// One page of the details pane, scrolled from its top.
 struct DetailPageView: View {
     @Environment(Workspace.self) private var workspace
+    /// What the page shows, the selection or the preview laid over it; a type the atlas no longer holds
+    /// leaves the page empty.
     var target: Workspace.Selection
 
     var body: some View {
@@ -69,6 +71,7 @@ struct DetailPageView: View {
 /// The overview: each module's entry points, the types other code reaches first.
 struct OverviewView: View {
     @Environment(Workspace.self) private var workspace
+    /// The arranged interface the overview reads the modules and each one's entry points from.
     var atlas: Atlas
 
     var body: some View {
@@ -90,7 +93,9 @@ struct OverviewView: View {
 /// A type on the overview: its kind, name, first sentence, and who uses it.
 struct CardView: View {
     @Environment(Workspace.self) private var workspace
+    /// The arranged interface the card reads its type's summary, operation count, and users from.
     var atlas: Atlas
+    /// The entry point the card describes, which clicking selects and hovering lights on the map.
     var node: Graph.Node
 
     var body: some View {
@@ -122,6 +127,7 @@ struct CardView: View {
 /// Every module, with the modules each depends on.
 struct ModulesView: View {
     @Environment(Workspace.self) private var workspace
+    /// The arranged interface the page reads each module, its summary, and the modules it depends on from.
     var atlas: Atlas
 
     var body: some View {
@@ -147,7 +153,9 @@ struct ModulesView: View {
 
 /// One module: its entry points, the modules it depends on and is used by, its folders, and its types.
 struct ModuleView: View {
+    /// The arranged interface the page reads the module's entry points, dependencies, and types from.
     var atlas: Atlas
+    /// The name of the module the page shows.
     var module: String
 
     var body: some View {
@@ -164,8 +172,11 @@ struct ModuleView: View {
 
 /// One folder drawn as its own level: what it depends on outside itself, what uses it, and its types.
 struct FolderView: View {
+    /// The arranged interface the page reads the folder's summary, dependencies, and types from.
     var atlas: Atlas
+    /// The name of the module the folder belongs to.
     var module: String
+    /// The folder's name within its module, empty for files directly in the module's directory.
     var folder: String
 
     var body: some View {
@@ -183,7 +194,10 @@ struct FolderView: View {
 /// One type: its declaration and doc, what flows into and out of it, and its members.
 struct TypeView: View {
     @Environment(Workspace.self) private var workspace
+    /// The arranged interface the page reads the type's declaration, doc, neighbors, and members from.
     var atlas: Atlas
+    /// The type the page shows, nested or not. For file scope or an extension of a type no scanned source
+    /// declares, the page shows only its label and says which it is.
     var node: Graph.Node
 
     var body: some View {
@@ -195,7 +209,7 @@ struct TypeView: View {
                 CodeView(runs: Highlight.runs(of: head.contract))
                     .font(.system(.title3, design: .monospaced).weight(.semibold))
                 if let summary = head.summary { DocTextView(text: summary).font(.title3) }
-                ForEach(head.notes, id: \.self) { note in DocTextView(text: note) }
+                ForEach(head.notes, id: \.self) { note in NoteView(text: note) }
                 FindingsView(findings: head.findings)
                 SourceLinkView(file: head.file, line: head.line)
             } else {
@@ -204,18 +218,22 @@ struct TypeView: View {
                     .foregroundStyle(.secondary)
             }
         }
-        FlowView(atlas: atlas, node: node, incoming: incoming, outgoing: outgoing, nested: nested)
-        MembersView(atlas: atlas, members: group.members.filter { Contract.rank($0.access) >= workspace.minimumRank })
+        FlowView(atlas: atlas, incoming: incoming, outgoing: outgoing, nested: nested)
+        MembersView(members: group.members.filter { Contract.rank($0.access) >= workspace.minimumRank })
     }
 }
 
 /// What flows into and out of a type, read top to bottom: what uses it, then what it conforms to,
 /// holds, takes, returns, and throws, then what it uses only inside its bodies.
 struct FlowView: View {
+    /// The arranged interface the chips read their names and findings from.
     var atlas: Atlas
-    var node: Graph.Node
+    /// The edges from types that use this one, shown as Used by chips whose tooltips name the edge's roles.
     var incoming: [Graph.Edge]
+    /// The edges to the types this one depends on, each shown under every role it has; one made only of body
+    /// uses shows under Uses inside its bodies.
     var outgoing: [Graph.Edge]
+    /// The types declared directly inside this one, shown as Nests chips when there are any.
     var nested: [Graph.Node]
 
     var body: some View {
@@ -237,10 +255,10 @@ struct FlowView: View {
     }
 }
 
-/// A type's members, grouped by what a caller does with them; overrides fold away, since their
+/// A type's members, grouped by what a caller does with them; overrides come last, since their
 /// contract is the inherited one.
 struct MembersView: View {
-    var atlas: Atlas
+    /// The type's members at or above the access filter, grouped by what a caller does with them.
     var members: [Atlas.Reviewed]
 
     var body: some View {
@@ -266,6 +284,7 @@ struct MembersView: View {
 
 /// One member: its declaration and first sentence, unfolding to its whole contract.
 struct MemberRowView: View {
+    /// The member the row shows: its contract and first sentence, unfolding to its whole doc and findings.
     var member: Atlas.Reviewed
     @State private var isOpen = false
 
@@ -282,7 +301,7 @@ struct MemberRowView: View {
                 ForEach(Array(member.callouts.enumerated()), id: \.offset) { _, callout in
                     TermsView(title: callout.keyword, rows: [("", callout.text, false)])
                 }
-                ForEach(member.notes, id: \.self) { note in DocTextView(text: note) }
+                ForEach(member.notes, id: \.self) { note in NoteView(text: note) }
                 if let exemption = member.exemption {
                     Text("Exempt: \(exemption)").font(.caption).foregroundStyle(.secondary)
                 }
@@ -316,8 +335,11 @@ struct MemberRowView: View {
 
 /// A view's heading: a small label, a title, and one line of context.
 struct HeadingView: View {
+    /// The small uppercase label over the title, such as Module, or `nil` for none.
     var eyebrow: String?
+    /// The page's name, set large in an italic serif.
     var title: String
+    /// One line of context under the title, such as how many types the page holds, or `nil` for none.
     var lede: String?
 
     var body: some View {
@@ -331,6 +353,7 @@ struct HeadingView: View {
 
 /// A small uppercase label over a section.
 struct EyebrowView: View {
+    /// The label, which the view sets in uppercase.
     var text: String
 
     var body: some View {
@@ -343,6 +366,7 @@ struct EyebrowView: View {
 
 /// Doc text with its code spans set in code.
 struct DocTextView: View {
+    /// Doc text as written, with its inline Markdown rendered; text that does not parse shows as written.
     var text: String
 
     var body: some View {
@@ -352,9 +376,52 @@ struct DocTextView: View {
     }
 }
 
+/// One paragraph of a doc's notes: prose, or fenced code, which the model keeps whole and this draws as
+/// a block, colored when it is Swift.
+struct NoteView: View {
+    /// A paragraph from a contract's notes; fenced code starts with its opening fence.
+    var text: String
+
+    var body: some View {
+        if let (language, code) = Self.fenced(text) {
+            ScrollView(.horizontal) {
+                Group {
+                    if language.isEmpty || language == "swift" {
+                        CodeView(runs: Highlight.runs(code))
+                    } else {
+                        Text(code)
+                    }
+                }
+                .font(.system(.callout, design: .monospaced))
+                .fixedSize()
+                .padding(10)
+            }
+            .background(RoundedRectangle(cornerRadius: 6).fill(Palette.panel))
+            .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(Palette.line))
+        } else {
+            DocTextView(text: text)
+        }
+    }
+
+    /// Splits fenced code into its language and its lines, fences dropped.
+    ///
+    /// - Parameter text: A note paragraph.
+    /// - Returns: The language after the opening fence, empty when none is named, and the code; `nil` for prose.
+    static func fenced(_ text: String) -> (language: String, code: String)? {
+        guard text.hasPrefix("```") else { return nil }
+        var lines = text.components(separatedBy: "\n")
+        let language = lines.removeFirst().drop { $0 == "`" }.trimmingCharacters(in: .whitespaces)
+        if lines.count > 0, lines[lines.count - 1].trimmingCharacters(in: .whitespaces).hasPrefix("```") { lines.removeLast() }
+        return (language, lines.joined(separator: "\n"))
+    }
+}
+
 /// A titled list of names and what each one means, for parameters, returns, throws, and callouts.
 struct TermsView: View {
+    /// The heading over the rows: Parameters, Returns, Throws, or a callout's keyword.
     var title: String
+    /// The rows: each term set in code, or empty to show the text alone; what it means; and whether its doc
+    /// is missing, which draws the text in ``Palette/danger``.
     var rows: [(term: String, text: String, missing: Bool)]
 
     var body: some View {
@@ -374,6 +441,7 @@ struct TermsView: View {
 
 /// The findings the linter made on one declaration.
 struct FindingsView: View {
+    /// The findings to list, each rule beside its message; empty shows nothing.
     var findings: [Assessment.Finding]
 
     var body: some View {
@@ -396,7 +464,9 @@ struct FindingsView: View {
 /// Where a declaration is written, opening it in Xcode.
 struct SourceLinkView: View {
     @Environment(Workspace.self) private var workspace
+    /// The file path as the interface names it, relative to the open folder.
     var file: String
+    /// The 1-based line of the declaration, shown after the path and where Xcode opens the file.
     var line: Int
 
     var body: some View {
@@ -411,8 +481,11 @@ struct SourceLinkView: View {
 
 /// A titled row of chips, or nothing when there are none.
 struct ChipBlockView: View {
+    /// The heading over the chips, shown with their count; empty shows the chips alone.
     var title: String
+    /// The types, modules, or folders to show as chips, in order; empty shows nothing, title included.
     var units: [MapScope.Unit]
+    /// The arranged interface the chips read their names and findings from.
     var atlas: Atlas
     /// A tooltip for each chip, at the same index.
     var notes: [String] = []
@@ -440,8 +513,12 @@ struct ChipBlockView: View {
 struct ChipView: View {
     @Environment(Workspace.self) private var workspace
     @State private var isHovered = false
+    /// The type, module, or folder the chip names, selects when clicked, and lights on the map while hovered;
+    /// a nested type lights its root's box.
     var unit: MapScope.Unit
+    /// The arranged interface the chip reads its name, its type's findings, and its type's root from.
     var atlas: Atlas
+    /// The chip's tooltip, or `nil` to show its name.
     var note: String?
 
     var body: some View {
@@ -467,6 +544,7 @@ struct ChipView: View {
 
 /// Lays out views in rows, wrapping to a new row when the next one does not fit.
 struct Wrap {
+    /// The gap in points between neighbors in a row and between rows.
     var spacing: CGFloat
 }
 

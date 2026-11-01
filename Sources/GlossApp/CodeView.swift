@@ -3,6 +3,7 @@ import SwiftUI
 
 /// Swift source colored the way Xcode's default themes color it, from the shared highlighter.
 struct CodeView: View {
+    /// The source to draw, as ``GlossMap/Highlight/runs(of:)`` splits it, each run colored by its kind.
     var runs: [Highlight.Run]
 
     var body: some View {

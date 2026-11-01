@@ -6,12 +6,27 @@ public struct Declaration: Sendable, Equatable {
     /// The syntactic category of a declaration, which decides which rules apply. Callables get the
     /// markup rules; types, properties, and cases get only the summary rules once documented.
     public enum Kind: String, Sendable, Codable {
-        case function, initializer, `subscript`, type, property, enumCase, other
+        /// A `func` or a `macro`.
+        case function
+        /// An `init`.
+        case initializer
+        /// A `subscript`.
+        case `subscript`
+        /// A struct, class, enum, actor, protocol, `typealias`, or `associatedtype`.
+        case type
+        /// A `var` or `let` outside a body.
+        case property
+        /// An enum case, covering every element its `case` line declares.
+        case enumCase
+        /// Anything else, such as a script's top-level code, which owes no doc.
+        case other
     }
 
     /// One parameter of a callable, as the two names DocC will accept for it.
     public struct Parameter: Sendable, Equatable {
+        /// The external argument label, or `nil` for `_`.
         public var label: String?
+        /// The internal name; the same as the label when the signature gives only one.
         public var name: String
 
         /// Creates a parameter from its two names.
@@ -41,7 +56,8 @@ public struct Declaration: Sendable, Equatable {
     /// three proxies: a signature every Swift author recognizes, residence in a conformance
     /// extension, or an author's marker naming the reason.
     public enum Exemption: Sendable, Equatable {
-        /// The signature is a well-known protocol requirement, one of ``Declaration/knownRequirements``.
+        /// The signature is a well-known protocol requirement, one of ``Declaration/knownRequirements``,
+        /// or the declaration is a case of a `CodingKeys` enum, which names a stored property.
         case knownRequirement
         /// The declaration sits in an `extension T: P { }` block, which houses P's requirements.
         case conformanceExtension
@@ -52,16 +68,32 @@ public struct Declaration: Sendable, Equatable {
         case memberwiseInit
     }
 
+    /// The syntactic category, which decides which rules apply.
     public var kind: Kind
+    /// The base name as diagnostics report it: `init` for initializers, `subscript` for subscripts.
     public var name: String
+    /// Why the declaration is excused from the harness, or `nil` when it is not.
     public var exemption: Exemption?
+    /// The parameter list of a callable, or `nil` for types, properties, and cases, which skips the
+    /// parameter, returns, and throws rules.
     public var parameters: [Parameter]?
+    /// `true` when the declared return type is anything but `Void`, `()`, or `Never`, which makes
+    /// `- Returns:` required.
     public var returnsValue: Bool
+    /// `true` for `throws`, `throws(E)`, and `rethrows`, which makes `- Throws:` required.
     public var throwsErrors: Bool
+    /// `true` for `private` or `fileprivate`, including members of a private type or extension; excuses
+    /// `missing-doc` only.
     public var isPrivate: Bool
+    /// `true` for `override`; excuses `missing-doc`, since the doc is inherited.
     public var isOverride: Bool
+    /// The path diagnostics report.
     public var file: String
+    /// The 1-based source line of the name token, or of the keyword for an initializer, subscript, property,
+    /// or case.
     public var line: Int
+    /// The 1-based column of the name token, or of the keyword for an initializer, subscript, property, or
+    /// case.
     public var column: Int
 
     /// Creates a declaration by hand, for tests and tools that have no syntax tree.
@@ -78,8 +110,9 @@ public struct Declaration: Sendable, Equatable {
     ///     extension; excuses `missing-doc` only.
     ///   - isOverride: `true` for `override`; excuses `missing-doc`, since the doc is inherited.
     ///   - file: The path diagnostics report.
-    ///   - line: The 1-based source line of the name token.
-    ///   - column: The 1-based column of the name token.
+    ///   - line: The 1-based source line of the name token, or of the keyword for an initializer,
+    ///     subscript, property, or enum case.
+    ///   - column: The 1-based column of that token.
     public init(
         kind: Kind,
         name: String,
@@ -114,9 +147,9 @@ public struct Declaration: Sendable, Equatable {
     public var requiresDoc: Bool {
         guard exemption == nil else { return false }
         switch kind {
-        case .function, .initializer, .subscript, .type:
+        case .function, .initializer, .subscript, .type, .property, .enumCase:
             return !isPrivate && !isOverride
-        case .property, .enumCase, .other:
+        case .other:
             return false
         }
     }
@@ -147,8 +180,13 @@ public struct Declaration: Sendable, Equatable {
         "makeIterator()", "next()", "index(after:)", "index(before:)",
         // Entry points and command runners
         "main()", "run()", "validate()",
-        // Error / CustomStringConvertible-style descriptions are properties; listed as methods only
+        // Codable with configuration
         "encode(to:configuration:)", "init(from:configuration:)",
+        // Properties: View, Identifiable, the description protocols, RawRepresentable, Hashable,
+        // CaseIterable, LocalizedError, Collection, and Actor
+        "body", "id", "description", "debugDescription", "rawValue", "hashValue", "allCases",
+        "errorDescription", "failureReason", "recoverySuggestion", "helpAnchor", "startIndex", "endIndex",
+        "unownedExecutor",
         // swift-syntax macro roles
         "expansion(of:in:)", "expansion(of:providingMembersOf:in:)",
         "expansion(of:providingMembersOf:conformingTo:in:)", "expansion(of:providingPeersOf:in:)",

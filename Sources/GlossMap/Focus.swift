@@ -2,9 +2,11 @@ import GlossCore
 
 /// The map's narrowest level: one type with only what uses it, above, and what it depends on, below.
 public struct Focus: Sendable {
+    /// The placed figure: users in rows above the focused type, its dependencies in rows below.
     public var layout: GraphLayout
-    /// How many types use it and how many it depends on, after the filters and before the cap.
+    /// How many types use it, after the filters and before the cap.
     public var incoming: Int
+    /// How many types it depends on, after the filters and before the cap.
     public var outgoing: Int
     /// How many of those are past the cap and not drawn.
     public var hidden: Int

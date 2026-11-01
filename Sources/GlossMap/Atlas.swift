@@ -9,7 +9,10 @@ public struct Atlas: Sendable {
     /// and nowhere earlier; a contract's own fields read through as the reviewed value's.
     @dynamicMemberLookup
     public struct Reviewed: Sendable {
+        /// The declaration as read: its signature and its doc comment, before any rule judges it.
         public var contract: Contract
+        /// The linter's verdict on the same declaration: whether it owes a doc, why it is excused, and
+        /// what the rules found.
         public var assessment: Assessment
 
         /// Reads a contract field through the reviewed value, so view code reads both halves alike.
@@ -17,30 +20,49 @@ public struct Atlas: Sendable {
         /// - Parameter path: A field of the contract.
         /// - Returns: The contract's value for it.
         public subscript<Value>(dynamicMember path: KeyPath<Contract, Value>) -> Value { contract[keyPath: path] }
+        /// The rule findings on the declaration, in source order; empty when its doc passes.
         public var findings: [Assessment.Finding] { assessment.findings }
+        /// `true` when the harness demands a doc comment here, so a missing one shows as a gap.
         public var requiresDoc: Bool { assessment.requiresDoc }
+        /// Why the harness excuses the declaration, in words a reader can act on, or `nil` when it does not.
         public var exemption: String? { assessment.exemption }
     }
 
     /// The contracts one node shows: the type's own declaration, if scanned, and its members.
     public struct Group: Sendable {
+        /// The type's own declaration, or `nil` for an extension of a type no scanned source declares
+        /// and for file scope.
         public var head: Reviewed?
+        /// The declarations filed under the node, members added in extensions included, in scan order;
+        /// a nested type heads a group of its own.
         public var members: [Reviewed] = []
+        /// The findings on the head and members together; types nested in the node are left out, as
+        /// ``Atlas/findings(under:)`` counts them.
         public var findingCount: Int { (head?.findings.count ?? 0) + members.reduce(0) { $0 + $1.findings.count } }
     }
 
     /// An edge between two root nodes, with nested types folded into their roots.
     public struct Rolled: Sendable {
+        /// The id of the dependent root node.
         public var from: String
+        /// The id of the root node it depends on, never the same as ``from``.
         public var to: String
+        /// The roles of every edge folded into it, each once, in ``GlossCore/Mention/Role`` order; never
+        /// empty, and only `body` means implementation.
         public var roles: [Mention.Role]
     }
 
+    /// Every node of the graph, in the order the interface first declares them.
     public private(set) var nodes: [Graph.Node]
+    /// Every dependency between nodes, nested types not yet folded into their roots.
     public private(set) var edges: [Graph.Edge]
+    /// The contracts each node shows, keyed by node id; ``group(_:)`` reads it with an empty fallback.
     public private(set) var groups: [String: Group] = [:]
+    /// Each node by its id.
     public private(set) var byID: [String: Graph.Node] = [:]
+    /// The module names in order of first appearance.
     public private(set) var modules: [String] = []
+    /// The ids of the nodes that are no type's nested type, which the map draws as boxes.
     public private(set) var rootIDs: [String] = []
     // Indexes built once, so an interface of thousands of types never rescans every edge per type.
     private var edgesFrom: [String: [Graph.Edge]] = [:]
@@ -279,8 +301,8 @@ public struct Atlas: Sendable {
     /// of the same module, and other modules.
     ///
     /// - Parameters:
-    ///   - module: The module the folder belongs to.
     ///   - folder: The folder name; empty for files directly in the module's directory.
+    ///   - module: The module the folder belongs to.
     /// - Returns: Both lists as map boxes, in order of first dependency, body dependencies included.
     public func dependencies(ofFolder folder: String, in module: String) -> (uses: [MapScope.Unit], usedBy: [MapScope.Unit]) {
         let ids = Set(types(inFolder: folder, of: module).map(\.id))

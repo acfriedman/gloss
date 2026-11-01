@@ -82,10 +82,7 @@ if interfaceMode {
     exit(0)
 }
 
-var diagnostics: [Diagnostic] = []
-for (file, source) in sources {
-    diagnostics += Linter.check(source: source, file: file)
-}
+let diagnostics = Linter.check(sources: sources)
 
 if !summaryOnly {
     for diagnostic in diagnostics { print(diagnostic.rendered) }

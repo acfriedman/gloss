@@ -4,13 +4,19 @@ import GlossCore
 public struct OutlineItem: Sendable, Identifiable {
     /// What a row stands for.
     public enum Kind: Sendable {
+        /// A source folder, by its own name alone; the row's id carries its full path.
         case folder(String)
+        /// A node of the module: a type, an extension of a type no scanned source declares, or the
+        /// module's file scope.
         case type(Graph.Node)
     }
 
     /// From ``Atlas/folderID(_:_:)`` for a folder, and the node id for a type.
     public var id: String
+    /// Whether the row is a folder or a node, and which.
     public var kind: Kind
+    /// The rows under this one: for a folder, its subfolders sorted by name and then its types in graph
+    /// order; for a type, the kept types nested directly in it.
     public var children: [OutlineItem]
     /// The types under the row at any depth, nested ones included, and the row itself for a type.
     public var typeCount: Int

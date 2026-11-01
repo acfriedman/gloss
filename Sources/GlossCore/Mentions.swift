@@ -22,8 +22,12 @@ public struct Mention: Sendable, Equatable, Codable {
         case body
     }
 
+    /// The type name as written, with a nested type's dotted path kept whole.
     public var name: String
+    /// Where the name appears, which says how the declaration depends on it.
     public var role: Role
+    /// The id of the graph node the name refers to, set by ``Graph/build(_:)``, or `nil` when no scanned
+    /// source declares it.
     public var resolved: String?
 }
 

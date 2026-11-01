@@ -107,11 +107,12 @@ public enum Rules {
     ///
     /// - Parameters:
     ///   - decl: The declaration under review.
-    ///   - doc: Its comment; every line is scanned, notes included.
+    ///   - doc: Its comment; every line is scanned, notes included, except fenced code.
     /// - Returns: One finding per single-backticked reference, naming the link form to write.
     static func symbolLinkRules(_ decl: Declaration, _ doc: DocComment) -> [Diagnostic] {
         var findings: [Diagnostic] = []
-        for line in doc.lines {
+        let code = doc.codeLines
+        for line in doc.lines where !code.contains(line.line) {
             for span in SymbolReference.singleBacktickSpans(in: line.text) where SymbolReference.isReference(span) {
                 findings.append(diagnostic(decl, line: line.line, .symbolLink,
                                            "`\(span)` names a symbol; write ``\(SymbolReference.linkForm(span))`` so DocC links it. Single backticks are for literals, keywords, and other modules' symbols."))
@@ -153,6 +154,8 @@ public enum Rules {
         return findings
     }
 
+    /// The DocC capitalization of each known callout keyword, keyed by its lowercased form, which
+    /// `markup-case` checks against.
     static let canonicalSpelling: [String: String] = [
         "parameters": "Parameters", "parameter": "Parameter", "returns": "Returns", "throws": "Throws",
         "note": "Note", "important": "Important", "precondition": "Precondition", "postcondition": "Postcondition",
@@ -195,6 +198,23 @@ public enum Rules {
         for parameter in parameters where !written.contains(where: { parameter.matches($0.name) }) {
             findings.append(diagnostic(decl, line: decl.docLineForParameters(structure), .parameterMissing,
                                        "Parameter `\(parameter.name)` of `\(signature)` is not documented. Add `- Parameter \(parameter.name): <what it is, its range or nil meaning>`."))
+        }
+        var seen = Set<Int>()
+        var order: [Int] = []
+        for entry in written {
+            guard let position = parameters.firstIndex(where: { $0.matches(entry.name) }) else { continue }
+            if !seen.insert(position).inserted {
+                findings.append(diagnostic(decl, line: entry.line, .parameterDuplicate,
+                                           "Parameter `\(parameters[position].name)` has more than one entry; keep one."))
+            } else {
+                order.append(position)
+            }
+        }
+        let sorted = order.sorted()
+        if let first = order.indices.first(where: { order[$0] != sorted[$0] }) {
+            let line = written.filter { entry in parameters.contains { $0.matches(entry.name) } }[first].line
+            findings.append(diagnostic(decl, line: line, .parameterOrder,
+                                       "Parameter entries are out of order; list them as `\(signature)` declares them: \(parameters.map(\.name).joined(separator: ", "))."))
         }
         for entry in written {
             if !parameters.contains(where: { $0.matches(entry.name) }) {
@@ -303,7 +323,10 @@ public enum SymbolReference {
         "ProcessInfo", "FileManager", "URLSession", "URLProtocol", "URLRequest", "URL", "JSONEncoder",
         "JSONDecoder", "Date", "Data", "Task", "MainActor", "NSObject", "Bundle", "RunLoop", "Timer",
         "OperationQueue", "UserDefaults", "NSLock", "NSManagedObjectContext", "NSPersistentContainer",
-        "String", "Array", "Dictionary", "Set", "Optional", "Result", "Int", "Double", "Bool", "Character"
+        "String", "Array", "Dictionary", "Set", "Optional", "Result", "Int", "Double", "Bool", "Character",
+        "StaticString", "Substring", "Float", "UInt", "UInt8", "Int8", "Int32", "UInt32", "Int64", "UInt64", "Never",
+        "Error", "Sequence", "Collection", "Equatable", "Hashable", "Comparable", "Codable", "Sendable", "Range",
+        "ClosedRange", "CustomStringConvertible"
     ]
 
     /// Extensions that make a dotted span a file name rather than a type path.
@@ -370,6 +393,7 @@ public enum SymbolReference {
 /// Counting naively on `.` would split `e.g.` and a dotted call; the summary rule is only fair if it
 /// counts the way a reader does.
 public enum Sentences {
+    /// Lowercased abbreviations, without their final period, whose period does not end a sentence.
     static let abbreviations: Set<String> = ["e.g", "i.e", "etc", "vs", "cf", "approx", "no", "fig"]
 
     /// Counts sentences in `text`, treating `.`, `!`, and `?` followed by whitespace or the end as terminators.

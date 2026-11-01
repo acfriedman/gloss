@@ -21,6 +21,7 @@ extension InterfacePage {
             var l: String
             /// The kind word: `struct`, `enum`, `extension`, `file scope`, and so on.
             var k: String
+            /// The module the node belongs to, which the view's eyebrow names.
             var m: String
             /// The access level; file scope counts as public, since it is an entry point.
             var x: String
@@ -46,37 +47,53 @@ extension InterfacePage {
 
         /// One parameter of a callable.
         struct Parameter: Encodable {
+            /// The external argument label, or `nil` for `_`.
             var l: String?
+            /// The internal name, the same as the label when the signature gives only one.
             var n: String
+            /// The type as written, with `...` for a variadic parameter.
             var t: String
             /// `true` when the parameter has a default value.
             var v: Bool?
+            /// The text of the doc's entry for the parameter, or `nil` when the doc has none.
             var d: String?
         }
 
         /// One finding of a contract.
         struct Finding: Encodable {
+            /// The rule's id, such as `missing-doc`.
             var r: String
+            /// The source line the finding points at, which the page prints beside it.
             var l: Int
+            /// The diagnostic's message, as doc text whose code spans the page renders.
             var m: String
         }
 
         /// One contract, every field omitted when it is empty or false.
         struct Contract: Encodable {
+            /// The base name, as diagnostics report it: `init` for an initializer, `subscript` for a subscript.
             var n: String
+            /// The introducing keyword as written, such as `func`, `var`, or `case`, which picks the section
+            /// a member is listed in.
             var k: String
+            /// The effective access level, from `open` down to `private`, which the access filter reads.
             var x: String
             /// The declaration as written, without its body.
             var d: String
+            /// The doc's summary paragraph joined into one line, or `nil` when there is none.
             var s: String?
             /// The length of the summary's first sentence in UTF-16 units, as the page's script measures
             /// text, when it is shorter than the summary.
             var b: Int?
+            /// The parameters of a callable, in signature order.
             var p: [Parameter]?
-            /// The return type, the returns entry, the throws clause, and the throws entry.
+            /// The return type as written, for a callable that returns a value.
             var rt: String?
+            /// The doc's `- Returns:` text.
             var r: String?
+            /// The `throws`, `throws(E)`, or `rethrows` clause as written.
             var tc: String?
+            /// The doc's `- Throws:` text.
             var td: String?
             /// `true` for an `async` callable.
             var y: Bool?
@@ -84,22 +101,33 @@ extension InterfacePage {
             var vt: String?
             /// Other callouts as `[keyword, text]` pairs.
             var co: [[String]]?
+            /// The prose paragraphs below the markup block, one string each.
             var no: [String]?
+            /// Why the harness excuses the declaration, in words; an excused declaration never shows as
+            /// missing its doc.
             var ex: String?
+            /// The rule findings, in source order.
             var f: [Finding]?
             /// The types it mentions: `[node, 1 when only in its body]` pairs.
             var u: [[Int]]?
-            /// The index of its file, and its line.
+            /// The index of its file in the page's file list.
             var fi: Int
+            /// The declaration's line in that file, which the page shows after the file name.
             var ln: Int
+            /// `true` for an `override`, which the page folds into its own section, since its contract is
+            /// the inherited one.
             var ov: Bool?
-            /// `true` when the harness requires a doc, and `true` when it has one.
+            /// `true` when the harness requires a doc on the declaration.
             var rq: Bool?
+            /// `true` when the declaration has a doc comment, whether or not it passes the rules.
             var dc: Bool?
         }
 
+        /// The path of every file a contract comes from, each once, in order of first contract.
         var files: [String] = []
+        /// Every node in sidebar order; edges, nesting, and uses name a node by its index here.
         var nodes: [Node] = []
+        /// Every contract in node order, each node's own declaration before its members.
         var contracts: [Contract] = []
     }
 

@@ -465,6 +465,9 @@ public enum InterfacePage {
     .gloss code { font-size: 12px; color: var(--ink); background: var(--bg); border: 1px solid var(--rule); border-radius: 4px; padding: 0 4px; }
     .gloss code.link, .lede code.link { color: var(--accent); border-color: transparent; background: var(--accent-soft); }
     .note { color: var(--muted); font-size: 14px; }
+    pre.code { margin: 0; padding: 10px 12px; overflow-x: auto; background: var(--panel); border: 1px solid var(--rule); border-radius: 6px;
+      font: 12.5px/1.5 var(--font-code); color: var(--ink); }
+    pre.code code { font: inherit; }
     .missing { color: var(--faint); font-style: italic; }
     .exempt { color: var(--exempt); font-size: 14px; }
     .tag { font: 600 10px/1 var(--font-ui); letter-spacing: 0.08em; text-transform: uppercase; background: var(--exempt-soft); color: var(--exempt); padding: 3px 6px; border-radius: 3px; vertical-align: 2px; }
@@ -547,6 +550,15 @@ public enum InterfacePage {
         + "dynamic optional isolated sending").split(" ").forEach(function (word) { KEYWORDS[word] = 1; });
       var entities = { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" };
       function esc(text) { return String(text).replace(/[&<>"']/g, function (c) { return entities[c]; }); }
+      // A note is prose, or fenced code kept whole by the model, drawn as a block with its fences dropped.
+      function paragraph(text, kind) {
+        if (text.indexOf("```") === 0) {
+          var lines = text.split("\\n");
+          var closed = lines.length > 1 && lines[lines.length - 1].trim().indexOf("```") === 0;
+          return '<pre class="code"><code>' + esc(lines.slice(1, closed ? -1 : lines.length).join("\\n")) + "</code></pre>";
+        }
+        return "<p" + (kind ? ' class="' + kind + '"' : "") + ">" + inline(text) + "</p>";
+      }
       function inline(text) {
         var html = "";
         var rest = text;
@@ -634,7 +646,7 @@ public enum InterfacePage {
           terms += '<dt><span class="term">' + esc(callout[0]) + "</span></dt><dd>" + inline(callout[1]) + "</dd>";
         });
         if (terms && (!contract.ex || contract.dc)) html += '<dl class="terms">' + terms + "</dl>";
-        (contract.no || []).forEach(function (note) { html += '<p class="note">' + inline(note) + "</p>"; });
+        (contract.no || []).forEach(function (text) { html += paragraph(text, "note"); });
         if (contract.u) {
           html += '<p class="uses"><span class="term">Uses</span>' + contract.u.map(function (use) {
             return chip(use[0], { dashed: use[1] === 1, title: use[1] === 1 ? "Used inside the body" : "Part of the signature" });
@@ -711,7 +723,7 @@ public enum InterfacePage {
           if (head.s) html += '<p class="lede ink">' + inline(head.s) + "</p>";
           else if (!head.ex) html += '<p class="lede missing">No doc comment.</p>';
           html += findingsList(head);
-          var more = (head.no || []).map(function (note) { return "<p>" + inline(note) + "</p>"; }).join("")
+          var more = (head.no || []).map(function (text) { return paragraph(text); }).join("")
             + (head.co || []).map(function (callout) { return '<p><span class="term">' + esc(callout[0]) + "</span> " + inline(callout[1]) + "</p>"; }).join("")
             + (head.ex ? '<p><span class="tag">Exempt</span> ' + inline(head.ex) + "</p>" : "");
           if (more) html += '<details class="more"><summary>More about ' + esc(head.n) + '</summary><div class="more-body">' + more + '<p class="loc">' + esc(data.files[head.fi]) + ":" + head.ln + "</p></div></details>";

@@ -2,11 +2,14 @@ import GlossCore
 
 /// One type found by a few typed letters, with where the letters landed in its name.
 public struct QuickOpenMatch: Sendable, Equatable {
+    /// The matched node: any node, nested types, extensions, and file scope included.
     public var node: Graph.Node
     /// The name the letters were matched in: the qualified name, or the label for file scope.
     public var name: String
     /// The offsets of the matched characters in ``name``, for drawing them apart.
     public var matched: [Int]
+    /// How well the letters fit the name, higher being better; it only ranks matches of one query
+    /// against each other.
     public var score: Int
 }
 

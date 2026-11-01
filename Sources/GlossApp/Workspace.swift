@@ -12,42 +12,67 @@ import SwiftUI
 final class Workspace {
     /// What the details pane shows and the map lights.
     enum Selection: Hashable {
+        /// The overview of each module's entry points, drawn at the map's default level.
         case overview
+        /// Every module with the modules it depends on, drawn at the modules level.
         case modules
+        /// One module, by name, drawn at its own level.
         case module(String)
+        /// One source folder, as the module name and the folder name, empty for the module's own directory.
+        /// The map draws the folder's level when the module is drawn as folders, and the module's otherwise.
         case folder(String, String)
+        /// One type by node id, nested or not, whose root's box the map lights, or its own box in the focus.
         case type(String)
     }
 
     /// What the map pane draws for the current level.
     struct Drawing {
+        /// The placed boxes and curves of the level, or of the selected type and its neighbors in the focus.
         var layout = GraphLayout()
         /// The path from the widest level to this one, each step with the level it returns to.
         var crumbs: [(scope: String, label: String)] = []
+        /// The line beside the breadcrumbs that counts the level's boxes and dependencies, or in the focus
+        /// says what uses the type and what it depends on.
         var caption = ""
+        /// The level's boxes with no edge, listed under the map as not connected; empty in the focus.
         var loose: [MapScope.Unit] = []
+        /// The level's least connected boxes past ``GlossMap/Atlas/mapBudget``, listed under the map instead
+        /// of drawn; empty in the focus.
         var overflow: [MapScope.Unit] = []
     }
 
     /// The level id of the selected type's focus, beside the atlas's own levels.
     static let focus = "focus"
 
+    /// The open folder, or `nil` before one is opened; file paths in the interface are relative to it.
     private(set) var root: URL?
+    /// The open folder's name, which titles the window.
     private(set) var name = "gloss"
+    /// What reading the folder produced, or `nil` until the first read finishes.
     private(set) var interface: Interface?
+    /// The interface arranged for reading, which every pane draws from.
     private(set) var atlas: Atlas?
+    /// The map's levels, the default first, as ``GlossMap/Atlas/mapScopes()`` orders them.
     private(set) var scopes: [MapScope] = []
+    /// The levels that draw each root type as itself, keyed by root id, widest first.
     private(set) var levels: [String: [String]] = [:]
+    /// Whether a read is under way, which disables Reload and shows progress before the first one lands.
     private(set) var isLoading = false
+    /// Why the folder could not be read, shown where the panes would be, or `nil` when it could.
     private(set) var problem: String?
+    /// What the details pane shows when nothing is previewed, and what the map lights.
     private(set) var selection = Selection.overview
+    /// The level the map draws: an id from ``scopes``, or ``focus``.
     private(set) var scopeID = ""
+    /// The map for ``scopeID``, laid out once per change rather than per frame.
     private(set) var drawing = Drawing()
     private var focusFrom: String?
 
     /// The narrowest access shown, as ``GlossCore/Contract/rank(_:)``: 3 for public, 1 for internal, 0 for all.
     var minimumRank = Atlas.defaultMinimumRank { didSet { redraw() } }
+    /// The list's search text, which keeps types whose name or a member's name contains it, ignoring case.
     var search = ""
+    /// Whether the list keeps only types with findings, their members' included, from the checkbox under it.
     var findingsOnly = false
     /// Whether Open Quickly is showing over the window.
     var isQuickOpenShown = false

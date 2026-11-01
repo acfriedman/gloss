@@ -99,8 +99,12 @@ struct MapPaneView: View {
 
 /// The map's magnification: smaller, the current scale, which fits the figure again, and larger.
 struct MagnifierView: View {
+    /// The map's scale, 1 for natural size, which the control shows as a percentage and steps by 1.25 times.
     var scale: CGFloat
+    /// Whether the scale is the fitted one rather than the reader's own, which dims the percentage.
     var isFitted: Bool
+    /// Sets the reader's magnification, already held to ``MapPaneView/clamp(_:)``'s range, or `nil` to fit
+    /// the figure to the pane again.
     var zoom: (CGFloat?) -> Void
 
     var body: some View {
@@ -130,8 +134,11 @@ struct MagnifierView: View {
 /// neighbors standing out and the rest dimmed. Everything is drawn at the scale rather than stretched,
 /// so text stays sharp at any magnification.
 struct MapCanvasView: View {
+    /// The placed boxes and curves, in points at natural size.
     var layout: GraphLayout
+    /// The id of the box to light with its edges and neighbors; `nil`, or one not drawn, lights nothing.
     var lit: String?
+    /// The figure's magnification, 1 for its natural size; line weights follow it, held between 0.6 and 1.5.
     var scale: CGFloat
 
     var body: some View {
@@ -204,9 +211,13 @@ struct MapCanvasView: View {
 /// One box on the map: a type, a module, or a folder, selecting it when clicked.
 struct MapBoxView: View {
     @Environment(Workspace.self) private var workspace
+    /// The placed box: its label and detail, its flags and width, and what clicking it selects.
     var box: GraphLayout.Box
+    /// The magnification the box's size, text, and corners are drawn at, 1 for its natural size.
     var scale: CGFloat
+    /// Whether this is the lit box, drawn with a thicker accent border on the soft accent fill.
     var isCurrent: Bool
+    /// Whether another box is lit and this one is not its neighbor, which fades it.
     var isDimmed: Bool
 
     var body: some View {

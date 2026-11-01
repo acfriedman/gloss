@@ -7,6 +7,7 @@ public struct Graph: Sendable, Equatable, Codable {
     public struct Node: Sendable, Equatable, Codable {
         /// `Module/Qualified.Name`, or `Module/` for file scope.
         public var id: String
+        /// The module whose declarations the node gathers.
         public var module: String
         /// The qualified type name, the extended type's name, or empty for file scope.
         public var name: String
@@ -21,7 +22,9 @@ public struct Graph: Sendable, Equatable, Codable {
 
     /// One dependency, with every role it is made of and the declarations that make it.
     public struct Edge: Sendable, Equatable, Codable {
+        /// The id of the node whose declarations mention the target.
         public var from: String
+        /// The id of the mentioned node, never the same as ``Graph/Edge/from``.
         public var to: String
         /// The roles in ``Mention/Role`` order; an edge made only of `body` is implementation.
         public var roles: [Mention.Role]
@@ -29,7 +32,9 @@ public struct Graph: Sendable, Equatable, Codable {
         public var via: [String]
     }
 
+    /// Every node, in order of first appearance across the contracts.
     public var nodes: [Node]
+    /// Every dependency, one per ordered pair of nodes, in order of first mention.
     public var edges: [Edge]
 
     /// The node id for a group key in a module.

@@ -47,6 +47,7 @@ enum Header {
         if syntax.is(ActorDeclSyntax.self) { return "actor" }
         if syntax.is(ProtocolDeclSyntax.self) { return "protocol" }
         if syntax.is(TypeAliasDeclSyntax.self) { return "typealias" }
+        if syntax.is(AssociatedTypeDeclSyntax.self) { return "associatedtype" }
         if syntax.is(MacroDeclSyntax.self) { return "macro" }
         return "decl"
     }

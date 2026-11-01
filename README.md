@@ -55,8 +55,9 @@ swift run GlossApp --root path/to/YourPackage
 ```
 
 The same three panes as the page, in a native window: the list, one type's text, and the map, with
-the access level and zoom in the toolbar (zoom is also ⌘= and ⌘-). ⌘1 hides the list, or shows it
-again. ⌘⇧O is Open Quickly, as in Xcode: type a few letters of a type's name, in order but not
+the access level and zoom in the toolbar (zoom is also ⌘= and ⌘-). The toolbar's arrows, or ⌘← and
+⌘→, go back and forward through the places visited: each selection, level, and focus, with the
+depth chosen there. ⌘1 hides the list, or shows it again. ⌘⇧O is Open Quickly, as in Xcode: type a few letters of a type's name, in order but not
 necessarily together (`dpv` finds `DetailPaneView`), move with the arrow keys, and press Return to
 open it in the map's focus, with only what uses it and what it uses. The list is an outline: each
 module as its source folders hold it, at full depth, with nested types under the type that declares

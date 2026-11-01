@@ -184,6 +184,8 @@ final class Workspace {
         name = url.lastPathComponent
         selection = .overview
         scopeID = ""
+        back.removeAll()
+        forward.removeAll()
         reload()
     }
 
@@ -244,15 +246,17 @@ final class Workspace {
     /// A module or folder draws its own level. A type keeps the current level when that level draws it,
     /// re-centers the focus when focused, and otherwise moves to the widest level that draws it.
     func select(_ target: Selection) {
-        showing?.cancel()
-        hiding?.cancel()
-        preview = nil
-        let rerooted = target != selection
-        selection = target
-        if case .type(let id) = target { reveal(id) }
-        scopeID = scope(for: target)
-        // A new type starts at the default depth; switching modes keeps the chosen one.
-        if rerooted, reachDepth != nil { reachDepth = nil } else { redraw() }
+        navigate {
+            showing?.cancel()
+            hiding?.cancel()
+            preview = nil
+            let rerooted = target != selection
+            selection = target
+            if case .type(let id) = target { reveal(id) }
+            scopeID = scope(for: target)
+            // A new type starts at the default depth; switching modes keeps the chosen one.
+            if rerooted, reachDepth != nil { reachDepth = nil } else { redraw() }
+        }
     }
 
     /// Selects a type and zooms the map to it and its neighbors, from whatever level was showing;
@@ -260,8 +264,10 @@ final class Workspace {
     ///
     /// - Parameter id: A node id.
     func focus(on id: String) {
-        select(.type(id))
-        zoom(to: Self.focus)
+        navigate {
+            select(.type(id))
+            zoom(to: Self.focus)
+        }
     }
 
     /// Selects what a box on the map stands for.
@@ -281,6 +287,74 @@ final class Workspace {
         case .module(let module): .module(module)
         case .folder(let module, let folder): .folder(module, folder)
         }
+    }
+
+    // MARK: History
+
+    /// A place the reader has been: what was selected, the level the map drew, and the depth chosen there.
+    private struct Place: Equatable {
+        var selection: Selection
+        var scopeID: String
+        var focusFrom: String?
+        var reachDepth: Int?
+    }
+
+    /// Where the reader is now.
+    private var here: Place {
+        Place(selection: selection, scopeID: scopeID, focusFrom: focusFrom, reachDepth: reachDepth)
+    }
+
+    /// The places Back returns to, the most recent last.
+    private var back: [Place] = []
+    /// The places Forward returns to after going back, the nearest last.
+    private var forward: [Place] = []
+    /// How many navigations are under way, so one made of others records a single step.
+    private var navigating = 0
+
+    /// Whether there is a place to go back to.
+    var canGoBack: Bool { !back.isEmpty }
+    /// Whether there is a place to go forward to.
+    var canGoForward: Bool { !forward.isEmpty }
+
+    /// Returns to the place before the last navigation.
+    func goBack() {
+        guard let place = back.popLast() else { return }
+        forward.append(here)
+        go(to: place)
+    }
+
+    /// Returns to the place the last Back left.
+    func goForward() {
+        guard let place = forward.popLast() else { return }
+        back.append(here)
+        go(to: place)
+    }
+
+    /// Runs one navigation and, once it lands somewhere new, records where it left as the place to go
+    /// back to; going somewhere new forgets the places ahead.
+    ///
+    /// - Parameter change: The navigation, which may itself be made of others.
+    private func navigate(_ change: () -> Void) {
+        let before = here
+        navigating += 1
+        change()
+        navigating -= 1
+        guard navigating == 0, here != before else { return }
+        back.append(before)
+        forward.removeAll()
+    }
+
+    private func go(to place: Place) {
+        showing?.cancel()
+        hiding?.cancel()
+        preview = nil
+        selection = place.selection
+        if case .type(let id) = place.selection { reveal(id) }
+        scopeID = place.scopeID
+        focusFrom = place.focusFrom
+        if reachDepth != place.reachDepth { reachDepth = place.reachDepth }
+        // A place read before a reload may name what is gone; it falls back as a reload does.
+        restore()
     }
 
     // MARK: Previewing
@@ -339,15 +413,17 @@ final class Workspace {
     /// - Parameter scope: A level id from ``Drawing/crumbs``.
     func step(to scope: String) {
         guard let level = scopes.first(where: { $0.id == scope }) else { return }
-        if scopeID == Self.focus, scope == focusFrom {
-            zoom(to: scope)
-            return
-        }
-        switch level.kind {
-        case .allTypes: select(.overview)
-        case .modules: select(scopes.first?.id == level.id ? .overview : .modules)
-        case .module(let module): select(.module(module))
-        case .folder(let module, let folder): select(.folder(module, folder))
+        navigate {
+            if scopeID == Self.focus, scope == focusFrom {
+                zoom(to: scope)
+                return
+            }
+            switch level.kind {
+            case .allTypes: select(.overview)
+            case .modules: select(scopes.first?.id == level.id ? .overview : .modules)
+            case .module(let module): select(.module(module))
+            case .folder(let module, let folder): select(.folder(module, folder))
+            }
         }
     }
 
@@ -412,9 +488,11 @@ final class Workspace {
     /// - Parameter target: A level id, or ``focus``; `nil` does nothing.
     func zoom(to target: String?) {
         guard let target else { return }
-        if target == Self.focus, scopeID != Self.focus { focusFrom = scopeID }
-        scopeID = target
-        redraw()
+        navigate {
+            if target == Self.focus, scopeID != Self.focus { focusFrom = scopeID }
+            scopeID = target
+            redraw()
+        }
     }
 
     /// The box the map lights: a hovered chip's, or else what the details pane shows, as the current

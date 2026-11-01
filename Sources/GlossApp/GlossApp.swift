@@ -47,6 +47,28 @@ struct GlossApp: App {
                     .disabled(workspace.zoomOutTarget == nil)
                 Divider()
             }
+            CommandMenu("Navigate") {
+                Button("Back") { travel(workspace.goBack, orMoveBy: #selector(NSResponder.moveToBeginningOfLine(_:))) }
+                    .keyboardShortcut(.leftArrow)
+                    .disabled(!workspace.canGoBack)
+                Button("Forward") { travel(workspace.goForward, orMoveBy: #selector(NSResponder.moveToEndOfLine(_:))) }
+                    .keyboardShortcut(.rightArrow)
+                    .disabled(!workspace.canGoForward)
+            }
+        }
+    }
+
+    /// Goes back or forward, unless a text field is being edited, where the arrow keeps moving the
+    /// cursor to the start or end of the line as it would without the menu.
+    ///
+    /// - Parameters:
+    ///   - step: Going back or forward.
+    ///   - selector: The cursor move the field makes instead.
+    private func travel(_ step: () -> Void, orMoveBy selector: Selector) {
+        if let editor = NSApp.keyWindow?.firstResponder as? NSTextView, editor.isEditable {
+            NSApp.sendAction(selector, to: editor, from: nil)
+        } else {
+            step()
         }
     }
 }

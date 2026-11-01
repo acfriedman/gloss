@@ -42,6 +42,16 @@ struct ContentView: View {
         .navigationTitle(workspace.name)
         .navigationSubtitle(workspace.subtitle)
         .toolbar {
+            ToolbarItem(placement: .navigation) {
+                ControlGroup {
+                    Button { workspace.goBack() } label: { Label("Back", systemImage: "chevron.left") }
+                        .disabled(!workspace.canGoBack)
+                        .help("Go back to the previous place (⌘←)")
+                    Button { workspace.goForward() } label: { Label("Forward", systemImage: "chevron.right") }
+                        .disabled(!workspace.canGoForward)
+                        .help("Go forward again (⌘→)")
+                }
+            }
             ToolbarItemGroup(placement: .primaryAction) {
                 Picker("Access", selection: $workspace.minimumRank) {
                     Text("Public").tag(3)

@@ -408,6 +408,20 @@ final class InterfaceTests: XCTestCase {
         XCTAssertLessThan(steps.lanes[0].y + steps.lanes[0].height, steps.lanes[1].y, "The bands stack, not sit side by side.")
     }
 
+    func testLanesGoAroundTheRootHeaviestNearest() throws {
+        func item(_ id: String, _ group: String) -> GraphLayout.Item {
+            GraphLayout.Item(unit: .type(id), label: id, detail: "struct", group: group)
+        }
+        let items = [item("Page", "P"), item("Data", "P"), item("Core1", "C"), item("Core2", "C"), item("Map1", "M")]
+        let links = ["Data", "Core1", "Core2", "Map1"].map { GraphLayout.Link(from: "Page", to: $0, dashed: false, title: "") }
+        let layout = GraphLayout.layered(items, links, emphasis: "P", splitAt: "Page")
+        XCTAssertEqual(layout.lanes.sorted { $0.x < $1.x }.map(\.name), ["M", "P", "C"],
+                       "The root's module in the middle, the module it reaches most beside it, the next on the other side.")
+        let root = try XCTUnwrap(layout.boxes.first { $0.item.label == "Page" })
+        let lane = try XCTUnwrap(layout.lanes.first { $0.name == "P" })
+        XCTAssertEqual(root.x + root.width / 2, lane.x + lane.width / 2, accuracy: 0.5, "The root sits centered in its lane.")
+    }
+
     func testReachStartsAtANestedTypeItself() throws {
         let atlas = Atlas(Interface.build(sources: [("Sources/Map/Layout.swift", """
         struct Layout { var boxes: [Box]; struct Box { var item: Item }; struct Item { var unit: Unit } }

@@ -74,16 +74,19 @@ type's module a little warmer, split into bands of rows where that saves width: 
 band of its own, and neighboring bands merge when one's modules are all among the other's and the
 merged band is no wider than the widest. A module that only shares rows with itself keeps one
 container, and one on both sides of the type gets a container on each only when that keeps the
-figure narrower. Each map opens centered and shrunk to fit the pane, never past its natural size; a
-pinch or the magnifier in its corner zooms, clicking the percentage fits it again, and a new level
-or focus fits again. Hovering a box on the map or a row in the list previews it in the details pane
-over the selection, and lights it on the map; moving into the pane keeps the preview to read, and
-moving away returns to the selection. Hovering a chip in the pane lights its box. Declarations are
-colored as Xcode's default themes color them, from swift-syntax's own classification (`Highlight` in
-`GlossMap`), with the types the scanned sources declare told apart from the types they only use. It
-reads the folder's `Sources` directory when it has one, ⌘R reads it again, and the next launch
-reopens the last folder. A member's file and line open in Xcode. The folder takes a flag because
-AppKit reads a bare path argument as a document to open and then opens no window.
+figure narrower. The focused type anchors one vertical axis through every band: its module's lane is
+in the middle of its band, and the other lanes go around it in organ-pipe order, the ones with the
+most edges to it nearest, each on the side that keeps the figure narrowest. Each map opens centered
+and shrunk to fit the pane, never past its natural size; a pinch or the magnifier in its corner
+zooms, clicking the percentage fits it again, and a new level or focus fits again. Hovering a box on
+the map or a row in the list previews it in the details pane over the selection, and lights it on
+the map; moving into the pane keeps the preview to read, and moving away returns to the selection.
+Hovering a chip in the pane lights its box. Declarations are colored as Xcode's default themes color
+them, from swift-syntax's own classification (`Highlight` in `GlossMap`), with the types the scanned
+sources declare told apart from the types they only use. It reads the folder's `Sources` directory
+when it has one, ⌘R reads it again, and the next launch reopens the last folder. A member's file and
+line open in Xcode. The folder takes a flag because AppKit reads a bare path argument as a document
+to open and then opens no window.
 
 For reviews from a script, `GLOSS_SNAPSHOT=out.png` writes the window to a PNG once the sources are
 read and quits; `GLOSS_SELECT` selects a node id (or `module:Name`) first, `GLOSS_ZOOM` zooms in

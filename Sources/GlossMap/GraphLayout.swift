@@ -295,8 +295,8 @@ public struct GraphLayout: Sendable, Equatable {
             // nothing; otherwise the figure is one band.
             let split = splitAt.flatMap { position[$0] } != nil
             let bands = split ? (0..<layerCount).map { $0..<$0 + 1 } : [0..<layerCount]
-            return lanes(items, slots: slots, bands: bands, merging: split, chains: chains, edges: edges.map(\.link),
-                         reversed: flow.map(\.reversed), groupOf: groupOf, emphasis: emphasis)
+            return lanes(items, slots: slots, bands: bands, merging: split, anchor: split ? splitAt.flatMap { position[$0] } : nil,
+                         chains: chains, edges: edges.map(\.link), reversed: flow.map(\.reversed), groupOf: groupOf, emphasis: emphasis)
         }
 
         // Layers are rows, top to bottom: a deep graph grows down the page, which scrolls, not sideways.
@@ -364,14 +364,17 @@ public struct GraphLayout: Sendable, Equatable {
     ///   - slots: Each layer's slots, nodes and edge placeholders, in swept order.
     ///   - bands: Consecutive runs of layers that each get lanes of their own, top to bottom.
     ///   - merging: `true` to merge neighboring bands where splitting them buys no width.
+    ///   - anchor: The index of the item the figure grows from, which the lanes center on; `nil` orders
+    ///     lanes by the sweeps and centers each band on its own.
     ///   - chains: Each edge's slots from its upper end to its lower end.
     ///   - edges: Each edge's link, at the same index as its chain.
     ///   - reversed: Whether each edge is drawn against the flow, at the same index.
     ///   - groupOf: The lane each slot belongs in.
     ///   - emphasis: The group whose lanes are drawn a little warmer.
     /// - Returns: The placed figure with its lanes.
-    private static func lanes(_ items: [Item], slots: [[Slot]], bands: [Range<Int>], merging: Bool, chains: [[Slot]],
-                              edges: [Link], reversed: [Bool], groupOf: (Slot) -> String, emphasis: String?) -> GraphLayout {
+    private static func lanes(_ items: [Item], slots: [[Slot]], bands: [Range<Int>], merging: Bool, anchor: Int?,
+                              chains: [[Slot]], edges: [Link], reversed: [Bool], groupOf: (Slot) -> String,
+                              emphasis: String?) -> GraphLayout {
         let dummyWidth = 8.0
         let slotGap = 18.0
         let layerGap = 54.0
@@ -395,26 +398,47 @@ public struct GraphLayout: Sendable, Equatable {
             var laneWidth: [String: Double] = [:]
             var laneX: [String: Double] = [:]
             var width = 0.0
+            /// The center of the band's middle lane, from the band's left edge, which a figure grown from
+            /// an anchor lines up across bands.
+            var axis = 0.0
+            /// The lane the band's lanes are arranged around: the anchor's, or the one pulled hardest.
+            var center: String?
         }
-        func plan(_ range: Range<Int>) -> Band {
+
+        // How strongly each group connects to the anchor: the edges between the anchor and its boxes.
+        var pull: [String: Int] = [:]
+        if let anchor {
+            for chain in chains {
+                guard case .node(let upper)? = chain.first, case .node(let lower)? = chain.last else { continue }
+                if upper == anchor, let group = items[lower].group { pull[group, default: 0] += 1 }
+                if lower == anchor, let group = items[upper].group { pull[group, default: 0] += 1 }
+            }
+        }
+        let anchorGroup = anchor.flatMap { items[$0].group }
+        /// Plans one band: its lanes' rows and widths, then their order and positions.
+        ///
+        /// - Parameters:
+        ///   - range: The layers the band holds.
+        ///   - reach: How far the bands already placed reach left and right of the axis; with an anchor,
+        ///     each lane goes on the side that keeps the whole figure narrowest.
+        /// - Returns: The band's plan.
+        func plan(_ range: Range<Int>, around reach: (left: Double, right: Double) = (0, 0)) -> Band {
             var band = Band()
-            // Lanes go in the order the sweeps placed their slots on average, which keeps crossings low.
+            // The sweeps' average placement orders lanes when nothing anchors them, and breaks ties when
+            // something does.
             var positions: [String: [Double]] = [:]
             for layer in slots[range] {
                 for (offset, slot) in layer.enumerated() {
                     positions[groupOf(slot), default: []].append((Double(offset) + 0.5) / Double(layer.count))
                 }
             }
-            band.order = positions.map { (name: $0.key, mean: $0.value.reduce(0, +) / Double($0.value.count)) }
+            let swept = positions.map { (name: $0.key, mean: $0.value.reduce(0, +) / Double($0.value.count)) }
                 .sorted { ($0.mean, $0.name) < ($1.mean, $1.name) }.map(\.name)
-            let rank = Dictionary(uniqueKeysWithValues: band.order.enumerated().map { ($0.element, $0.offset) })
+            let sweptRank = Dictionary(uniqueKeysWithValues: swept.enumerated().map { ($0.element, $0.offset) })
             // Each layer, each lane: its slots in swept order, wrapped onto rows no wider than the lane limit.
             for layer in slots[range] {
                 var byLane: [String: [[Slot]]] = [:]
-                let ordered = layer.enumerated().sorted {
-                    (rank[groupOf($0.element)] ?? 0, $0.offset) < (rank[groupOf($1.element)] ?? 0, $1.offset)
-                }.map(\.element)
-                for slot in ordered {
+                for slot in layer {
                     let lane = groupOf(slot)
                     var wrapped = byLane[lane] ?? [[]]
                     let current = wrapped[wrapped.count - 1]
@@ -427,19 +451,53 @@ public struct GraphLayout: Sendable, Equatable {
             for layer in band.rows {
                 for (lane, wrapped) in layer { band.laneWidth[lane] = max(band.laneWidth[lane] ?? 0, wrapped.map(rowWidth).max() ?? 0) }
             }
+
+            band.order = swept
+            if anchor != nil {
+                // Organ-pipe around the anchor: its group in the middle, then the rest by their pull toward
+                // it, heaviest nearest, each on the side that keeps the figure narrowest, which keeps edges
+                // to the anchor short and the figure balanced.
+                var rest = swept.sorted { (-(pull[$0] ?? 0), sweptRank[$0] ?? 0) < (-(pull[$1] ?? 0), sweptRank[$1] ?? 0) }
+                let center = anchorGroup.flatMap { group in rest.firstIndex(of: group).map { rest.remove(at: $0) } }
+                    ?? (rest.isEmpty ? nil : rest.removeFirst())
+                band.center = center
+                let full = { (lane: String) in (band.laneWidth[lane] ?? 0) + padding * 2 }
+                var left: [String] = []
+                var right: [String] = []
+                var leftSpan = center.map(full).map { $0 / 2 } ?? 0
+                var rightSpan = leftSpan
+                for lane in rest {
+                    let width = full(lane) + laneGap
+                    let ifLeft = max(reach.left, leftSpan + width) + max(reach.right, rightSpan)
+                    let ifRight = max(reach.left, leftSpan) + max(reach.right, rightSpan + width)
+                    if ifLeft < ifRight || (ifLeft == ifRight && leftSpan < rightSpan) {
+                        left.append(lane)
+                        leftSpan += width
+                    } else {
+                        right.append(lane)
+                        rightSpan += width
+                    }
+                }
+                band.order = left.reversed() + (center.map { [$0] } ?? []) + right
+            }
             var x = 0.0
             for lane in band.order {
                 band.laneX[lane] = x + padding
                 x += padding + (band.laneWidth[lane] ?? 0) + padding + laneGap
             }
             band.width = max(x - laneGap, 0)
+            if let middle = band.center {
+                band.axis = (band.laneX[middle] ?? 0) + (band.laneWidth[middle] ?? 0) / 2
+            } else {
+                band.axis = band.width / 2
+            }
             return band
         }
 
         // Merging two neighboring bands is free when it adds no lane, one's groups all being among the
         // other's, and the merged band is no wider than the widest; the narrowest free merge goes first.
         var ranges = bands
-        var planned = ranges.map(plan)
+        var planned = ranges.map { plan($0) }
         let widest = planned.map(\.width).max() ?? 0
         while merging {
             var best: (index: Int, band: Band)?
@@ -458,11 +516,28 @@ public struct GraphLayout: Sendable, Equatable {
             planned.remove(at: best.index + 1)
         }
 
+        // Grown from an anchor, the bands are planned again outward from the anchor's own, each lane on
+        // the side that keeps the figure narrowest given the bands already placed.
+        if let anchor, let layer = slots.firstIndex(where: { $0.contains(.node(anchor)) }),
+           let home = ranges.firstIndex(where: { $0.contains(layer) }) {
+            var reach = (left: 0.0, right: 0.0)
+            let outward = [home] + (1..<max(ranges.count, 1)).flatMap { [home - $0, home + $0] }.filter(ranges.indices.contains)
+            for index in outward {
+                planned[index] = plan(ranges[index], around: reach)
+                reach.left = max(reach.left, planned[index].axis)
+                reach.right = max(reach.right, planned[index].width - planned[index].axis)
+            }
+        }
+
+        // Grown from an anchor, every band hangs on one vertical axis through it.
+        let leftOfAxis = planned.map(\.axis).max() ?? 0
+        let rightOfAxis = planned.map { $0.width - $0.axis }.max() ?? 0
+
         var layout = GraphLayout()
         var anchors: [Slot: Anchor] = [:]
         var top = margin + labelHeight + padding
         for (index, band) in planned.enumerated() {
-            let offset = margin + (widest - band.width) / 2
+            let offset = margin + (anchor != nil ? leftOfAxis - band.axis : (widest - band.width) / 2)
             let first = layout.boxes.count
             for layer in band.rows {
                 let height = layer.values.map(\.count).max() ?? 1
@@ -495,7 +570,7 @@ public struct GraphLayout: Sendable, Equatable {
         for (index, chain) in chains.enumerated() {
             layout.curves.append(Curve(link: edges[index], points: chain.compactMap { anchors[$0] }, reversed: reversed[index]))
         }
-        layout.width = widest + margin * 2
+        layout.width = (anchor != nil ? leftOfAxis + rightOfAxis : widest) + margin * 2
         layout.height = top - layerGap + padding + margin
         return layout
     }

@@ -37,12 +37,35 @@ final class Workspace {
         /// The level's boxes with no edge, listed under the map as not connected; empty in the focus.
         var loose: [MapScope.Unit] = []
         /// The level's least connected boxes past ``GlossMap/Atlas/mapBudget``, listed under the map instead
-        /// of drawn; empty in the focus.
+        /// of drawn; in a reach, the first step's types left out; empty in the neighbors focus.
         var overflow: [MapScope.Unit] = []
+        /// In a reach, the steps drawn and the steps there are in all, for the depth stepper; `nil` otherwise.
+        var depth: (drawn: Int, total: Int)?
+    }
+
+    /// What the focus draws around the selected type.
+    enum FocusMode: Hashable, CaseIterable {
+        /// What uses the type, above, and what it depends on, below: one step each way.
+        case neighbors
+        /// Everything the type depends on, step by step, below it.
+        case below
+        /// Everything that uses the type, step by step, above it.
+        case above
     }
 
     /// The level id of the selected type's focus, beside the atlas's own levels.
     static let focus = "focus"
+
+    /// What the focus draws: the type's neighbors, or all it reaches one way.
+    var focusMode = FocusMode.neighbors {
+        didSet {
+            reachDepth = nil
+            redraw()
+        }
+    }
+    /// The steps a reach draws, chosen with the depth stepper; `nil` draws as many whole steps as fit
+    /// ``GlossMap/Atlas/mapBudget``.
+    var reachDepth: Int? { didSet { redraw() } }
 
     /// The open folder, or `nil` before one is opened; file paths in the interface are relative to it.
     private(set) var root: URL?
@@ -218,10 +241,11 @@ final class Workspace {
         showing?.cancel()
         hiding?.cancel()
         preview = nil
+        let rerooted = target != selection
         selection = target
         if case .type(let id) = target { reveal(id) }
         scopeID = scope(for: target)
-        redraw()
+        if rerooted, reachDepth != nil { reachDepth = nil } else { redraw() }
     }
 
     /// Selects a type and zooms the map to it and its neighbors, from whatever level was showing;
@@ -394,13 +418,37 @@ final class Workspace {
         case .overview, .modules: return nil
         case .module(let module): return MapScope.Unit.module(module).id
         case .folder(let module, let folder): return MapScope.Unit.folder(module, folder).id
-        case .type(let id): return scopeID == Self.focus ? id : atlas?.byID[id]?.root
+        case .type(let id):
+            guard scopeID == Self.focus else { return atlas?.byID[id]?.root }
+            if focusMode == .neighbors { return id }
+            // A reach is about the whole tree, so the root is marked, not lit; a previewed box still lights.
+            return preview == nil ? nil : atlas?.byID[id]?.root
         }
+    }
+
+    /// The box a reach grows from, drawn as the current one without dimming the rest; `nil` outside a reach.
+    var anchorID: String? {
+        guard scopeID == Self.focus, focusMode != .neighbors, case .type(let id) = selection else { return nil }
+        return atlas?.byID[id]?.root
     }
 
     private func redraw() {
         guard let atlas else {
             drawing = Drawing()
+            return
+        }
+        if scopeID == Self.focus, focusMode != .neighbors, case .type(let id) = selection, let node = atlas.byID[id],
+           let reach = atlas.reach(from: id, toward: focusMode == .below ? .dependencies : .users,
+                                   depth: reachDepth, minimumRank: minimumRank) {
+            let from = scopes.first { $0.id == focusFrom } ?? scopes.first
+            let root = atlas.byID[node.root].map(atlas.label) ?? atlas.label(node)
+            let what = focusMode == .below ? "all it depends on" : "all that uses it"
+            let cut = reach.drawn < reach.total ? " · dashed boxes continue" : ""
+            drawing = Drawing(layout: reach.layout,
+                              crumbs: [(from?.id ?? "", from?.label ?? "Map"), (Self.focus, "\(root) and \(what)")],
+                              caption: "Depth \(reach.depth) of \(reach.totalDepth) · \(reach.drawn) of \(reach.total) types" + cut,
+                              overflow: reach.overflow.map { .type($0) },
+                              depth: (reach.depth, reach.totalDepth))
             return
         }
         if scopeID == Self.focus, case .type(let id) = selection, let node = atlas.byID[id],

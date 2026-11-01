@@ -305,6 +305,40 @@ final class InterfaceTests: XCTestCase {
         XCTAssertEqual(Highlight.runs("public var rendered: String { get }").first { $0.kind == .declaration }?.text, "rendered")
     }
 
+    func testReachDrawsWholeStepsThatFitAndMarksTheCut() throws {
+        let atlas = Atlas(Interface.build(sources: [("Sources/Shop/Shop.swift", """
+        struct App { var store: Store; var view: Screen }
+        struct Store { var cart: Cart }
+        struct Screen { var cart: Cart }
+        struct Cart { var lines: [Line] }
+        struct Line { var price: Price }
+        struct Price {}
+        """)]))
+        func boxes(_ reach: Reach) -> [String] { reach.layout.boxes.map(\.item.label).sorted() }
+        let all = try XCTUnwrap(atlas.reach(from: "Shop/App", toward: .dependencies, minimumRank: 0))
+        XCTAssertEqual([all.depth, all.totalDepth, all.drawn, all.total], [4, 4, 5, 5])
+        XCTAssertEqual(all.layout.boxes.first { $0.item.label == "App" }?.y, 6, "The root is drawn at the top.")
+        let tight = try XCTUnwrap(atlas.reach(from: "Shop/App", toward: .dependencies, minimumRank: 0, budget: 4))
+        XCTAssertEqual(tight.depth, 2, "Whole steps only: App, Store and Screen, then Cart, is four boxes.")
+        XCTAssertEqual(boxes(tight), ["App", "Cart", "Screen", "Store"])
+        let cart = try XCTUnwrap(tight.layout.boxes.first { $0.item.label == "Cart" })
+        XCTAssertTrue(cart.item.flags.contains(.boundary))
+        XCTAssertEqual(cart.item.detail, "struct · +1 below", "A box at the cut counts its next step.")
+        let users = try XCTUnwrap(atlas.reach(from: "Shop/Line", toward: .users, depth: 1, minimumRank: 0))
+        XCTAssertEqual(boxes(users), ["Cart", "Line"])
+        XCTAssertEqual(users.layout.boxes.first { $0.item.label == "Cart" }?.item.detail, "struct · +2 above")
+    }
+
+    func testReachKeepsTheMostConnectedWhenOneStepIsOverTheBudget() throws {
+        let fields = (0..<8).map { "var f\($0): T\($0)" }.joined(separator: "; ")
+        let types = (0..<8).map { "struct T\($0) {}" }.joined(separator: "\n")
+        let atlas = Atlas(Interface.build(sources: [("Sources/Hub/Hub.swift", "struct Hub { \(fields) }\nstruct Other { var t: T7 }\n\(types)")]))
+        let reach = try XCTUnwrap(atlas.reach(from: "Hub/Hub", toward: .dependencies, minimumRank: 0, budget: 5))
+        XCTAssertEqual(reach.drawn, 4)
+        XCTAssertEqual(reach.overflow.count, 4)
+        XCTAssertTrue(reach.layout.boxes.contains { $0.item.label == "T7" }, "The most connected type is kept.")
+    }
+
     func testNotesKeepFencedCodeAsOneBlock() throws {
         let source = """
         /// Parses a name.

@@ -17,6 +17,7 @@ struct MapPaneView: View {
     static let inset: CGFloat = 24
 
     var body: some View {
+        @Bindable var workspace = workspace
         let drawing = workspace.drawing
         VStack(spacing: 0) {
             HStack(spacing: 6) {
@@ -30,15 +31,42 @@ struct MapPaneView: View {
                     }
                 }
                 Spacer()
-                Text(drawing.caption).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                if workspace.scopeID == Workspace.focus {
+                    if let depth = drawing.depth, depth.total > 1 {
+                        Stepper {
+                            Text("Depth \(depth.drawn)").font(.callout).monospacedDigit()
+                        } onIncrement: {
+                            workspace.reachDepth = min(depth.drawn + 1, depth.total)
+                        } onDecrement: {
+                            workspace.reachDepth = max(depth.drawn - 1, 1)
+                        }
+                        .help("Draw more or fewer steps from the type")
+                    }
+                    Picker("Focus", selection: $workspace.focusMode) {
+                        Text("Neighbors").tag(Workspace.FocusMode.neighbors)
+                        Text("All below").tag(Workspace.FocusMode.below)
+                        Text("All above").tag(Workspace.FocusMode.above)
+                    }
+                    .pickerStyle(.segmented)
+                    .labelsHidden()
+                    .fixedSize()
+                    .help("Neighbors: one step each way. All below: everything it depends on. All above: everything that uses it.")
+                }
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 10)
+            Text(drawing.caption)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 16)
+                .padding(.bottom, 8)
             Divider()
             GeometryReader { proxy in
                 let scale = zoom ?? Self.fit(drawing.layout, in: proxy.size)
                 ScrollView([.horizontal, .vertical]) {
-                    MapCanvasView(layout: drawing.layout, lit: workspace.litID, scale: scale)
+                    MapCanvasView(layout: drawing.layout, lit: workspace.litID, anchor: workspace.anchorID, scale: scale)
                         .padding(Self.inset)
                         .frame(minWidth: proxy.size.width, minHeight: proxy.size.height)
                 }
@@ -138,6 +166,8 @@ struct MapCanvasView: View {
     var layout: GraphLayout
     /// The id of the box to light with its edges and neighbors; `nil`, or one not drawn, lights nothing.
     var lit: String?
+    /// The box drawn as the current one whether or not anything is lit: a reach's root.
+    var anchor: String?
     /// The figure's magnification, 1 for its natural size; line weights follow it, held between 0.6 and 1.5.
     var scale: CGFloat
 
@@ -158,7 +188,7 @@ struct MapCanvasView: View {
             }
             .frame(width: layout.width * scale, height: layout.height * scale)
             ForEach(Array(layout.boxes.enumerated()), id: \.offset) { _, box in
-                MapBoxView(box: box, scale: scale, isCurrent: isLighting && box.item.id == lit,
+                MapBoxView(box: box, scale: scale, isCurrent: (isLighting && box.item.id == lit) || box.item.id == anchor,
                        isDimmed: isLighting && !near.contains(box.item.id) && box.item.id != lit)
                     .offset(x: box.x * scale, y: box.y * scale)
             }

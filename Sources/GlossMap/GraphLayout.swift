@@ -186,8 +186,9 @@ public struct GraphLayout: Sendable, Equatable {
     /// lanes in the order the sweeps placed their boxes on average, and an edge's placeholders run down
     /// its source's lane. Split at an item, the figure is bands of rows stacked and centered, each laid
     /// out in lanes for only the groups it holds, so a group on both sides of the item can get a
-    /// container on each. Splitting only stays where it saves width: two neighboring bands merge when
-    /// one's groups are all among the other's and the merged band is no wider than the widest band.
+    /// container on each. Splitting only stays where it saves width: two neighboring bands merge when a
+    /// group continues across the rows where they meet and the merged band is no wider than the widest
+    /// band, and within a band, lanes whose rows never meet can stack in one column.
     public static func layered(_ items: [Item], _ links: [Link], emphasis: String? = nil,
                                splitAt: String? = nil) -> GraphLayout {
         let count = items.count
@@ -356,16 +357,18 @@ public struct GraphLayout: Sendable, Equatable {
         return layout
     }
 
-    /// Places ordered layers in group lanes, band by band: in each band, each group a column as wide as
-    /// its widest row there, its boxes kept inside it on every row, and a container drawn behind them.
+    /// Places ordered layers in group lanes, band by band: in each band, each group a lane as wide as its
+    /// widest row there, its boxes kept inside it on every row, and a container drawn behind them.
     ///
     /// - Parameters:
     ///   - items: The nodes.
     ///   - slots: Each layer's slots, nodes and edge placeholders, in swept order.
     ///   - bands: Consecutive runs of layers that each get lanes of their own, top to bottom.
-    ///   - merging: `true` to merge neighboring bands where splitting them buys no width.
-    ///   - anchor: The index of the item the figure grows from, which the lanes center on; `nil` orders
-    ///     lanes by the sweeps and centers each band on its own.
+    ///   - merging: `true` to merge neighboring bands where that joins a group's containers without
+    ///     widening the figure.
+    ///   - anchor: The index of the item the figure grows from, which the lanes center on, lanes whose
+    ///     rows never meet stacking in one column where that is no wider; `nil` orders lanes by the sweeps,
+    ///     one column each, and centers each band on its own.
     ///   - chains: Each edge's slots from its upper end to its lower end.
     ///   - edges: Each edge's link, at the same index as its chain.
     ///   - reversed: Whether each edge is drawn against the flow, at the same index.
@@ -398,11 +401,9 @@ public struct GraphLayout: Sendable, Equatable {
             var laneWidth: [String: Double] = [:]
             var laneX: [String: Double] = [:]
             var width = 0.0
-            /// The center of the band's middle lane, from the band's left edge, which a figure grown from
+            /// The center of the band's middle column, from the band's left edge, which a figure grown from
             /// an anchor lines up across bands.
             var axis = 0.0
-            /// The lane the band's lanes are arranged around: the anchor's, or the one pulled hardest.
-            var center: String?
         }
 
         // How strongly each group connects to the anchor: the edges between the anchor and its boxes.
@@ -452,62 +453,103 @@ public struct GraphLayout: Sendable, Equatable {
                 for (lane, wrapped) in layer { band.laneWidth[lane] = max(band.laneWidth[lane] ?? 0, wrapped.map(rowWidth).max() ?? 0) }
             }
 
-            band.order = swept
+            let full = { (lane: String) in (band.laneWidth[lane] ?? 0) + padding * 2 }
+            // Each lane's rows in the band, first to last; lanes whose rows never meet can stack in one column.
+            var span: [String: ClosedRange<Int>] = [:]
+            for (row, layer) in band.rows.enumerated() {
+                for lane in layer.keys { span[lane] = span[lane].map { min($0.lowerBound, row)...max($0.upperBound, row) } ?? row...row }
+            }
+            func meets(_ lane: String, _ column: [String]) -> Bool {
+                column.contains { other in span[other].map { span[lane]?.overlaps($0) ?? true } ?? true }
+            }
+
+            // Columns left to right, each holding lanes top to bottom.
+            var columns = swept.map { [$0] }
+            var middle: Int?
             if anchor != nil {
                 // Organ-pipe around the anchor: its group in the middle, then the rest by their pull toward
                 // it, heaviest nearest, each on the side that keeps the figure narrowest, which keeps edges
-                // to the anchor short and the figure balanced.
+                // to the anchor short and the figure balanced. A lane stacks in a column whose lanes it never
+                // meets when that costs no more than a column of its own.
                 var rest = swept.sorted { (-(pull[$0] ?? 0), sweptRank[$0] ?? 0) < (-(pull[$1] ?? 0), sweptRank[$1] ?? 0) }
                 let center = anchorGroup.flatMap { group in rest.firstIndex(of: group).map { rest.remove(at: $0) } }
                     ?? (rest.isEmpty ? nil : rest.removeFirst())
-                band.center = center
-                let full = { (lane: String) in (band.laneWidth[lane] ?? 0) + padding * 2 }
-                var left: [String] = []
-                var right: [String] = []
-                var leftSpan = center.map(full).map { $0 / 2 } ?? 0
-                var rightSpan = leftSpan
-                for lane in rest {
-                    let width = full(lane) + laneGap
-                    let ifLeft = max(reach.left, leftSpan + width) + max(reach.right, rightSpan)
-                    let ifRight = max(reach.left, leftSpan) + max(reach.right, rightSpan + width)
-                    if ifLeft < ifRight || (ifLeft == ifRight && leftSpan < rightSpan) {
-                        left.append(lane)
-                        leftSpan += width
-                    } else {
-                        right.append(lane)
-                        rightSpan += width
-                    }
+                /// A column being filled: its lanes and the width of the widest.
+                struct Column {
+                    var lanes: [String]
+                    var width: Double
                 }
-                band.order = left.reversed() + (center.map { [$0] } ?? []) + right
+                var mid = Column(lanes: center.map { [$0] } ?? [], width: center.map(full) ?? 0)
+                var left: [Column] = []
+                var right: [Column] = []
+                for lane in rest {
+                    let width = full(lane)
+                    let leftSpan = mid.width / 2 + left.reduce(0) { $0 + $1.width + laneGap }
+                    let rightSpan = mid.width / 2 + right.reduce(0) { $0 + $1.width + laneGap }
+                    func cost(_ addLeft: Double, _ addRight: Double) -> Double {
+                        max(reach.left, leftSpan + addLeft) + max(reach.right, rightSpan + addRight)
+                    }
+                    // Candidates in order of preference, so the first of the cheapest wins: the middle, the
+                    // columns nearest it, then a column of its own.
+                    var choices: [(cost: Double, place: () -> Void)] = []
+                    if !meets(lane, mid.lanes) {
+                        let grow = max(width - mid.width, 0)
+                        choices.append((cost(grow / 2, grow / 2), { mid.lanes.append(lane); mid.width += grow }))
+                    }
+                    for index in 0..<max(left.count, right.count) {
+                        if index < left.count, !meets(lane, left[index].lanes) {
+                            let grow = max(width - left[index].width, 0)
+                            choices.append((cost(grow, 0), { left[index].lanes.append(lane); left[index].width += grow }))
+                        }
+                        if index < right.count, !meets(lane, right[index].lanes) {
+                            let grow = max(width - right[index].width, 0)
+                            choices.append((cost(0, grow), { right[index].lanes.append(lane); right[index].width += grow }))
+                        }
+                    }
+                    let ifLeft = cost(width + laneGap, 0)
+                    let ifRight = cost(0, width + laneGap)
+                    let newLeft: (cost: Double, place: () -> Void) = (ifLeft, { left.append(Column(lanes: [lane], width: width)) })
+                    let newRight: (cost: Double, place: () -> Void) = (ifRight, { right.append(Column(lanes: [lane], width: width)) })
+                    choices += ifLeft < ifRight || (ifLeft == ifRight && leftSpan < rightSpan) ? [newLeft, newRight] : [newRight, newLeft]
+                    let cheapest = choices.map(\.cost).min() ?? 0
+                    choices.first { $0.cost == cheapest }?.place()
+                }
+                columns = left.reversed().map(\.lanes) + [mid.lanes] + right.map(\.lanes)
+                middle = left.count
             }
+
             var x = 0.0
-            for lane in band.order {
-                band.laneX[lane] = x + padding
-                x += padding + (band.laneWidth[lane] ?? 0) + padding + laneGap
+            for (index, column) in columns.enumerated() {
+                let width = column.map(full).max() ?? 0
+                for lane in column.sorted(by: { (span[$0]?.lowerBound ?? 0) < (span[$1]?.lowerBound ?? 0) }) {
+                    band.order.append(lane)
+                    band.laneX[lane] = x + padding + (width - full(lane)) / 2
+                }
+                if index == middle { band.axis = x + width / 2 }
+                x += width + laneGap
             }
             band.width = max(x - laneGap, 0)
-            if let middle = band.center {
-                band.axis = (band.laneX[middle] ?? 0) + (band.laneWidth[middle] ?? 0) / 2
-            } else {
-                band.axis = band.width / 2
-            }
+            if middle == nil { band.axis = band.width / 2 }
             return band
         }
 
-        // Merging two neighboring bands is free when it adds no lane, one's groups all being among the
-        // other's, and the merged band is no wider than the widest; the narrowest free merge goes first.
+        // Two neighboring bands merge where that joins containers, a group on both sides of the rows where
+        // they meet becoming one lane, and the merged band is no wider than the widest. The merge joining
+        // the most goes first, the narrowest among equals. A group the meeting rows lack stays split, so no
+        // container spans a row it has nothing on.
         var ranges = bands
         var planned = ranges.map { plan($0) }
         let widest = planned.map(\.width).max() ?? 0
         while merging {
-            var best: (index: Int, band: Band)?
+            var best: (index: Int, joined: Int, band: Band)?
             for index in ranges.indices.dropLast() {
-                let upper = Set(planned[index].order)
-                let lower = Set(planned[index + 1].order)
-                guard upper.isSubset(of: lower) || lower.isSubset(of: upper) else { continue }
+                guard let last = planned[index].rows.last, let first = planned[index + 1].rows.first else { continue }
+                let shared = Set(planned[index].order).intersection(planned[index + 1].order)
+                guard !shared.isEmpty, shared.allSatisfy({ last[$0] != nil && first[$0] != nil }) else { continue }
                 let merged = plan(ranges[index].lowerBound..<ranges[index + 1].upperBound)
-                guard merged.width <= widest, merged.width < best?.band.width ?? .infinity else { continue }
-                best = (index, merged)
+                guard merged.width <= widest else { continue }
+                if let best, (best.joined, -best.band.width) >= (shared.count, -merged.width) { continue }
+                best = (index, shared.count, merged)
             }
             guard let best else { break }
             ranges[best.index] = ranges[best.index].lowerBound..<ranges[best.index + 1].upperBound

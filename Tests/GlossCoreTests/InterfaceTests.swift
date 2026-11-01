@@ -408,6 +408,22 @@ final class InterfaceTests: XCTestCase {
         XCTAssertLessThan(steps.lanes[0].y + steps.lanes[0].height, steps.lanes[1].y, "The bands stack, not sit side by side.")
     }
 
+    func testSplitBandsKeepAContinuingGroupWholeAndStackTheRest() throws {
+        func item(_ id: String, _ group: String) -> GraphLayout.Item {
+            GraphLayout.Item(unit: .type(id), label: id, detail: "struct", group: group)
+        }
+        func link(_ from: String, _ to: String) -> GraphLayout.Link { GraphLayout.Link(from: from, to: to, dashed: false, title: "") }
+        let layout = GraphLayout.layered(
+            [item("Root", "Map"), item("Ap1", "App"), item("Pg1", "Page"), item("Ap2", "App"), item("Tp2", "Top")],
+            [link("Ap1", "Root"), link("Pg1", "Root"), link("Ap2", "Ap1"), link("Tp2", "Pg1")], emphasis: "Map", splitAt: "Root")
+        XCTAssertEqual(layout.lanes.filter { $0.name == "App" }.count, 1,
+                       "App runs through both rows above, so its neighbors changing beside it does not split it.")
+        let top = try XCTUnwrap(layout.lanes.first { $0.name == "Top" })
+        let page = try XCTUnwrap(layout.lanes.first { $0.name == "Page" })
+        XCTAssertEqual(top.x + top.width / 2, page.x + page.width / 2, accuracy: 0.5, "Lanes whose rows never meet share a column.")
+        XCTAssertLessThan(top.y + top.height, page.y)
+    }
+
     func testLanesGoAroundTheRootHeaviestNearest() throws {
         func item(_ id: String, _ group: String) -> GraphLayout.Item {
             GraphLayout.Item(unit: .type(id), label: id, detail: "struct", group: group)

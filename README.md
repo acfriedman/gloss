@@ -71,10 +71,11 @@ draws only the edges from one step to the next, marks types at the cut that lead
 boxes counting what lies beyond, and keeps the most connected when even the first step is over;
 clicking a box re-roots it. A focus or reach that crosses modules draws them as lanes, the focused
 type's module a little warmer, split into bands of rows where that saves width: each row starts as a
-band of its own, and neighboring bands merge when one's modules are all among the other's and the
-merged band is no wider than the widest. A module that only shares rows with itself keeps one
-container, and one on both sides of the type gets a container on each only when that keeps the
-figure narrower. The focused type anchors one vertical axis through every band: its module's lane is
+band of its own, and neighboring bands merge when a module continues across the rows where they meet
+and the merged band is no wider than the widest. Within a band, modules whose rows never meet stack
+in one column, so a module that runs through several rows keeps one container while its neighbors
+change beside it, and one on both sides of the type gets a container on each, never one spanning a
+row it has nothing on. The focused type anchors one vertical axis through every band: its module's lane is
 in the middle of its band, and the other lanes go around it in organ-pipe order, the ones with the
 most edges to it nearest, each on the side that keeps the figure narrowest. Each map opens centered
 and shrunk to fit the pane, never past its natural size; a pinch or the magnifier in its corner

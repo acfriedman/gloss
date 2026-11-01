@@ -33,6 +33,9 @@ struct GlossApp: App {
                     .disabled(workspace.root == nil)
             }
             CommandGroup(after: .toolbar) {
+                Button(workspace.showsList ? "Hide List" : "Show List") { workspace.toggleList() }
+                    .keyboardShortcut("1")
+                Divider()
                 Button("Zoom In") { workspace.zoom(to: workspace.zoomInTarget) }
                     .keyboardShortcut("=")
                     .disabled(workspace.zoomInTarget == nil)

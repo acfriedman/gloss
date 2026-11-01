@@ -49,6 +49,8 @@ final class Workspace {
     var minimumRank = Atlas.defaultMinimumRank { didSet { redraw() } }
     var search = ""
     var findingsOnly = false
+    /// Which panes the window shows: all three, or the details and the map with the list hidden.
+    var columns = NavigationSplitViewVisibility.all
     /// The chip under the pointer, whose box the map lights instead of what the details pane shows.
     var hovered: String?
     /// What hovering a box or a list row shows in the details pane in place of the selection.
@@ -400,6 +402,16 @@ final class Workspace {
             guard !query.isEmpty else { return true }
             return ([node.name] + group.members.map(\.name)).contains { $0.lowercased().contains(query) }
         }
+    }
+
+    /// Whether the list is shown.
+    var showsList: Bool {
+        columns != .doubleColumn && columns != .detailOnly
+    }
+
+    /// Hides the list, or shows it again, keeping the details and the map.
+    func toggleList() {
+        columns = showsList ? .doubleColumn : .all
     }
 
     // MARK: Expanding

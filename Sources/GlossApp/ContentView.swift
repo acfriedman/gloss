@@ -9,7 +9,7 @@ struct ContentView: View {
         @Bindable var workspace = workspace
         Group {
             if workspace.atlas != nil {
-                NavigationSplitView {
+                NavigationSplitView(columnVisibility: $workspace.columns) {
                     ListPaneView()
                         .navigationSplitViewColumnWidth(min: 180, ideal: 240, max: 420)
                 } content: {

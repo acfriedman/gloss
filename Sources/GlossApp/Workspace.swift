@@ -67,14 +67,10 @@ final class Workspace {
     static let focus = "focus"
 
     /// What the focus draws: the type's neighbors, or all it reaches one way.
-    var focusMode = FocusMode.neighbors {
-        didSet {
-            reachDepth = nil
-            redraw()
-        }
-    }
-    /// The steps a reach draws, chosen with the depth stepper; `nil` draws 1 for Neighbors, and as many
-    /// whole steps as fit ``GlossMap/Atlas/mapBudget`` for the others.
+    var focusMode = FocusMode.neighbors { didSet { redraw() } }
+    /// The steps a reach draws, chosen with the depth stepper and kept across modes until another type is
+    /// selected; `nil`, the default, draws 1 for Neighbors and as many whole steps as fit
+    /// ``GlossMap/Atlas/mapBudget`` for the others.
     var reachDepth: Int? { didSet { redraw() } }
 
     /// The open folder, or `nil` before one is opened; file paths in the interface are relative to it.
@@ -255,6 +251,7 @@ final class Workspace {
         selection = target
         if case .type(let id) = target { reveal(id) }
         scopeID = scope(for: target)
+        // A new type starts at the default depth; switching modes keeps the chosen one.
         if rerooted, reachDepth != nil { reachDepth = nil } else { redraw() }
     }
 

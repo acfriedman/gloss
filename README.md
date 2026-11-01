@@ -65,7 +65,8 @@ folders; searching or filtering opens whatever holds a match, and selecting a ty
 chip opens the rows around it. In focus, a menu in the map header picks what to draw around the
 type: Neighbors, what uses it above and what it depends on below; All below, everything it depends
 on; or All above, everything that uses it. All three are one reach (`Atlas.reach`) with a depth
-stepper. Neighbors opens at depth 1; the other two draw whole steps while they fit 30 boxes. A reach
+stepper. By default Neighbors draws depth 1 and the other two draw whole steps while they fit 30
+boxes; a chosen depth stays when the mode changes, and a new type starts at the default. A reach
 draws only the edges from one step to the next, marks types at the cut that lead further as dashed
 boxes counting what lies beyond, and keeps the most connected when even the first step is over;
 clicking a box re-roots it. Each map opens centered and shrunk to fit the pane, never past its

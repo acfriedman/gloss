@@ -209,7 +209,13 @@ extension Atlas {
         for link in links {
             for unit in [link.from, link.to] where drawnSet.insert(unit).inserted { drawn.append(unit) }
         }
-        figure.items = drawn.map { item($0, boundary: !scope.isInside($0)) }
+        // A level of types from two or more modules draws each module as a lane.
+        let typeModules = drawn.compactMap { unit -> String? in
+            if case .type(let id) = unit { return byID[id]?.module }
+            return nil
+        }
+        let laned = typeModules.count == drawn.count && Set(typeModules).count > 1
+        figure.items = drawn.map { item($0, boundary: !scope.isInside($0), laned: laned) }
         figure.links = links.map { link in
             GraphLayout.Link(from: link.from.id, to: link.to.id, dashed: link.roles == [.body],
                              title: "\(label(of: link.from)) \(Wording.words(link.roles)) \(label(of: link.to))")
@@ -238,17 +244,20 @@ extension Atlas {
     /// - Parameters:
     ///   - unit: The box.
     ///   - boundary: `true` for a box outside the level, drawn dashed.
+    ///   - laned: `true` to place a type in its module's lane, which then names the module instead of
+    ///     the box's detail line.
     /// - Returns: The layout item.
-    public func item(_ unit: MapScope.Unit, boundary: Bool) -> GraphLayout.Item {
+    public func item(_ unit: MapScope.Unit, boundary: Bool, laned: Bool = false) -> GraphLayout.Item {
         switch unit {
         case .type(let id):
             let node = byID[id]
             let kind = node.map(Wording.kind(of:)) ?? ""
-            let detail = ([kind] + (modules.count > 1 ? [node?.module ?? ""] : [])).joined(separator: " · ")
+            let detail = ([kind] + (modules.count > 1 && !laned ? [node?.module ?? ""] : [])).joined(separator: " · ")
             var flags: GraphLayout.Flags = []
             if findings(under: id) > 0 { flags.insert(.dirty) }
             if let node, Contract.rank(node.access) == 0 { flags.insert(.private) }
-            return GraphLayout.Item(unit: unit, label: label(of: unit), detail: detail, flags: flags)
+            return GraphLayout.Item(unit: unit, label: label(of: unit), detail: detail, flags: flags,
+                                    group: laned ? node?.module : nil)
         case .module(let module):
             let count = types(in: module).count
             return GraphLayout.Item(unit: unit, label: module, detail: "module · \(count) type\(count == 1 ? "" : "s")",

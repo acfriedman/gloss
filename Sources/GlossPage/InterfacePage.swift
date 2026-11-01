@@ -171,7 +171,16 @@ public enum InterfacePage {
         let format = GraphLayout.format
         let arrow = "arrow-" + marker
         var html = "<svg class=\"graph\" viewBox=\"0 0 \(format(layout.width)) \(format(layout.height))\" width=\"\(format(layout.width))\" height=\"\(format(layout.height))\" role=\"img\" aria-label=\"\(escape(label))\">"
-        html += "<defs><marker id=\"\(arrow)\" viewBox=\"0 0 10 10\" refX=\"9\" refY=\"5\" markerWidth=\"7\" markerHeight=\"7\" orient=\"auto-start-reverse\"><path class=\"arrowhead\" d=\"M0,1 L9,5 L0,9 z\"/></marker></defs><g class=\"edges\">"
+        html += "<defs><marker id=\"\(arrow)\" viewBox=\"0 0 10 10\" refX=\"9\" refY=\"5\" markerWidth=\"7\" markerHeight=\"7\" orient=\"auto-start-reverse\"><path class=\"arrowhead\" d=\"M0,1 L9,5 L0,9 z\"/></marker></defs>"
+        if !layout.lanes.isEmpty {
+            html += "<g class=\"lanes\">"
+            for lane in layout.lanes {
+                html += "<g class=\"lane\(lane.isEmphasized ? " current" : "")\"><rect x=\"\(format(lane.x))\" y=\"\(format(lane.y))\" width=\"\(format(lane.width))\" height=\"\(format(lane.height))\" rx=\"10\"/>"
+                html += "<text class=\"lane-label\" x=\"\(format(lane.x + 12))\" y=\"\(format(lane.y + 19))\">\(escape(lane.name.uppercased()))</text></g>"
+            }
+            html += "</g>"
+        }
+        html += "<g class=\"edges\">"
         for curve in layout.curves {
             let end = curve.reversed ? "marker-start" : "marker-end"
             html += "<path class=\"edge\(curve.link.dashed ? " body" : "")\" d=\"\(curve.path)\" data-from=\"\(escape(curve.link.from))\" data-to=\"\(escape(curve.link.to))\" \(end)=\"url(#\(arrow))\"><title>\(escape(curve.link.title))</title></path>"
@@ -368,6 +377,10 @@ public enum InterfacePage {
     .graph .edge { fill: none; stroke: var(--edge); stroke-width: 1.3; transition: opacity 0.15s; }
     .graph .edge.body { stroke: var(--faint); stroke-dasharray: 4 3; }
     .graph .arrowhead { fill: var(--edge); }
+    .graph .lane rect { fill: var(--panel); stroke: var(--rule); }
+    .graph .lane.current rect { fill: var(--accent-soft); }
+    .graph .lane-label { font: 600 10px var(--font-ui); letter-spacing: 0.08em; fill: var(--muted); }
+    .graph .lane.current .lane-label { fill: var(--accent); }
     .graph .node { transition: opacity 0.15s; }
     .graph .node rect { fill: var(--surface); stroke: var(--line); stroke-width: 1; }
     .graph .node .label { font: 12px var(--font-code); fill: var(--ink); }

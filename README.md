@@ -69,7 +69,10 @@ stepper. By default Neighbors draws depth 1 and the other two draw whole steps w
 boxes; a chosen depth stays when the mode changes, and a new type starts at the default. A reach
 draws only the edges from one step to the next, marks types at the cut that lead further as dashed
 boxes counting what lies beyond, and keeps the most connected when even the first step is over;
-clicking a box re-roots it. Each map opens centered and shrunk to fit the pane, never past its
+clicking a box re-roots it. A focus or reach that crosses modules draws them as lanes, the focused
+type's module a little warmer, split at the type: what lies above it, the type, and what lies below
+each get lanes of their own, so a module on both sides gets a container on each and the figure is
+only as wide as its widest band. Each map opens centered and shrunk to fit the pane, never past its
 natural size; a pinch or the magnifier in its corner zooms, clicking the percentage fits it again,
 and a new level or focus fits again. Hovering a box on the map or a row in the list previews it in
 the details pane over the selection, and lights it on the map; moving into the pane keeps the
@@ -116,7 +119,8 @@ browser, and double-clicking a divider restores its default.
 - **Overview** is what the details pane shows first: each module's entry points, meaning root types
   used from another module and root types nothing else in their module uses.
 - **The map** shows root types, nested types folded in, with every dependency: signature ones solid,
-  and ones used only inside bodies dashed. Layout happens in Swift, so it is plain SVG. It reads at
+  and ones used only inside bodies dashed. A figure of types from two or more modules draws each
+  module as a lane: a soft container holding that module's boxes on every row, named at its top. Layout happens in Swift, so it is plain SVG. It reads at
   levels: all types, all modules, one module, and one folder. It opens on all types when they fit
   30 boxes, and otherwise on the module overview. A module over 30 types that spans several
   folders is drawn as its folders, each a level of its own. A level draws what lies outside it as

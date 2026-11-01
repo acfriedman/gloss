@@ -331,6 +331,56 @@ final class InterfaceTests: XCTestCase {
         XCTAssertEqual(users.layout.boxes.first { $0.item.label == "Cart" }?.item.detail, "struct · +2 above")
     }
 
+    func testLanesKeepEachGroupsBoxesInsideItsOwnColumn() {
+        func item(_ id: String, _ group: String?) -> GraphLayout.Item {
+            GraphLayout.Item(unit: .type(id), label: id, detail: "struct", group: group)
+        }
+        let links = [("App", "Store"), ("App", "Cart"), ("Store", "Cart"), ("Cart", "Price")].map {
+            GraphLayout.Link(from: $0.0, to: $0.1, dashed: false, title: "")
+        }
+        let items = [item("App", "UI"), item("Store", "Core"), item("Cart", "Core"), item("Price", "Money")]
+        let layout = GraphLayout.layered(items, links, emphasis: "Core")
+        XCTAssertEqual(Set(layout.lanes.map(\.name)), ["UI", "Core", "Money"])
+        XCTAssertEqual(layout.lanes.filter(\.isEmphasized).map(\.name), ["Core"])
+        for box in layout.boxes {
+            let lane = layout.lanes.first { $0.name == box.item.group }
+            XCTAssertNotNil(lane)
+            if let lane {
+                XCTAssertGreaterThanOrEqual(box.x, lane.x, "\(box.item.label) starts inside \(lane.name).")
+                XCTAssertLessThanOrEqual(box.x + box.width, lane.x + lane.width, "\(box.item.label) ends inside \(lane.name).")
+                XCTAssertGreaterThanOrEqual(box.y, lane.y)
+            }
+        }
+        let sorted = layout.lanes.sorted { $0.x < $1.x }
+        for (left, right) in zip(sorted, sorted.dropFirst()) {
+            XCTAssertLessThan(left.x + left.width, right.x, "Lanes do not overlap.")
+        }
+        XCTAssertEqual(GraphLayout.layered(items.map { item($0.id, "One") }, links).lanes, [], "One group draws no lanes.")
+        XCTAssertEqual(GraphLayout.layered(items.map { item($0.id, nil) }, links), GraphLayout.layered(items.map { item($0.id, nil) }, links))
+        XCTAssertEqual(GraphLayout.layered(items, links), GraphLayout.layered(items, links), "Lanes are laid out deterministically.")
+    }
+
+    func testSplitLanesGiveAGroupOnBothSidesAContainerOnEach() {
+        func item(_ id: String, _ group: String) -> GraphLayout.Item {
+            GraphLayout.Item(unit: .type(id), label: id, detail: "struct", group: group)
+        }
+        let items = [item("Screen", "App"), item("Panel", "Page"), item("Atlas", "Map"),
+                     item("Store", "App"), item("Graph", "Core"), item("Layout", "Map")]
+        let links = [("Screen", "Atlas"), ("Panel", "Atlas"), ("Atlas", "Store"), ("Atlas", "Graph"), ("Atlas", "Layout")].map {
+            GraphLayout.Link(from: $0.0, to: $0.1, dashed: false, title: "")
+        }
+        let split = GraphLayout.layered(items, links, emphasis: "Map", splitAt: "Atlas")
+        let whole = GraphLayout.layered(items, links, emphasis: "Map")
+        XCTAssertEqual(split.lanes.filter { $0.name == "App" }.count, 2, "App sits above and below, so it gets two containers.")
+        XCTAssertEqual(whole.lanes.filter { $0.name == "App" }.count, 1)
+        XCTAssertLessThan(split.width, whole.width, "Each band holds only its own groups, so the figure is narrower.")
+        let atlas = split.boxes.first { $0.item.label == "Atlas" }
+        let screen = split.boxes.first { $0.item.label == "Screen" }
+        let store = split.boxes.first { $0.item.label == "Store" }
+        XCTAssertLessThan(screen?.y ?? 0, atlas?.y ?? 0)
+        XCTAssertLessThan(atlas?.y ?? 0, store?.y ?? 0)
+    }
+
     func testReachStartsAtANestedTypeItself() throws {
         let atlas = Atlas(Interface.build(sources: [("Sources/Map/Layout.swift", """
         struct Layout { var boxes: [Box]; struct Box { var item: Item }; struct Item { var unit: Unit } }

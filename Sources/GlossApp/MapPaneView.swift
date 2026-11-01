@@ -178,6 +178,18 @@ struct MapCanvasView: View {
         let weight = min(1.5, max(0.6, scale))
         ZStack(alignment: .topLeading) {
             Canvas { context, _ in
+                // Module lanes sit behind everything: a soft container and the module's name.
+                for lane in layout.lanes {
+                    let rect = CGRect(x: lane.x * scale, y: lane.y * scale, width: lane.width * scale, height: lane.height * scale)
+                    let shape = Path(roundedRect: rect, cornerRadius: 10 * scale)
+                    context.fill(shape, with: .color(lane.isEmphasized ? Palette.accentSoft : Palette.panel))
+                    context.stroke(shape, with: .color(Palette.line.opacity(0.5)), lineWidth: 1)
+                    let name = Text(lane.name.uppercased())
+                        .font(.system(size: 10 * scale, weight: .semibold))
+                        .tracking(0.8 * scale)
+                        .foregroundColor(lane.isEmphasized ? Palette.accent : Palette.edge)
+                    context.draw(name, at: CGPoint(x: rect.minX + 12 * scale, y: rect.minY + 9 * scale), anchor: .topLeading)
+                }
                 for curve in layout.curves {
                     let isLit = isLighting && (curve.link.from == lit || curve.link.to == lit)
                     let color: Color = isLit ? Palette.accent : Palette.edge.opacity(isLighting ? 0.2 : 0.75)

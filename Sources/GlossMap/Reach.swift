@@ -47,7 +47,9 @@ extension Atlas {
     ///     step draws at any depth.
     /// - Returns: The drawing and how much of the reach it shows, or `nil` for an unknown id.
     ///
-    /// Every type is its own box, nested ones included, so a nested type reaches from itself and a
+    /// Types from two or more modules are drawn in module lanes, the root's emphasized, and split at the
+    /// root: what lies above it, the root, and what lies below each get lanes of their own. Every type is its
+    /// own box, nested ones included, so a nested type reaches from itself and a
     /// type's own nested types are among what it depends on. Every dependency counts, signature and body
     /// alike. Only the edges from one step to the next are drawn, which show how each type leads back to
     /// the root; a type on both sides of a cycle is drawn once, below. A type at the last drawn step that
@@ -135,10 +137,10 @@ extension Atlas {
             if findings(under: id) > 0 { flags.insert(.dirty) }
             if rank(of: node) == 0 { flags.insert(.private) }
             if beyond > 0 { flags.insert(.boundary) }
-            let place = node.module != root.module ? [node.module] : []
             let more = beyond > 0 ? ["+\(beyond) \(further)"] : []
             return GraphLayout.Item(unit: .type(id), label: label(node),
-                                    detail: ([Wording.kind(of: node)] + place + more).joined(separator: " · "), flags: flags)
+                                    detail: ([Wording.kind(of: node)] + more).joined(separator: " · "), flags: flags,
+                                    group: node.module)
         }
         // Only the edges from one step to the next, which show how each type leads back to the root;
         // the others between drawn types are real but would bury that.
@@ -151,7 +153,7 @@ extension Atlas {
             GraphLayout.Link(from: link.from, to: link.to, dashed: link.roles == [.body],
                              title: "\(label(of: .type(link.from))) \(Wording.words(link.roles)) \(label(of: .type(link.to)))")
         }
-        return Reach(layout: GraphLayout.layered(items, links), depth: drawnDepth, totalDepth: totalDepth,
+        return Reach(layout: GraphLayout.layered(items, links, emphasis: root.module, splitAt: root.id), depth: drawnDepth, totalDepth: totalDepth,
                      above: drawnAbove.count, below: drawnBelow.count, total: total, overflow: overflow)
     }
 }

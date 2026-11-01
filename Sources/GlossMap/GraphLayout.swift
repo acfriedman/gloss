@@ -33,6 +33,8 @@ public struct GraphLayout: Sendable, Equatable {
         public var detail: String
         /// How the box is drawn; empty for a plain box.
         public var flags: Flags = []
+        /// The lane the box belongs in, such as its module; `nil` keeps the figure without lanes.
+        public var group: String?
         /// The id links name the box by.
         public var id: String { unit.id }
 
@@ -43,11 +45,13 @@ public struct GraphLayout: Sendable, Equatable {
         ///   - label: Its name.
         ///   - detail: The smaller line under the name.
         ///   - flags: How it is drawn.
-        public init(unit: MapScope.Unit, label: String, detail: String, flags: Flags = []) {
+        ///   - group: The lane it belongs in, such as its module, or `nil` for none.
+        public init(unit: MapScope.Unit, label: String, detail: String, flags: Flags = [], group: String? = nil) {
             self.unit = unit
             self.label = label
             self.detail = detail
             self.flags = flags
+            self.group = group
         }
     }
 
@@ -115,8 +119,26 @@ public struct GraphLayout: Sendable, Equatable {
         public var path: String { GraphLayout.downward(through: points) }
     }
 
+    /// A column that holds one group's boxes, such as a module's, drawn as a subtle container behind them.
+    public struct Lane: Sendable, Equatable {
+        /// The group's name, shown at the container's top.
+        public var name: String
+        /// The container's left edge, in points from the figure's left.
+        public var x: Double
+        /// The container's top edge, its label included.
+        public var y: Double
+        /// The container's width.
+        public var width: Double
+        /// The container's height.
+        public var height: Double
+        /// Whether the lane holds what the figure is about, such as the focused type's module.
+        public var isEmphasized: Bool
+    }
+
     /// The placed boxes, row by row from the top.
     public var boxes: [Box] = []
+    /// The group containers, left to right; empty unless the figure's boxes span two or more groups.
+    public var lanes: [Lane] = []
     /// The placed edges, one per link that was kept.
     public var curves: [Curve] = []
     /// The figure's width in points, margins included.
@@ -153,11 +175,19 @@ public struct GraphLayout: Sendable, Equatable {
     /// - Parameters:
     ///   - items: The nodes, in a stable order that seeds the ordering within each layer.
     ///   - links: The edges; a link naming an unknown item or its own source is dropped.
+    ///   - emphasis: The group whose lane holds what the figure is about, drawn a little warmer.
+    ///   - splitAt: The id of the item the figure grows from, such as a focused type; when lanes are
+    ///     drawn, the rows above it, its own row, and the rows below it each get lanes of their own.
     /// - Returns: The placed figure.
     ///
     /// Cycles are broken by reversing the back edges of a depth-first search, layers come from the
-    /// longest path from a source, and order within a layer from repeated barycenter sweeps.
-    public static func layered(_ items: [Item], _ links: [Link]) -> GraphLayout {
+    /// longest path from a source, and order within a layer from repeated barycenter sweeps. When every
+    /// item has a group and there are two or more, each group keeps to a lane of its own on every row,
+    /// lanes in the order the sweeps placed their boxes on average, and an edge's placeholders run down
+    /// its source's lane. Split at an item, the figure is three bands stacked and centered, each laid
+    /// out in lanes for only the groups it holds, so a group on both sides gets a container on each.
+    public static func layered(_ items: [Item], _ links: [Link], emphasis: String? = nil,
+                               splitAt: String? = nil) -> GraphLayout {
         let count = items.count
         var position: [String: Int] = [:]
         for (index, item) in items.enumerated() { position[item.id] = index }
@@ -251,6 +281,23 @@ public struct GraphLayout: Sendable, Equatable {
             for index in stride(from: layerCount - 2, through: 0, by: -1) { reorder(index, by: below) }
         }
 
+        let groups = items.map(\.group)
+        if groups.allSatisfy({ $0 != nil }), Set(groups.compactMap { $0 }).count > 1 {
+            let groupOf = { (slot: Slot) -> String in
+                switch slot {
+                case .node(let node): items[node].group ?? ""
+                case .dummy(let edge, _): items[flow[edge].low].group ?? ""
+                }
+            }
+            var bands = [0..<layerCount]
+            if let splitAt, let index = position[splitAt] {
+                let middle = layer[index]
+                bands = [0..<middle, middle..<middle + 1, middle + 1..<layerCount].filter { !$0.isEmpty }
+            }
+            return lanes(items, slots: slots, bands: bands, chains: chains, edges: edges.map(\.link),
+                         reversed: flow.map(\.reversed), groupOf: groupOf, emphasis: emphasis)
+        }
+
         // Layers are rows, top to bottom: a deep graph grows down the page, which scrolls, not sideways.
         let dummyWidth = 8.0
         let slotGap = 18.0
@@ -305,6 +352,129 @@ public struct GraphLayout: Sendable, Equatable {
         }
         layout.width = widest + margin * 2
         layout.height = top - layerGap + margin
+        return layout
+    }
+
+    /// Places ordered layers in group lanes, band by band: in each band, each group a column as wide as
+    /// its widest row there, its boxes kept inside it on every row, and a container drawn behind them.
+    ///
+    /// - Parameters:
+    ///   - items: The nodes.
+    ///   - slots: Each layer's slots, nodes and edge placeholders, in swept order.
+    ///   - bands: Consecutive runs of layers that each get lanes of their own, top to bottom.
+    ///   - chains: Each edge's slots from its upper end to its lower end.
+    ///   - edges: Each edge's link, at the same index as its chain.
+    ///   - reversed: Whether each edge is drawn against the flow, at the same index.
+    ///   - groupOf: The lane each slot belongs in.
+    ///   - emphasis: The group whose lanes are drawn a little warmer.
+    /// - Returns: The placed figure with its lanes.
+    private static func lanes(_ items: [Item], slots: [[Slot]], bands: [Range<Int>], chains: [[Slot]], edges: [Link],
+                              reversed: [Bool], groupOf: (Slot) -> String, emphasis: String?) -> GraphLayout {
+        let dummyWidth = 8.0
+        let slotGap = 18.0
+        let layerGap = 54.0
+        let wrapGap = 14.0
+        let laneLimit = maxRowWidth / 2
+        let padding = 12.0
+        let laneGap = 16.0
+        let labelHeight = 18.0
+        func slotWidth(_ slot: Slot) -> Double {
+            if case .node(let node) = slot { return width(of: items[node]) }
+            return dummyWidth
+        }
+        func rowWidth(_ row: [Slot]) -> Double {
+            row.map(slotWidth).reduce(0, +) + slotGap * Double(max(row.count - 1, 0))
+        }
+
+        /// One band's plan: its lanes in order, each layer's rows by lane, and where each lane sits.
+        struct Band {
+            var order: [String] = []
+            var rows: [[String: [[Slot]]]] = []
+            var laneWidth: [String: Double] = [:]
+            var laneX: [String: Double] = [:]
+            var width = 0.0
+        }
+        var planned: [Band] = []
+        for range in bands {
+            var band = Band()
+            // Lanes go in the order the sweeps placed their slots on average, which keeps crossings low.
+            var positions: [String: [Double]] = [:]
+            for layer in slots[range] {
+                for (offset, slot) in layer.enumerated() {
+                    positions[groupOf(slot), default: []].append((Double(offset) + 0.5) / Double(layer.count))
+                }
+            }
+            band.order = positions.map { (name: $0.key, mean: $0.value.reduce(0, +) / Double($0.value.count)) }
+                .sorted { ($0.mean, $0.name) < ($1.mean, $1.name) }.map(\.name)
+            let rank = Dictionary(uniqueKeysWithValues: band.order.enumerated().map { ($0.element, $0.offset) })
+            // Each layer, each lane: its slots in swept order, wrapped onto rows no wider than the lane limit.
+            for layer in slots[range] {
+                var byLane: [String: [[Slot]]] = [:]
+                let ordered = layer.enumerated().sorted {
+                    (rank[groupOf($0.element)] ?? 0, $0.offset) < (rank[groupOf($1.element)] ?? 0, $1.offset)
+                }.map(\.element)
+                for slot in ordered {
+                    let lane = groupOf(slot)
+                    var wrapped = byLane[lane] ?? [[]]
+                    let current = wrapped[wrapped.count - 1]
+                    if !current.isEmpty, rowWidth(current + [slot]) > laneLimit { wrapped.append([]) }
+                    wrapped[wrapped.count - 1].append(slot)
+                    byLane[lane] = wrapped
+                }
+                band.rows.append(byLane)
+            }
+            for layer in band.rows {
+                for (lane, wrapped) in layer { band.laneWidth[lane] = max(band.laneWidth[lane] ?? 0, wrapped.map(rowWidth).max() ?? 0) }
+            }
+            var x = 0.0
+            for lane in band.order {
+                band.laneX[lane] = x + padding
+                x += padding + (band.laneWidth[lane] ?? 0) + padding + laneGap
+            }
+            band.width = max(x - laneGap, 0)
+            planned.append(band)
+        }
+        let widest = planned.map(\.width).max() ?? 0
+
+        var layout = GraphLayout()
+        var anchors: [Slot: Anchor] = [:]
+        var top = margin + labelHeight + padding
+        for (index, band) in planned.enumerated() {
+            let offset = margin + (widest - band.width) / 2
+            let first = layout.boxes.count
+            for layer in band.rows {
+                let height = layer.values.map(\.count).max() ?? 1
+                for (lane, wrapped) in layer {
+                    for (row, slotsInRow) in wrapped.enumerated() {
+                        let y = top + Double(row) * (boxHeight + wrapGap)
+                        var left = offset + (band.laneX[lane] ?? 0) + ((band.laneWidth[lane] ?? 0) - rowWidth(slotsInRow)) / 2
+                        for slot in slotsInRow {
+                            let slotWidth = slotWidth(slot)
+                            if case .node(let node) = slot { layout.boxes.append(Box(item: items[node], x: left, y: y, width: slotWidth)) }
+                            anchors[slot] = Anchor(x: left + slotWidth / 2, top: y, bottom: y + boxHeight)
+                            left += slotWidth + slotGap
+                        }
+                    }
+                }
+                top += Double(height) * (boxHeight + wrapGap) - wrapGap + layerGap
+            }
+            let bandBoxes = layout.boxes[first...]
+            for lane in band.order {
+                let boxes = bandBoxes.filter { $0.item.group == lane }
+                guard let firstY = boxes.map(\.y).min(), let lastY = boxes.map(\.y).max(), let left = band.laneX[lane] else { continue }
+                layout.lanes.append(Lane(name: lane, x: offset + left - padding, y: firstY - labelHeight - padding,
+                                         width: (band.laneWidth[lane] ?? 0) + padding * 2,
+                                         height: lastY + boxHeight + padding - (firstY - labelHeight - padding),
+                                         isEmphasized: lane == emphasis))
+            }
+            if index < planned.count - 1 { top += labelHeight + padding }
+        }
+        layout.boxes.sort { ($0.y, $0.x) < ($1.y, $1.x) }
+        for (index, chain) in chains.enumerated() {
+            layout.curves.append(Curve(link: edges[index], points: chain.compactMap { anchors[$0] }, reversed: reversed[index]))
+        }
+        layout.width = widest + margin * 2
+        layout.height = top - layerGap + padding + margin
         return layout
     }
 

@@ -29,6 +29,9 @@ public struct Mention: Sendable, Equatable, Codable {
     /// The id of the graph node the name refers to, set by ``Graph/build(_:)``, or `nil` when no scanned
     /// source declares it.
     public var resolved: String?
+    /// The internal names of the parameters whose types mention the name, in signature order; empty for
+    /// every role but `parameter`.
+    public var parameters: [String] = []
 }
 
 /// Collects the type names a declaration mentions, tagged with where each appears.
@@ -43,7 +46,8 @@ enum Mentions {
     ///   - parameters: Its parameter list, for callables.
     ///   - returnType: Its return type, for callables and subscripts.
     ///   - effects: Its effect specifiers, for a typed `throws(E)` clause.
-    /// - Returns: Mentions in signature order, each name listed once per role.
+    /// - Returns: Mentions in signature order, each name listed once per role, with the parameters that
+    ///   mention it.
     static func collect(
         _ node: some DeclSyntaxProtocol,
         parameters: FunctionParameterListSyntax?,
@@ -51,17 +55,21 @@ enum Mentions {
         effects: FunctionEffectSpecifiersSyntax?
     ) -> [Mention] {
         var mentions: [Mention] = []
-        func add(_ syntax: (some SyntaxProtocol)?, _ role: Mention.Role) {
+        func add(_ syntax: (some SyntaxProtocol)?, _ role: Mention.Role, parameter: String? = nil) {
             guard let syntax else { return }
-            for name in names(in: syntax) where !mentions.contains(where: { $0.name == name && $0.role == role }) {
-                mentions.append(Mention(name: name, role: role))
+            for name in names(in: syntax) {
+                if let index = mentions.firstIndex(where: { $0.name == name && $0.role == role }) {
+                    if let parameter, !mentions[index].parameters.contains(parameter) { mentions[index].parameters.append(parameter) }
+                } else {
+                    mentions.append(Mention(name: name, role: role, parameters: parameter.map { [$0] } ?? []))
+                }
             }
         }
         let syntax = Syntax(node)
         if let group = syntax.asProtocol(DeclGroupSyntax.self) {
             add(group.inheritanceClause, .conformance)
         }
-        for parameter in parameters ?? [] { add(parameter.type, .parameter) }
+        for parameter in parameters ?? [] { add(parameter.type, .parameter, parameter: (parameter.secondName ?? parameter.firstName).text) }
         add(returnType, .returns)
         add(effects?.throwsClause?.type, .throws)
         if let variable = syntax.as(VariableDeclSyntax.self) {

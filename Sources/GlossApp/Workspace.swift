@@ -510,6 +510,13 @@ final class Workspace {
         }
     }
 
+    /// The drawn dependencies that bring a previewed type into the focus, each as the dependent and the
+    /// type it depends on; empty outside the focus or with no type previewed.
+    var previewLinks: [(from: String, to: String)] {
+        guard scopeID == Self.focus, case .type(let id)? = preview else { return [] }
+        return drawing.layout.curves.map(\.link).filter { $0.from == id || $0.to == id }.map { ($0.from, $0.to) }
+    }
+
     /// The box the focus grows from, drawn as the current one without dimming the rest; `nil` outside it.
     var anchorID: String? {
         guard scopeID == Self.focus, case .type(let id) = selection else { return nil }

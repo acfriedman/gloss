@@ -635,7 +635,9 @@ public enum InterfacePage {
         return html;
       }
       function words(mask) {
-        return ROLES.filter(function (role, bit) { return mask & (1 << bit); }).map(function (role) { return WORDS[role]; }).join(" · ");
+        var list = ROLES.filter(function (role, bit) { return mask & (1 << bit); }).map(function (role) { return WORDS[role]; });
+        if (list.length < 3) return list.join(" and ");
+        return list.slice(0, -1).join(", ") + ", and " + list[list.length - 1];
       }
       function chip(position, options) {
         var node = data.nodes[position];

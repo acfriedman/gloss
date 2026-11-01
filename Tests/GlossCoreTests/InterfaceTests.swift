@@ -438,6 +438,44 @@ final class InterfaceTests: XCTestCase {
         XCTAssertEqual(root.x + root.width / 2, lane.x + lane.width / 2, accuracy: 0.5, "The root sits centered in its lane.")
     }
 
+    func testRoleWordsReadAsOneEnglishPhrase() {
+        XCTAssertEqual(Wording.words([.property]), "holds")
+        XCTAssertEqual(Wording.words([.parameter, .body]), "takes and uses")
+        XCTAssertEqual(Wording.words([.property, .parameter, .returns]), "holds, takes, and returns")
+        XCTAssertEqual(Wording.words([]), "")
+    }
+
+    func testReasonsQuoteTheDocWhereTheTypeIsUsed() throws {
+        let atlas = Atlas(Interface.build(sources: [("Sources/Shop/Store.swift", """
+        /// Keeps the shopper's cart.
+        struct Store {
+            /// The cart being filled.
+            var cart: Cart
+            /// Adds an item to the cart.
+            ///
+            /// - Parameters:
+            ///   - count: How many to add.
+            ///   - item: The item to put in the cart.
+            /// - Returns: The cart after the add.
+            func add(_ count: Int, of item: Item) -> Cart { Cart() }
+            func tidy() { _ = Item() }
+        }
+        struct Cart {}
+        struct Item {}
+        """)]))
+        let cart = atlas.reasons(from: "Shop/Store", to: "Shop/Cart")
+        XCTAssertEqual(cart.map(\.name), ["cart", "add(_:of:)"])
+        XCTAssertEqual(cart.first?.summary, "The cart being filled.", "A property answers with its summary.")
+        XCTAssertEqual(cart.last?.roles, [.returns, .body])
+        XCTAssertEqual(cart.last?.entries, [Reason.Entry(role: .returns, parameter: nil, text: "The cart after the add.")])
+        let item = atlas.reasons(from: "Shop/Store", to: "Shop/Item")
+        XCTAssertEqual(item.map(\.name), ["add(_:of:)", "tidy()"], "Signature uses come before uses inside a body.")
+        XCTAssertEqual(item.first?.entries, [Reason.Entry(role: .parameter, parameter: "item", text: "The item to put in the cart.")],
+                       "Only the parameter that takes the type answers.")
+        XCTAssertTrue(try XCTUnwrap(item.last).isUnexplained, "An undocumented use says nothing about why.")
+        XCTAssertTrue(atlas.reasons(from: "Shop/Cart", to: "Shop/Store").isEmpty)
+    }
+
     func testReachStartsAtANestedTypeItself() throws {
         let atlas = Atlas(Interface.build(sources: [("Sources/Map/Layout.swift", """
         struct Layout { var boxes: [Box]; struct Box { var item: Item }; struct Item { var unit: Unit } }

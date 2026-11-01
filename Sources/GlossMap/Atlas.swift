@@ -249,6 +249,19 @@ public struct Atlas: Sendable {
         return (incoming, outgoing, children[node.id] ?? [])
     }
 
+    /// Why one node depends on another, in the words of the declarations the dependency runs through.
+    ///
+    /// - Parameters:
+    ///   - from: The id of the dependent node.
+    ///   - to: The id of the node it depends on.
+    /// - Returns: One reason per declaration of `from` that mentions `to`: those in its signature first,
+    ///   then those that use it only inside a body, each in scan order; empty when there is no such edge.
+    public func reasons(from: String, to: String) -> [Reason] {
+        let group = group(from)
+        let reasons = ([group.head].compactMap { $0 } + group.members).compactMap { $0.contract.reason(toward: to) }
+        return reasons.filter { $0.roles != [.body] } + reasons.filter { $0.roles == [.body] }
+    }
+
     /// The finding count of a node together with every type nested in it.
     ///
     /// - Parameter root: A root node id.

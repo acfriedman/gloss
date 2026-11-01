@@ -83,7 +83,10 @@ and shrunk to fit the pane, never past its natural size; a pinch or the magnifie
 zooms, clicking the percentage fits it again, and a new level or focus fits again. Hovering a box on
 the map or a row in the list previews it in the details pane over the selection, and lights it on
 the map; moving into the pane keeps the preview to read, and moving away returns to the selection.
-Hovering a chip in the pane lights its box. Declarations are colored as Xcode's default themes color
+In a focus, the preview opens with why the box is there: each drawn dependency that touches it, in
+the words of the declarations it runs through. A type's page lists the same under Why for every
+type beside it, one row per neighbor that unfolds to its reasons. Hovering a chip in the pane lights
+its box. Declarations are colored as Xcode's default themes color
 them, from swift-syntax's own classification (`Highlight` in `GlossMap`), with the types the scanned
 sources declare told apart from the types they only use. It reads the folder's `Sources` directory
 when it has one, ⌘R reads it again, and the next launch reopens the last folder. A member's file and
@@ -113,7 +116,11 @@ property, a parameter, the return type, a typed `throws`, or a body. Names are r
 Swift looks them up (innermost enclosing type first, then outward, then other scanned modules) into
 a dependency graph of types. A module's top-level statements count as one `top-level code` entry, so
 an executable's entry point appears in the graph. Names no scanned source declares are kept on the
-mention but are not graph nodes.
+mention but are not graph nodes. A parameter mention also records which parameters take the type,
+so `Contract.reason(toward:)` can say why a declaration depends on a type from its own doc: the entry
+for each parameter that takes it, the `- Returns:` or `- Throws:` entry, and the summary, which
+answers for a property, a conformance, or a use inside a body. Since gloss requires those docs, the
+reason is usually already written where the type is used.
 
 The page is three panes on one screen: every type listed on the left, the text of one type in the
 middle, and the dependency map on the right, where it takes whatever width the other two leave.

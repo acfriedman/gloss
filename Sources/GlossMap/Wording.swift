@@ -8,12 +8,25 @@ public enum Wording {
         .returns: "returns", .throws: "throws", .body: "uses"
     ]
 
-    /// Words for an edge's roles, in model order.
+    /// Words for an edge's roles, in model order, read as one English verb phrase sharing its object.
     ///
     /// - Parameter roles: The roles of one edge.
-    /// - Returns: `holds · takes`, and the like.
+    /// - Returns: `holds`, `takes and uses`, `holds, takes, and returns`, and the like.
     public static func words(_ roles: [Mention.Role]) -> String {
-        roles.compactMap { roleWords[$0] }.joined(separator: " · ")
+        list(roles.compactMap { roleWords[$0] })
+    }
+
+    /// Joins words the way English lists them, with a serial comma.
+    ///
+    /// - Parameter words: The words in order.
+    /// - Returns: `a`, `a and b`, or `a, b, and c`; empty for none.
+    public static func list(_ words: [String]) -> String {
+        guard let last = words.last else { return "" }
+        switch words.count {
+        case 1: return last
+        case 2: return words[0] + " and " + last
+        default: return words.dropLast().joined(separator: ", ") + ", and " + last
+        }
     }
 
     /// The kind word a node is shown with.

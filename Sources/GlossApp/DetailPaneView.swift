@@ -28,7 +28,7 @@ struct DetailPaneView: View {
                     .padding(.vertical, 8)
                     .background(.bar)
                     Divider()
-                    DetailPageView(target: preview)
+                    DetailPageView(target: preview, why: workspace.previewLinks)
                 }
                 .id(preview)
             }
@@ -43,11 +43,15 @@ struct DetailPageView: View {
     /// What the page shows, the selection or the preview laid over it; a type the atlas no longer holds
     /// leaves the page empty.
     var target: Workspace.Selection
+    /// The drawn dependencies that bring a previewed type into the focus, answered above its page; empty
+    /// shows the page alone.
+    var why: [(from: String, to: String)] = []
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
                 if let atlas = workspace.atlas {
+                    if !why.isEmpty { WhyHereView(atlas: atlas, links: why) }
                     switch target {
                     case .overview: OverviewView(atlas: atlas)
                     case .modules: ModulesView(atlas: atlas)
@@ -222,6 +226,7 @@ struct TypeView: View {
             }
         }
         FlowView(atlas: atlas, incoming: incoming, outgoing: outgoing, nested: nested)
+        WhyView(atlas: atlas, node: node, incoming: incoming, outgoing: outgoing)
         MembersView(members: group.members.filter { Contract.rank($0.access) >= workspace.minimumRank })
     }
 }
@@ -254,6 +259,141 @@ struct FlowView: View {
                 ChipBlockView(title: "Nests", units: nested.map { .type($0.id) }, atlas: atlas)
             }
             ChipBlockView(title: "Uses inside its bodies", units: insideOnly.map { .type($0.to) }, atlas: atlas)
+        }
+    }
+}
+
+/// Why the type is tied to each type beside it, one row per neighbor that unfolds to what the
+/// declarations the dependency runs through say about it.
+struct WhyView: View {
+    /// The arranged interface the rows read their reasons and names from.
+    var atlas: Atlas
+    /// The type the page shows.
+    var node: Graph.Node
+    /// The edges from types that use this one, listed first.
+    var incoming: [Graph.Edge]
+    /// The edges to the types this one depends on, listed after.
+    var outgoing: [Graph.Edge]
+
+    var body: some View {
+        if !incoming.isEmpty || !outgoing.isEmpty {
+            VStack(alignment: .leading, spacing: 2) {
+                EyebrowView(text: "Why · \(incoming.count + outgoing.count)")
+                    .padding(.bottom, 6)
+                ForEach(incoming, id: \.from) { edge in
+                    WhyRowView(atlas: atlas, other: edge.from, roles: edge.roles, usesThis: true,
+                               reasons: atlas.reasons(from: edge.from, to: node.id))
+                    Divider()
+                }
+                ForEach(outgoing, id: \.to) { edge in
+                    WhyRowView(atlas: atlas, other: edge.to, roles: edge.roles, usesThis: false,
+                               reasons: atlas.reasons(from: node.id, to: edge.to))
+                    Divider()
+                }
+            }
+        }
+    }
+}
+
+/// One neighbor and how it is tied to the type, unfolding to the reasons.
+struct WhyRowView: View {
+    /// The arranged interface the neighbor's chip reads its name from.
+    var atlas: Atlas
+    /// The id of the neighbor.
+    var other: String
+    /// How the dependent mentions the other, as the edge's roles.
+    var roles: [Mention.Role]
+    /// `true` when the neighbor uses the type, read as "Neighbor holds it"; `false` when the type uses
+    /// the neighbor, read as "holds Neighbor".
+    var usesThis: Bool
+    /// What each declaration the dependency runs through says about it.
+    var reasons: [Reason]
+    @State private var isOpen = false
+
+    var body: some View {
+        DisclosureGroup(isExpanded: $isOpen) {
+            VStack(alignment: .leading, spacing: 12) {
+                ForEach(Array(reasons.enumerated()), id: \.offset) { _, reason in ReasonView(reason: reason) }
+            }
+            .padding(.leading, 4)
+            .padding(.bottom, 8)
+        } label: {
+            HStack(spacing: 6) {
+                if usesThis {
+                    ChipView(unit: .type(other), atlas: atlas)
+                    Text(Wording.words(roles) + " it").foregroundStyle(.secondary)
+                } else {
+                    Text(Wording.words(roles)).foregroundStyle(.secondary)
+                    ChipView(unit: .type(other), atlas: atlas)
+                }
+            }
+            .font(.callout)
+            .padding(.vertical, 4)
+        }
+    }
+}
+
+/// Why a previewed type is in the focus: each drawn dependency that brings it there, with what the
+/// declarations it runs through say about it.
+struct WhyHereView: View {
+    /// The arranged interface the reasons and names come from.
+    var atlas: Atlas
+    /// The drawn dependencies, each as the dependent and the type it depends on.
+    var links: [(from: String, to: String)]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            EyebrowView(text: "Why it's here")
+            ForEach(Array(links.enumerated()), id: \.offset) { _, link in
+                let reasons = atlas.reasons(from: link.from, to: link.to)
+                let roles = Mention.Role.allCases.filter { role in reasons.contains { $0.roles.contains(role) } }
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("\(atlas.label(of: .type(link.from))) \(Wording.words(roles)) \(atlas.label(of: .type(link.to)))")
+                        .font(.system(.callout, design: .monospaced).weight(.semibold))
+                    ForEach(Array(reasons.enumerated()), id: \.offset) { _, reason in ReasonView(reason: reason) }
+                }
+            }
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: 8).fill(Palette.panel))
+        .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Palette.line))
+    }
+}
+
+/// One declaration a dependency runs through, and what its doc says: the entry for each parameter that
+/// takes the type and for the return or thrown error, then the summary.
+struct ReasonView: View {
+    @Environment(Workspace.self) private var workspace
+    /// The declaration and the doc text that answers for the dependency.
+    var reason: Reason
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Text(reason.name).font(.system(.callout, design: .monospaced).weight(.medium))
+                Text(Wording.words(reason.roles)).font(.caption).foregroundStyle(.secondary)
+                Button { workspace.reveal(reason.file, line: reason.line) } label: {
+                    Image(systemName: "arrow.up.forward.app").font(.caption)
+                }
+                .buttonStyle(.link)
+                .help("Open \(reason.file):\(reason.line) in Xcode")
+            }
+            ForEach(Array(reason.entries.enumerated()), id: \.offset) { _, entry in
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    Text(entry.parameter ?? (entry.role == .returns ? "Returns" : "Throws"))
+                        .font(entry.parameter == nil ? .caption.weight(.semibold) : .system(.caption, design: .monospaced))
+                        .foregroundStyle(.secondary)
+                    DocTextView(text: entry.text ?? "Undocumented.").font(.callout)
+                        .foregroundStyle(entry.text == nil ? Palette.danger : .primary)
+                }
+            }
+            if let summary = reason.summary {
+                DocTextView(text: summary).font(.callout)
+                    .foregroundStyle(reason.entries.contains { $0.text != nil } ? .secondary : .primary)
+            } else if reason.entries.isEmpty {
+                Text("Undocumented.").font(.callout).foregroundStyle(.secondary)
+            }
         }
     }
 }

@@ -28,7 +28,8 @@ struct DetailPaneView: View {
                     .padding(.vertical, 8)
                     .background(.bar)
                     Divider()
-                    DetailPageView(target: preview, why: workspace.previewLinks)
+                    let why = workspace.previewTrails
+                    DetailPageView(target: preview, trails: why.trails, more: why.more)
                 }
                 .id(preview)
             }
@@ -43,15 +44,19 @@ struct DetailPageView: View {
     /// What the page shows, the selection or the preview laid over it; a type the atlas no longer holds
     /// leaves the page empty.
     var target: Workspace.Selection
-    /// The drawn dependencies that bring a previewed type into the focus, answered above its page; empty
-    /// shows the page alone.
-    var why: [(from: String, to: String)] = []
+    /// The trails that bring a previewed type into the focus, answered above its page; empty shows the
+    /// page alone.
+    var trails: [[GraphLayout.Link]] = []
+    /// How many more trails the type has than are given.
+    var more = 0
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
                 if let atlas = workspace.atlas {
-                    if !why.isEmpty { WhyHereView(atlas: atlas, links: why) }
+                    if case .type = target, !trails.isEmpty {
+                        WhyHereView(atlas: atlas, trails: trails, more: more, root: workspace.anchorID)
+                    }
                     switch target {
                     case .overview: OverviewView(atlas: atlas)
                     case .modules: ModulesView(atlas: atlas)
@@ -333,32 +338,33 @@ struct WhyRowView: View {
     }
 }
 
-/// Why a previewed type is in the focus: each drawn dependency that brings it there, with what the
-/// declarations it runs through say about it.
+/// Why a previewed type is in the focus: each trail of drawn dependencies that leads from it back to the
+/// root, read top to bottom as the map draws it, every step open on its reasons so the chain reads whole.
 struct WhyHereView: View {
     /// The arranged interface the reasons and names come from.
     var atlas: Atlas
-    /// The drawn dependencies, each as the dependent and the type it depends on.
-    var links: [(from: String, to: String)]
+    /// The trails, each a run of drawn dependencies from ``GlossMap/Reach/trails(to:limit:)``.
+    var trails: [[GraphLayout.Link]]
+    /// How many more trails the type has than are shown.
+    var more: Int
+    /// The id of the type the focus grows from, which the leftover count names.
+    var root: String?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
+        VStack(alignment: .leading, spacing: 12) {
             EyebrowView(text: "Why it's here")
-            ForEach(Array(links.enumerated()), id: \.offset) { index, link in
-                let reasons = atlas.reasons(from: link.from, to: link.to)
-                let roles = Mention.Role.allCases.filter { role in reasons.contains { $0.roles.contains(role) } }
+            ForEach(Array(trails.enumerated()), id: \.offset) { index, trail in
                 if index > 0 { Divider() }
-                VStack(alignment: .leading, spacing: 10) {
-                    Text(sentence(link, roles: roles))
-                    // The reasons are the dependent's declarations, so its module's color marks them.
-                    VStack(alignment: .leading, spacing: 12) {
-                        ForEach(Array(reasons.enumerated()), id: \.offset) { _, reason in ReasonView(reason: reason) }
-                    }
-                    .padding(.leading, 10)
-                    .overlay(alignment: .leading) {
-                        Rectangle().fill(ink(link.from).opacity(0.7)).frame(width: 2)
+                VStack(alignment: .leading, spacing: 6) {
+                    ForEach(Array(trail.enumerated()), id: \.offset) { _, hop in
+                        HopView(atlas: atlas, hop: hop)
                     }
                 }
+            }
+            if more > 0 {
+                Text("\(more) more way\(more == 1 ? "" : "s") back to \(root.map { atlas.label(of: .type($0)) } ?? "the root")")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
         }
         .padding(12)
@@ -366,15 +372,43 @@ struct WhyHereView: View {
         .background(RoundedRectangle(cornerRadius: 8).fill(Palette.panel))
         .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Palette.line))
     }
+}
+
+/// One step of a trail: the dependency as a sentence, open on what the declarations it runs through
+/// say about it, and folding away when the reader closes it.
+struct HopView: View {
+    /// The arranged interface the reasons and names come from.
+    var atlas: Atlas
+    /// The drawn dependency.
+    var hop: GraphLayout.Link
+    @State private var isOpen = true
+
+    var body: some View {
+        let reasons = atlas.reasons(from: hop.from, to: hop.to)
+        let roles = Mention.Role.allCases.filter { role in reasons.contains { $0.roles.contains(role) } }
+        DisclosureGroup(isExpanded: $isOpen) {
+            // The reasons are the dependent's declarations, so its module's color marks them.
+            VStack(alignment: .leading, spacing: 12) {
+                ForEach(Array(reasons.enumerated()), id: \.offset) { _, reason in ReasonView(reason: reason) }
+            }
+            .padding(.leading, 10)
+            .overlay(alignment: .leading) {
+                Rectangle().fill(ink(hop.from).opacity(0.7)).frame(width: 2)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.top, 4)
+            .padding(.bottom, 6)
+        } label: {
+            Text(sentence(roles: roles))
+        }
+    }
 
     /// The dependency as a sentence: each type named in code in its module's color, the verb between
     /// them quieter.
     ///
-    /// - Parameters:
-    ///   - link: The dependent and the type it depends on.
-    ///   - roles: How the dependent mentions the other.
+    /// - Parameter roles: How the dependent mentions the other.
     /// - Returns: `Workspace holds Atlas`, styled.
-    private func sentence(_ link: (from: String, to: String), roles: [Mention.Role]) -> AttributedString {
+    private func sentence(roles: [Mention.Role]) -> AttributedString {
         func name(_ id: String) -> AttributedString {
             var text = AttributedString(atlas.label(of: .type(id)))
             text.font = .system(.callout, design: .monospaced).weight(.semibold)
@@ -384,7 +418,7 @@ struct WhyHereView: View {
         var verb = AttributedString(" \(Wording.words(roles)) ")
         verb.font = .callout
         verb.foregroundColor = .secondary
-        return name(link.from) + verb + name(link.to)
+        return name(hop.from) + verb + name(hop.to)
     }
 
     /// The color a type's module is drawn in on the map.
@@ -406,20 +440,32 @@ struct ReasonView: View {
 
     var body: some View {
         let inSignature = reason.roles != [.body]
+        let declaration = Text(Self.declaration(reason)).font(.system(.callout, design: .monospaced))
+        let marks = HStack(alignment: .firstTextBaseline, spacing: 8) {
+            Text(Wording.words(reason.roles))
+                .font(.caption.weight(.medium))
+                .foregroundStyle(inSignature ? Palette.accent : .secondary)
+                .padding(.horizontal, 6)
+                .padding(.vertical, 1)
+                .background(Capsule().fill(inSignature ? Palette.accentSoft : Palette.surface))
+            Button { workspace.reveal(reason.file, line: reason.line) } label: {
+                Image(systemName: "arrow.up.forward.app").font(.caption)
+            }
+            .buttonStyle(.link)
+            .help("Open \(reason.file):\(reason.line) in Xcode")
+        }
         VStack(alignment: .leading, spacing: 4) {
-            HStack(alignment: .firstTextBaseline, spacing: 8) {
-                Text(Self.declaration(reason)).font(.system(.callout, design: .monospaced))
-                Text(Wording.words(reason.roles))
-                    .font(.caption.weight(.medium))
-                    .foregroundStyle(inSignature ? Palette.accent : .secondary)
-                    .padding(.horizontal, 6)
-                    .padding(.vertical, 1)
-                    .background(Capsule().fill(inSignature ? Palette.accentSoft : Palette.surface))
-                Button { workspace.reveal(reason.file, line: reason.line) } label: {
-                    Image(systemName: "arrow.up.forward.app").font(.caption)
+            // A long declaration takes the whole line and its marks go under it, rather than breaking
+            // the name beside them.
+            ViewThatFits(in: .horizontal) {
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    declaration.fixedSize()
+                    marks
                 }
-                .buttonStyle(.link)
-                .help("Open \(reason.file):\(reason.line) in Xcode")
+                VStack(alignment: .leading, spacing: 4) {
+                    declaration.fixedSize(horizontal: false, vertical: true)
+                    marks
+                }
             }
             ForEach(Array(reason.entries.enumerated()), id: \.offset) { _, entry in
                 HStack(alignment: .firstTextBaseline, spacing: 8) {

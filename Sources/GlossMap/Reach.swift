@@ -28,8 +28,41 @@ public struct Reach: Sendable {
     /// Types one step from the root left out because even that step is over the budget; empty when the
     /// first step fits.
     public var overflow: [String]
+    /// Each drawn type's drawn neighbors one step closer to the root, in graph order; the root has none.
+    public var parents: [String: [String]] = [:]
+    /// The drawn types above the root, which use it, as against those below, which it depends on.
+    public var aboveIDs: Set<String> = []
     /// How many types are drawn besides the root.
     public var drawn: Int { above + below }
+
+    /// The ways a drawn type leads back to the root, each a run of drawn dependencies read top to bottom
+    /// as the map draws them: from the root down to a type below it, and from a type above down to the
+    /// root.
+    ///
+    /// - Parameters:
+    ///   - id: A drawn type.
+    ///   - limit: The most trails to give, one per neighbor a step closer to the root.
+    /// - Returns: One trail per such neighbor, in graph order, each followed on through the first
+    ///   neighbor closer still; and how many neighbors were left out. No trails for the root or for a
+    ///   type not drawn.
+    ///
+    /// A type a step from the root has one trail, its dependency with the root. Past that, a type
+    /// reached from several types gets a trail through each, but each trail climbs on by one way only,
+    /// so the trails stay as many as the type's own neighbors however the steps above them branch.
+    public func trails(to id: String, limit: Int = 3) -> (trails: [[GraphLayout.Link]], more: Int) {
+        let direct = parents[id] ?? []
+        let isAbove = aboveIDs.contains(id)
+        func link(_ from: String, _ to: String) -> GraphLayout.Link? {
+            layout.curves.first { $0.link.from == from && $0.link.to == to }?.link
+        }
+        let trails = direct.prefix(limit).map { parent -> [GraphLayout.Link] in
+            var chain = [id, parent]
+            while let next = parents[chain[chain.count - 1]]?.first, !chain.contains(next) { chain.append(next) }
+            let hops = zip(chain, chain.dropFirst()).compactMap { near, far in isAbove ? link(near, far) : link(far, near) }
+            return isAbove ? hops : hops.reversed()
+        }
+        return (trails, max(direct.count - limit, 0))
+    }
 }
 
 extension Atlas {
@@ -144,16 +177,24 @@ extension Atlas {
         }
         // Only the edges from one step to the next, which show how each type leads back to the root;
         // the others between drawn types are real but would bury that.
+        var parents: [String: [String]] = [:]
         let links = edges.filter { link in
             guard drawnSet.contains(link.from), drawnSet.contains(link.to) else { return false }
-            if let from = belowStep[link.from], belowStep[link.to] == from + 1 { return true }
-            if let to = aboveStep[link.to], aboveStep[link.from] == to + 1 { return true }
+            if let from = belowStep[link.from], belowStep[link.to] == from + 1 {
+                parents[link.to, default: []].append(link.from)
+                return true
+            }
+            if let to = aboveStep[link.to], aboveStep[link.from] == to + 1 {
+                parents[link.from, default: []].append(link.to)
+                return true
+            }
             return false
         }.map { link in
             GraphLayout.Link(from: link.from, to: link.to, dashed: link.roles == [.body],
                              title: "\(label(of: .type(link.from))) \(Wording.words(link.roles)) \(label(of: .type(link.to)))")
         }
         return Reach(layout: GraphLayout.layered(items, links, emphasis: root.module, splitAt: root.id), depth: drawnDepth, totalDepth: totalDepth,
-                     above: drawnAbove.count, below: drawnBelow.count, total: total, overflow: overflow)
+                     above: drawnAbove.count, below: drawnBelow.count, total: total, overflow: overflow,
+                     parents: parents, aboveIDs: Set(drawnAbove))
     }
 }

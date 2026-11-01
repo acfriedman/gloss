@@ -476,6 +476,30 @@ final class InterfaceTests: XCTestCase {
         XCTAssertTrue(atlas.reasons(from: "Shop/Cart", to: "Shop/Store").isEmpty)
     }
 
+    func testTrailsLeadBackToTheRootTopToBottom() throws {
+        let atlas = Atlas(Interface.build(sources: [("Sources/Shop/Types.swift", """
+        struct Root { var a: A; var b: B }
+        struct A { var c: C }
+        struct B { var c: C }
+        struct C { var d: D }
+        struct D {}
+        struct X { var y: Y }
+        struct Y { var root: Root }
+        """)]))
+        func hops(_ trail: [GraphLayout.Link]) -> [String] { trail.map { "\($0.from)>\($0.to)" } }
+        let down = try XCTUnwrap(atlas.reach(from: "Shop/Root", toward: .dependencies, depth: 3, minimumRank: 0))
+        let toD = down.trails(to: "Shop/D")
+        XCTAssertEqual(toD.trails.map(hops), [["Shop/Root>Shop/A", "Shop/A>Shop/C", "Shop/C>Shop/D"]],
+                       "Below the root, a trail reads from the root down, climbing by the first way only.")
+        let toC = down.trails(to: "Shop/C", limit: 1)
+        XCTAssertEqual(toC.trails.count, 1)
+        XCTAssertEqual(toC.more, 1, "A type reached from two types has two trails; the cap counts the rest.")
+        XCTAssertTrue(down.trails(to: "Shop/Root").trails.isEmpty)
+        let up = try XCTUnwrap(atlas.reach(from: "Shop/Root", toward: .users, depth: 2, minimumRank: 0))
+        XCTAssertEqual(up.trails(to: "Shop/X").trails.map(hops), [["Shop/X>Shop/Y", "Shop/Y>Shop/Root"]],
+                       "Above the root, a trail reads from the type down to the root, as the map draws it.")
+    }
+
     func testReachStartsAtANestedTypeItself() throws {
         let atlas = Atlas(Interface.build(sources: [("Sources/Map/Layout.swift", """
         struct Layout { var boxes: [Box]; struct Box { var item: Item }; struct Item { var unit: Unit } }

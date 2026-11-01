@@ -41,6 +41,9 @@ final class Workspace {
         var overflow: [MapScope.Unit] = []
         /// In a reach, the steps drawn and the steps there are in all, for the depth stepper; `nil` otherwise.
         var depth: (drawn: Int, total: Int)?
+        /// The reach the focus draws, which says how each drawn type leads back to the root; `nil` at the
+        /// other levels.
+        var reach: Reach?
     }
 
     /// What the focus draws around the selected type.
@@ -510,11 +513,11 @@ final class Workspace {
         }
     }
 
-    /// The drawn dependencies that bring a previewed type into the focus, each as the dependent and the
-    /// type it depends on; empty outside the focus or with no type previewed.
-    var previewLinks: [(from: String, to: String)] {
-        guard scopeID == Self.focus, case .type(let id)? = preview else { return [] }
-        return drawing.layout.curves.map(\.link).filter { $0.from == id || $0.to == id }.map { ($0.from, $0.to) }
+    /// The trails that bring a previewed type into the focus, as ``GlossMap/Reach/trails(to:limit:)``
+    /// gives them; none outside the focus or with no type previewed.
+    var previewTrails: (trails: [[GraphLayout.Link]], more: Int) {
+        guard scopeID == Self.focus, case .type(let id)? = preview, let reach = drawing.reach else { return ([], 0) }
+        return reach.trails(to: id)
     }
 
     /// The box the focus grows from, drawn as the current one without dimming the rest; `nil` outside it.
@@ -544,7 +547,7 @@ final class Workspace {
                               crumbs: [(from?.id ?? "", from?.label ?? "Map"), (Self.focus, "\(atlas.label(node)) and \(what)")],
                               caption: "Depth \(reach.depth) of \(reach.totalDepth) · \(counted) of \(reach.total) types" + cut,
                               overflow: reach.overflow.map { .type($0) },
-                              depth: (reach.depth, reach.totalDepth))
+                              depth: (reach.depth, reach.totalDepth), reach: reach)
             return
         }
         guard let scope = scopes.first(where: { $0.id == scopeID }) ?? scopes.first else {

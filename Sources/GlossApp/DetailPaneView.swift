@@ -344,13 +344,20 @@ struct WhyHereView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             EyebrowView(text: "Why it's here")
-            ForEach(Array(links.enumerated()), id: \.offset) { _, link in
+            ForEach(Array(links.enumerated()), id: \.offset) { index, link in
                 let reasons = atlas.reasons(from: link.from, to: link.to)
                 let roles = Mention.Role.allCases.filter { role in reasons.contains { $0.roles.contains(role) } }
+                if index > 0 { Divider() }
                 VStack(alignment: .leading, spacing: 10) {
-                    Text("\(atlas.label(of: .type(link.from))) \(Wording.words(roles)) \(atlas.label(of: .type(link.to)))")
-                        .font(.system(.callout, design: .monospaced).weight(.semibold))
-                    ForEach(Array(reasons.enumerated()), id: \.offset) { _, reason in ReasonView(reason: reason) }
+                    Text(sentence(link, roles: roles))
+                    // The reasons are the dependent's declarations, so its module's color marks them.
+                    VStack(alignment: .leading, spacing: 12) {
+                        ForEach(Array(reasons.enumerated()), id: \.offset) { _, reason in ReasonView(reason: reason) }
+                    }
+                    .padding(.leading, 10)
+                    .overlay(alignment: .leading) {
+                        Rectangle().fill(ink(link.from).opacity(0.7)).frame(width: 2)
+                    }
                 }
             }
         }
@@ -358,6 +365,35 @@ struct WhyHereView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(RoundedRectangle(cornerRadius: 8).fill(Palette.panel))
         .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Palette.line))
+    }
+
+    /// The dependency as a sentence: each type named in code in its module's color, the verb between
+    /// them quieter.
+    ///
+    /// - Parameters:
+    ///   - link: The dependent and the type it depends on.
+    ///   - roles: How the dependent mentions the other.
+    /// - Returns: `Workspace holds Atlas`, styled.
+    private func sentence(_ link: (from: String, to: String), roles: [Mention.Role]) -> AttributedString {
+        func name(_ id: String) -> AttributedString {
+            var text = AttributedString(atlas.label(of: .type(id)))
+            text.font = .system(.callout, design: .monospaced).weight(.semibold)
+            text.foregroundColor = ink(id)
+            return text
+        }
+        var verb = AttributedString(" \(Wording.words(roles)) ")
+        verb.font = .callout
+        verb.foregroundColor = .secondary
+        return name(link.from) + verb + name(link.to)
+    }
+
+    /// The color a type's module is drawn in on the map.
+    ///
+    /// - Parameter id: A node id.
+    /// - Returns: The module's ink, or the secondary color for a node the atlas does not hold.
+    private func ink(_ id: String) -> Color {
+        guard let module = atlas.byID[id]?.module, let slot = atlas.moduleColors[module] else { return .secondary }
+        return Palette.moduleInk(slot)
     }
 }
 
@@ -369,10 +405,16 @@ struct ReasonView: View {
     var reason: Reason
 
     var body: some View {
+        let inSignature = reason.roles != [.body]
         VStack(alignment: .leading, spacing: 4) {
             HStack(alignment: .firstTextBaseline, spacing: 8) {
-                Text(reason.name).font(.system(.callout, design: .monospaced).weight(.medium))
-                Text(Wording.words(reason.roles)).font(.caption).foregroundStyle(.secondary)
+                Text(Self.declaration(reason)).font(.system(.callout, design: .monospaced))
+                Text(Wording.words(reason.roles))
+                    .font(.caption.weight(.medium))
+                    .foregroundStyle(inSignature ? Palette.accent : .secondary)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 1)
+                    .background(Capsule().fill(inSignature ? Palette.accentSoft : Palette.surface))
                 Button { workspace.reveal(reason.file, line: reason.line) } label: {
                     Image(systemName: "arrow.up.forward.app").font(.caption)
                 }
@@ -384,17 +426,37 @@ struct ReasonView: View {
                     Text(entry.parameter ?? (entry.role == .returns ? "Returns" : "Throws"))
                         .font(entry.parameter == nil ? .caption.weight(.semibold) : .system(.caption, design: .monospaced))
                         .foregroundStyle(.secondary)
-                    DocTextView(text: entry.text ?? "Undocumented.").font(.callout)
+                    DocTextView(text: entry.text ?? "Undocumented.", codeColor: Self.code).font(.callout)
                         .foregroundStyle(entry.text == nil ? Palette.danger : .primary)
                 }
             }
             if let summary = reason.summary {
-                DocTextView(text: summary).font(.callout)
+                DocTextView(text: summary, codeColor: Self.code).font(.callout)
                     .foregroundStyle(reason.entries.contains { $0.text != nil } ? .secondary : .primary)
             } else if reason.entries.isEmpty {
                 Text("Undocumented.").font(.callout).foregroundStyle(.secondary)
             }
         }
+    }
+
+    /// The color of code spans in the doc text, the color code gives the scanned sources' own types.
+    private static let code = CodeView.color(.projectType)
+
+    /// The declaration as code: its keyword, its name in the color of a declared name, and a callable's
+    /// argument labels quieter.
+    ///
+    /// - Parameter reason: The reason whose declaration to show.
+    /// - Returns: `func add(_:to:)` and the like, styled.
+    static func declaration(_ reason: Reason) -> AttributedString {
+        var keyword = AttributedString(reason.keyword + " ")
+        keyword.foregroundColor = CodeView.color(.keyword)
+        keyword.inlinePresentationIntent = .stronglyEmphasized
+        let open = reason.name.firstIndex(of: "(") ?? reason.name.endIndex
+        var name = AttributedString(String(reason.name[..<open]))
+        name.foregroundColor = CodeView.color(.declaration)
+        var labels = AttributedString(String(reason.name[open...]))
+        labels.foregroundColor = .secondary
+        return keyword + name + labels
     }
 }
 
@@ -525,10 +587,18 @@ struct EyebrowView: View {
 struct DocTextView: View {
     /// Doc text as written, with its inline Markdown rendered; text that does not parse shows as written.
     var text: String
+    /// The color of the code spans, or `nil` to draw them in the text's own color.
+    var codeColor: Color?
 
     var body: some View {
         let options = AttributedString.MarkdownParsingOptions(interpretedSyntax: .inlineOnlyPreservingWhitespace)
-        Text((try? AttributedString(markdown: text, options: options)) ?? AttributedString(text))
+        var attributed = (try? AttributedString(markdown: text, options: options)) ?? AttributedString(text)
+        if let codeColor {
+            for run in attributed.runs where run.inlinePresentationIntent?.contains(.code) == true {
+                attributed[run.range].foregroundColor = codeColor
+            }
+        }
+        return Text(attributed)
             .fixedSize(horizontal: false, vertical: true)
     }
 }

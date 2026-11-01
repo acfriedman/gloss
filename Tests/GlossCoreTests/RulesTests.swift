@@ -143,6 +143,8 @@ final class RulesTests: XCTestCase {
         struct Cart {
             /// The sum of its lines.
             var total: Int
+            /// Whether the cart is kept for later.
+            var `default`: Bool
             /// Adds a line; ``total`` grows by it.
             ///
             /// - Parameter line: The amount.
@@ -154,6 +156,7 @@ final class RulesTests: XCTestCase {
         }
         XCTAssertEqual(rules("/// Reads ``Cart/total``, ``Cart/add(_:)``, ``Shop/Cart``, ``String``, and ``Swift/Array``.\nstruct Report {}"), [])
         XCTAssertEqual(rules("/// Reads ``Cart/count``.\nstruct Report {}"), [.deadLink])
+        XCTAssertEqual(rules("/// Reads ``Cart/default``.\nstruct Report {}"), [], "A keyword-named member is linked without backticks.")
         XCTAssertEqual(rules("/// Reads ``Cart/hashValue``, which a conformance supplies.\nstruct Report {}"), [])
         XCTAssertEqual(rules("/// Calls ``Cart/add(_:)-7tndx`` and reads ``Cart/total-swift.property``.\nstruct Report {}"), [],
                        "DocC's disambiguation suffixes tell overloads apart; they are not part of the name.")

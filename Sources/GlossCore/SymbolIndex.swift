@@ -1,3 +1,5 @@
+import Foundation
+
 /// The symbols the scanned sources declare, as a DocC link names them, so a link written in one file
 /// can be checked against every file.
 public struct SymbolIndex: Sendable {
@@ -17,13 +19,15 @@ public struct SymbolIndex: Sendable {
         for (file, entries) in readings {
             modules.insert(Interface.module(of: file))
             for entry in entries where entry.declaration.kind != .other {
-                let container = entry.details.container
-                let path = (container + [entry.declaration.name]).joined(separator: "/")
-                paths.insert(path)
+                // A link names a keyword-named declaration, such as ``Role/throws``, without its backticks.
+                func path(_ last: String) -> String {
+                    (entry.details.container + [last]).joined(separator: "/").replacingOccurrences(of: "`", with: "")
+                }
+                paths.insert(path(entry.declaration.name))
                 if entry.declaration.parameters == nil {
-                    bare.insert(path)
+                    bare.insert(path(entry.declaration.name))
                 } else {
-                    paths.insert((container + [entry.declaration.signature]).joined(separator: "/"))
+                    paths.insert(path(entry.declaration.signature))
                 }
             }
         }

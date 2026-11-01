@@ -177,15 +177,17 @@ public struct GraphLayout: Sendable, Equatable {
     ///   - links: The edges; a link naming an unknown item or its own source is dropped.
     ///   - emphasis: The group whose lane holds what the figure is about, drawn a little warmer.
     ///   - splitAt: The id of the item the figure grows from, such as a focused type; when lanes are
-    ///     drawn, the rows above it, its own row, and the rows below it each get lanes of their own.
+    ///     drawn, its rows are split into bands with lanes of their own wherever that saves width.
     /// - Returns: The placed figure.
     ///
     /// Cycles are broken by reversing the back edges of a depth-first search, layers come from the
     /// longest path from a source, and order within a layer from repeated barycenter sweeps. When every
     /// item has a group and there are two or more, each group keeps to a lane of its own on every row,
     /// lanes in the order the sweeps placed their boxes on average, and an edge's placeholders run down
-    /// its source's lane. Split at an item, the figure is three bands stacked and centered, each laid
-    /// out in lanes for only the groups it holds, so a group on both sides gets a container on each.
+    /// its source's lane. Split at an item, the figure is bands of rows stacked and centered, each laid
+    /// out in lanes for only the groups it holds, so a group on both sides of the item can get a
+    /// container on each. Splitting only stays where it saves width: two neighboring bands merge when
+    /// one's groups are all among the other's and the merged band is no wider than the widest band.
     public static func layered(_ items: [Item], _ links: [Link], emphasis: String? = nil,
                                splitAt: String? = nil) -> GraphLayout {
         let count = items.count
@@ -289,12 +291,11 @@ public struct GraphLayout: Sendable, Equatable {
                 case .dummy(let edge, _): items[flow[edge].low].group ?? ""
                 }
             }
-            var bands = [0..<layerCount]
-            if let splitAt, let index = position[splitAt] {
-                let middle = layer[index]
-                bands = [0..<middle, middle..<middle + 1, middle + 1..<layerCount].filter { !$0.isEmpty }
-            }
-            return lanes(items, slots: slots, bands: bands, chains: chains, edges: edges.map(\.link),
+            // Split at an item, every row starts as a band of its own and merges back where splitting buys
+            // nothing; otherwise the figure is one band.
+            let split = splitAt.flatMap { position[$0] } != nil
+            let bands = split ? (0..<layerCount).map { $0..<$0 + 1 } : [0..<layerCount]
+            return lanes(items, slots: slots, bands: bands, merging: split, chains: chains, edges: edges.map(\.link),
                          reversed: flow.map(\.reversed), groupOf: groupOf, emphasis: emphasis)
         }
 
@@ -362,14 +363,15 @@ public struct GraphLayout: Sendable, Equatable {
     ///   - items: The nodes.
     ///   - slots: Each layer's slots, nodes and edge placeholders, in swept order.
     ///   - bands: Consecutive runs of layers that each get lanes of their own, top to bottom.
+    ///   - merging: `true` to merge neighboring bands where splitting them buys no width.
     ///   - chains: Each edge's slots from its upper end to its lower end.
     ///   - edges: Each edge's link, at the same index as its chain.
     ///   - reversed: Whether each edge is drawn against the flow, at the same index.
     ///   - groupOf: The lane each slot belongs in.
     ///   - emphasis: The group whose lanes are drawn a little warmer.
     /// - Returns: The placed figure with its lanes.
-    private static func lanes(_ items: [Item], slots: [[Slot]], bands: [Range<Int>], chains: [[Slot]], edges: [Link],
-                              reversed: [Bool], groupOf: (Slot) -> String, emphasis: String?) -> GraphLayout {
+    private static func lanes(_ items: [Item], slots: [[Slot]], bands: [Range<Int>], merging: Bool, chains: [[Slot]],
+                              edges: [Link], reversed: [Bool], groupOf: (Slot) -> String, emphasis: String?) -> GraphLayout {
         let dummyWidth = 8.0
         let slotGap = 18.0
         let layerGap = 54.0
@@ -394,8 +396,7 @@ public struct GraphLayout: Sendable, Equatable {
             var laneX: [String: Double] = [:]
             var width = 0.0
         }
-        var planned: [Band] = []
-        for range in bands {
+        func plan(_ range: Range<Int>) -> Band {
             var band = Band()
             // Lanes go in the order the sweeps placed their slots on average, which keeps crossings low.
             var positions: [String: [Double]] = [:]
@@ -432,9 +433,30 @@ public struct GraphLayout: Sendable, Equatable {
                 x += padding + (band.laneWidth[lane] ?? 0) + padding + laneGap
             }
             band.width = max(x - laneGap, 0)
-            planned.append(band)
+            return band
         }
+
+        // Merging two neighboring bands is free when it adds no lane, one's groups all being among the
+        // other's, and the merged band is no wider than the widest; the narrowest free merge goes first.
+        var ranges = bands
+        var planned = ranges.map(plan)
         let widest = planned.map(\.width).max() ?? 0
+        while merging {
+            var best: (index: Int, band: Band)?
+            for index in ranges.indices.dropLast() {
+                let upper = Set(planned[index].order)
+                let lower = Set(planned[index + 1].order)
+                guard upper.isSubset(of: lower) || lower.isSubset(of: upper) else { continue }
+                let merged = plan(ranges[index].lowerBound..<ranges[index + 1].upperBound)
+                guard merged.width <= widest, merged.width < best?.band.width ?? .infinity else { continue }
+                best = (index, merged)
+            }
+            guard let best else { break }
+            ranges[best.index] = ranges[best.index].lowerBound..<ranges[best.index + 1].upperBound
+            ranges.remove(at: best.index + 1)
+            planned[best.index] = best.band
+            planned.remove(at: best.index + 1)
+        }
 
         var layout = GraphLayout()
         var anchors: [Slot: Anchor] = [:]

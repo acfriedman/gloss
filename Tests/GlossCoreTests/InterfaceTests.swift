@@ -381,6 +381,23 @@ final class InterfaceTests: XCTestCase {
         XCTAssertLessThan(atlas?.y ?? 0, store?.y ?? 0)
     }
 
+    func testSplitBandsMergeWhereSplittingSavesNothing() {
+        func item(_ id: String, _ group: String) -> GraphLayout.Item {
+            GraphLayout.Item(unit: .type(id), label: id, detail: "struct", group: group)
+        }
+        func link(_ from: String, _ to: String) -> GraphLayout.Link { GraphLayout.Link(from: from, to: to, dashed: false, title: "") }
+        let ownAbove = GraphLayout.layered(
+            [item("Focus", "Map"), item("Atlas", "Map"), item("Graph", "Core"), item("Layout", "Map")],
+            [link("Focus", "Atlas"), link("Atlas", "Graph"), link("Atlas", "Layout")], emphasis: "Map", splitAt: "Atlas")
+        XCTAssertEqual(ownAbove.lanes.filter { $0.name == "Map" }.count, 1,
+                       "Only the root's own module above: no second container for it.")
+        let steps = GraphLayout.layered(
+            [item("App", "UI"), item("Store", "UI"), item("Ledger", "Core"), item("Entry", "Core")],
+            [link("App", "Store"), link("Store", "Ledger"), link("Ledger", "Entry")], emphasis: "UI", splitAt: "App")
+        XCTAssertEqual(steps.lanes.map(\.name), ["UI", "Core"], "Rows of one module merge; a new module starts a band.")
+        XCTAssertLessThan(steps.lanes[0].y + steps.lanes[0].height, steps.lanes[1].y, "The bands stack, not sit side by side.")
+    }
+
     func testReachStartsAtANestedTypeItself() throws {
         let atlas = Atlas(Interface.build(sources: [("Sources/Map/Layout.swift", """
         struct Layout { var boxes: [Box]; struct Box { var item: Item }; struct Item { var unit: Unit } }

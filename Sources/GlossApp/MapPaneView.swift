@@ -47,7 +47,7 @@ struct MapPaneView: View {
                         Text("All below").tag(Workspace.FocusMode.below)
                         Text("All above").tag(Workspace.FocusMode.above)
                     }
-                    .pickerStyle(.segmented)
+                    .pickerStyle(.menu)
                     .labelsHidden()
                     .fixedSize()
                     .help("Neighbors: one step each way. All below: everything it depends on. All above: everything that uses it.")

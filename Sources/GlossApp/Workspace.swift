@@ -45,12 +45,22 @@ final class Workspace {
 
     /// What the focus draws around the selected type.
     enum FocusMode: Hashable, CaseIterable {
-        /// What uses the type, above, and what it depends on, below: one step each way.
+        /// What uses the type above it and what it depends on below it, one step each way unless the
+        /// depth stepper goes further.
         case neighbors
         /// Everything the type depends on, step by step, below it.
         case below
         /// Everything that uses the type, step by step, above it.
         case above
+
+        /// The way the mode's reach follows dependencies.
+        var direction: ReachDirection {
+            switch self {
+            case .neighbors: .both
+            case .below: .dependencies
+            case .above: .users
+            }
+        }
     }
 
     /// The level id of the selected type's focus, beside the atlas's own levels.
@@ -63,8 +73,8 @@ final class Workspace {
             redraw()
         }
     }
-    /// The steps a reach draws, chosen with the depth stepper; `nil` draws as many whole steps as fit
-    /// ``GlossMap/Atlas/mapBudget``.
+    /// The steps a reach draws, chosen with the depth stepper; `nil` draws 1 for Neighbors, and as many
+    /// whole steps as fit ``GlossMap/Atlas/mapBudget`` for the others.
     var reachDepth: Int? { didSet { redraw() } }
 
     /// The open folder, or `nil` before one is opened; file paths in the interface are relative to it.
@@ -420,15 +430,14 @@ final class Workspace {
         case .folder(let module, let folder): return MapScope.Unit.folder(module, folder).id
         case .type(let id):
             guard scopeID == Self.focus else { return atlas?.byID[id]?.root }
-            if focusMode == .neighbors { return id }
-            // A reach is about the whole tree, so the root is marked, not lit; a previewed box still lights.
+            // A focus is about the whole reach, so its root is marked, not lit; a previewed box still lights.
             return preview == nil ? nil : id
         }
     }
 
-    /// The box a reach grows from, drawn as the current one without dimming the rest; `nil` outside a reach.
+    /// The box the focus grows from, drawn as the current one without dimming the rest; `nil` outside it.
     var anchorID: String? {
-        guard scopeID == Self.focus, focusMode != .neighbors, case .type(let id) = selection else { return nil }
+        guard scopeID == Self.focus, case .type(let id) = selection else { return nil }
         return id
     }
 
@@ -437,30 +446,23 @@ final class Workspace {
             drawing = Drawing()
             return
         }
-        if scopeID == Self.focus, focusMode != .neighbors, case .type(let id) = selection, let node = atlas.byID[id],
-           let reach = atlas.reach(from: id, toward: focusMode == .below ? .dependencies : .users,
-                                   depth: reachDepth, minimumRank: minimumRank) {
+        // Every focus is a reach: Neighbors goes both ways from depth 1, and the other two fit the budget.
+        if scopeID == Self.focus, case .type(let id) = selection, let node = atlas.byID[id],
+           let reach = atlas.reach(from: id, toward: focusMode.direction,
+                                   depth: reachDepth ?? (focusMode == .neighbors ? 1 : nil), minimumRank: minimumRank) {
             let from = scopes.first { $0.id == focusFrom } ?? scopes.first
-            let root = atlas.label(node)
-            let what = focusMode == .below ? "all it depends on" : "all that uses it"
+            let what = switch focusMode {
+            case .neighbors: "its neighbors"
+            case .below: "all it depends on"
+            case .above: "all that uses it"
+            }
+            let counted = focusMode == .neighbors ? "\(reach.above) above, \(reach.below) below" : "\(reach.drawn)"
             let cut = reach.drawn < reach.total ? " · dashed boxes continue" : ""
             drawing = Drawing(layout: reach.layout,
-                              crumbs: [(from?.id ?? "", from?.label ?? "Map"), (Self.focus, "\(root) and \(what)")],
-                              caption: "Depth \(reach.depth) of \(reach.totalDepth) · \(reach.drawn) of \(reach.total) types" + cut,
+                              crumbs: [(from?.id ?? "", from?.label ?? "Map"), (Self.focus, "\(atlas.label(node)) and \(what)")],
+                              caption: "Depth \(reach.depth) of \(reach.totalDepth) · \(counted) of \(reach.total) types" + cut,
                               overflow: reach.overflow.map { .type($0) },
                               depth: (reach.depth, reach.totalDepth))
-            return
-        }
-        if scopeID == Self.focus, case .type(let id) = selection, let node = atlas.byID[id],
-           let focus = atlas.focus(on: id, includeBody: true, minimumRank: minimumRank) {
-            let from = scopes.first { $0.id == focusFrom } ?? scopes.first
-            let users = focus.incoming == 0 ? "Nothing uses it"
-                : focus.incoming == 1 ? "1 type uses it" : "\(focus.incoming) types use it"
-            let needs = focus.outgoing == 0 ? "it depends on nothing scanned" : "it depends on \(focus.outgoing)"
-            let hidden = focus.hidden > 0 ? ". \(focus.hidden) more are not drawn; the details list them all." : "."
-            drawing = Drawing(layout: focus.layout,
-                              crumbs: [(from?.id ?? "", from?.label ?? "Map"), (Self.focus, "\(atlas.label(node)) and its neighbors")],
-                              caption: users + "; " + needs + hidden)
             return
         }
         guard let scope = scopes.first(where: { $0.id == scopeID }) ?? scopes.first else {

@@ -271,13 +271,15 @@ final class InterfaceTests: XCTestCase {
         public struct Checkout { public func run(_ cart: Cart) {} }
         """
         let atlas = Atlas(Interface.build(sources: [("Sources/Shop/Cart.swift", source)]))
-        let focus = try XCTUnwrap(atlas.focus(on: "Shop/Cart", includeBody: false, minimumRank: 3))
+        let focus = try XCTUnwrap(atlas.reach(from: "Shop/Cart", toward: .both, depth: 1, minimumRank: 3))
         let y = Dictionary(uniqueKeysWithValues: focus.layout.boxes.map { ($0.item.id, $0.y) })
-        XCTAssertEqual(Set(y.keys), ["Shop/Checkout", "Shop/Cart", "Shop/Line"], "Only direct neighbors are drawn.")
+        XCTAssertEqual(Set(y.keys), ["Shop/Checkout", "Shop/Cart", "Shop/Line"], "At depth 1, only direct neighbors are drawn.")
         XCTAssertLessThan(try XCTUnwrap(y["Shop/Checkout"]), try XCTUnwrap(y["Shop/Cart"]))
         XCTAssertLessThan(try XCTUnwrap(y["Shop/Cart"]), try XCTUnwrap(y["Shop/Line"]))
-        XCTAssertEqual(focus.layout.curves.map(\.link.title), ["Checkout takes Cart", "Cart holds Line"])
-        XCTAssertEqual([focus.incoming, focus.outgoing, focus.hidden], [1, 1, 0])
+        XCTAssertEqual(focus.layout.curves.map(\.link.title).sorted(), ["Cart holds Line", "Checkout takes Cart"])
+        XCTAssertEqual([focus.above, focus.below, focus.overflow.count], [1, 1, 0])
+        let deeper = try XCTUnwrap(atlas.reach(from: "Shop/Cart", toward: .both, depth: 2, minimumRank: 3))
+        XCTAssertTrue(deeper.layout.boxes.contains { $0.item.id == "Shop/Price" }, "Depth 2 reaches both ways a step further.")
     }
 
     func testLevelPathsNameTheWayBackFromTheWidestLevel() {

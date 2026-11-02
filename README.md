@@ -282,4 +282,4 @@ the harness accepts four proxies:
 
 ## License
 
-MIT. See [LICENSE](LICENSE).
+Copyright 2026 Andrew C. Friedman. Licensed under the [Apache License, Version 2.0](LICENSE).

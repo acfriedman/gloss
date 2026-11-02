@@ -65,6 +65,17 @@ public enum Revision {
         try text(git(["merge-base", revision, other], in: directory))
     }
 
+    /// The commit a revision names.
+    ///
+    /// - Parameters:
+    ///   - revision: A branch, a tag, `HEAD`, or a hash.
+    ///   - directory: A directory inside the repository.
+    /// - Returns: The commit's hash.
+    /// - Throws: ``Failure`` when git cannot run, or the revision names no commit.
+    public static func commit(_ revision: String, in directory: String) throws -> String {
+        try text(git(["rev-parse", "--verify", "--quiet", revision + "^{commit}"], in: directory))
+    }
+
     /// Runs git in a directory and collects what it prints.
     ///
     /// - Parameters:

@@ -66,6 +66,19 @@ final class Workspace {
         }
     }
 
+    /// What the map's marks compare the interface with.
+    enum Comparison: Hashable {
+        /// Nothing: no marks.
+        case off
+        /// Where the branch left the named one, as a pull request into it compares, uncommitted edits
+        /// included.
+        case branch(String)
+        /// The last commit, so only what is not committed yet shows.
+        case lastCommit
+        /// A commit, tag, or branch as it is, without finding where the branch left it.
+        case revision(String)
+    }
+
     /// The level id of the selected type's focus, beside the atlas's own levels.
     static let focus = "focus"
 
@@ -172,6 +185,25 @@ final class Workspace {
         set { tabs[current].inspected = newValue }
     }
 
+    /// What the marks compare with; changing it reads the base, or reuses it when read before.
+    var comparison = Comparison.off {
+        didSet {
+            comparisonChosen = true
+            if comparison != oldValue { compare() }
+        }
+    }
+    /// How the interface differs from the base, or `nil` with no comparison, before the base is read, or
+    /// when it cannot be.
+    private(set) var diff: InterfaceDiff?
+    /// Why the base could not be read, such as a folder outside git, or `nil` when it could.
+    private(set) var comparisonProblem: String?
+    /// The branch a pull request from here would go into, `main` or else `master`, or `nil` outside git.
+    private(set) var defaultBranch: String?
+    /// The bases read so far, by commit, so a reload compares again without reading git again.
+    private var bases: [String: Interface] = [:]
+    /// Whether the reader picked a comparison, which the default then leaves alone.
+    private var comparisonChosen = false
+
     /// The narrowest access shown, as ``GlossCore/Contract/rank(_:)``: 3 for public, 1 for internal, 0 for all.
     var minimumRank = Atlas.defaultMinimumRank { didSet { redraw() } }
     /// The list's search text, which keeps types whose name or a member's name contains it, ignoring case.
@@ -231,6 +263,16 @@ final class Workspace {
         var atlas: Atlas
         var scopes: [MapScope]
         var levels: [String: [String]]
+        var defaultBranch: String?
+
+        /// The folder read for a package: its `Sources` directory when it has one, else the folder itself.
+        ///
+        /// - Parameter root: The package folder.
+        /// - Returns: The folder to scan.
+        static func scanned(_ root: URL) -> URL {
+            let sources = root.appendingPathComponent("Sources")
+            return FileManager.default.fileExists(atPath: sources.path) ? sources : root
+        }
 
         /// Reads a package: its `Sources` directory when it has one, and otherwise the folder itself.
         ///
@@ -238,8 +280,7 @@ final class Workspace {
         /// - Returns: The interface and its arrangement, with files named relative to `root`.
         /// - Throws: ``GlossCore/SourceFiles/Missing`` when the folder is gone.
         static func read(_ root: URL) throws -> Loaded {
-            let sources = root.appendingPathComponent("Sources")
-            let scanned = FileManager.default.fileExists(atPath: sources.path) ? sources : root
+            let scanned = scanned(root)
             let prefix = root.path.hasSuffix("/") ? root.path : root.path + "/"
             let files = try SourceFiles.swiftFiles(under: scanned.path, includeTests: false)
             let pairs = files.compactMap { file -> (file: String, source: String)? in
@@ -249,7 +290,8 @@ final class Workspace {
             let interface = Interface.build(sources: pairs)
             let atlas = Atlas(interface)
             let scopes = atlas.mapScopes()
-            return Loaded(interface: interface, atlas: atlas, scopes: scopes, levels: atlas.levelsDrawing(scopes))
+            let branch = ["main", "master"].first { (try? Revision.commit($0, in: scanned.path)) != nil }
+            return Loaded(interface: interface, atlas: atlas, scopes: scopes, levels: atlas.levelsDrawing(scopes), defaultBranch: branch)
         }
     }
 
@@ -262,6 +304,11 @@ final class Workspace {
         name = url.lastPathComponent
         tabs = [Tab()]
         currentTabID = tabs[0].id
+        bases = [:]
+        diff = nil
+        comparisonProblem = nil
+        comparison = .off
+        comparisonChosen = false
         reload()
     }
 
@@ -290,11 +337,100 @@ final class Workspace {
                 atlas = loaded.atlas
                 scopes = loaded.scopes
                 levels = loaded.levels
+                defaultBranch = loaded.defaultBranch
                 restore()
+                // A branch is compared with where it left the default branch until the reader picks.
+                if !comparisonChosen, let branch = loaded.defaultBranch, comparison == .off {
+                    comparison = .branch(branch)
+                    comparisonChosen = false
+                } else {
+                    compare()
+                }
                 snapshotIfAsked()
             case .failure:
                 problem = "There is nothing at \(root.path)."
             }
+        }
+    }
+
+    /// Compares the interface with the base ``comparison`` names, reading the base from git unless it
+    /// was read before, off the main thread.
+    private func compare() {
+        guard comparison != .off, let root, let head = interface else {
+            diff = nil
+            comparisonProblem = nil
+            return
+        }
+        let comparison = self.comparison
+        let known = bases
+        Task {
+            let result = await Task.detached(priority: .utility) { () -> Result<(commit: String, base: Interface, diff: InterfaceDiff), Error> in
+                Result {
+                    let scanned = Loaded.scanned(root).path
+                    let commit = switch comparison {
+                    case .off, .lastCommit: try Revision.commit("HEAD", in: scanned)
+                    case .branch(let branch): try Revision.mergeBase(of: "HEAD", and: branch, in: scanned)
+                    case .revision(let revision): try Revision.commit(revision, in: scanned)
+                    }
+                    let base = try known[commit] ?? Interface.build(sources: Revision.sources(at: commit, under: scanned,
+                                                                                               relativeTo: root.path, includeTests: false))
+                    return (commit, base, InterfaceDiff(base: base, head: head))
+                }
+            }.value
+            guard root == self.root, comparison == self.comparison, head == self.interface else { return }
+            switch result {
+            case .success(let compared):
+                bases[compared.commit] = compared.base
+                diff = compared.diff
+                comparisonProblem = nil
+            case .failure(let error):
+                diff = nil
+                comparisonProblem = (error as? Revision.Failure)?.message ?? error.localizedDescription
+            }
+        }
+    }
+
+    /// The marks on the map's boxes: how each box differs from the base, by box id; empty with no
+    /// comparison.
+    var boxMarks: [String: InterfaceDiff.Change] {
+        guard let diff, let atlas else { return [:] }
+        var marks: [String: InterfaceDiff.Change] = [:]
+        for box in drawing.layout.boxes {
+            if let change = atlas.change(of: box.item.unit, in: diff) { marks[box.item.id] = change }
+        }
+        return marks
+    }
+
+    /// The marks on the focus's edges: how each drawn dependency differs from the base, keyed by its
+    /// ends joined with a tab; empty outside a focus, whose edges stand for many dependencies at once.
+    var edgeMarks: [String: InterfaceDiff.Change] {
+        guard let diff, scopeID == Self.focus else { return [:] }
+        var marks: [String: InterfaceDiff.Change] = [:]
+        for curve in drawing.layout.curves {
+            if let change = diff.change(from: curve.link.from, to: curve.link.to)?.change {
+                marks[curve.link.from + "\t" + curve.link.to] = change
+            }
+        }
+        return marks
+    }
+
+    /// What the comparison is with, for the toolbar and the map's count of changes.
+    var comparisonTitle: String {
+        switch comparison {
+        case .off: "No Comparison"
+        case .branch(let branch): "Since \(branch)"
+        case .lastCommit: "Since Last Commit"
+        case .revision(let revision): "Since \(revision)"
+        }
+    }
+
+    /// The comparison as the end of a sentence about changes: `since main`, or `since the last commit`.
+    var comparisonPhrase: String {
+        switch comparison {
+        case .off: ""
+        case .branch(let branch): "since \(branch)"
+        case .lastCommit: "since the last commit"
+        case .revision(let revision): "since \(revision)"
         }
     }
 

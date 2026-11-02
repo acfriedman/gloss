@@ -1,4 +1,5 @@
 @testable import GlossCore
+import GlossMap
 import XCTest
 
 /// Pins how an interface is compared with a base, and how a base is read from git.
@@ -80,6 +81,18 @@ final class DiffTests: XCTestCase {
         XCTAssertEqual(helper.viaAdded, ["Cart.tidy"])
         XCTAssertEqual(helper.viaRemoved, ["Cart.total"])
         XCTAssertTrue(try XCTUnwrap(diff.change(from: "Shop/Cart", to: "Shop/Coupon")).leavesInterface)
+    }
+
+    func testBoxesFoldWhatTheyHoldIntoOneMark() {
+        let head = Interface.build(sources: [("Sources/Shop/Cart.swift", head), ("Sources/Promo/Promo.swift", "/// A promo.\nstruct Promo {}")])
+        let diff = InterfaceDiff(base: Interface.build(sources: [("Sources/Shop/Cart.swift", base)]), head: head)
+        let atlas = Atlas(head)
+        XCTAssertEqual(atlas.change(of: .type("Shop/Discount"), in: diff), .added)
+        XCTAssertEqual(atlas.change(of: .type("Shop/Cart"), in: diff), .changed)
+        XCTAssertNil(atlas.change(of: .type("Shop/Line"), in: diff))
+        XCTAssertEqual(atlas.change(of: .module("Shop"), in: diff), .changed, "A module holding changes, a removed type among them.")
+        XCTAssertEqual(atlas.change(of: .module("Promo"), in: diff), .added, "A module whose every type is new is new.")
+        XCTAssertEqual(atlas.change(of: .folder("Shop", ""), in: diff), .changed)
     }
 
     func testAnInterfaceComparedWithItselfHasNoChanges() {

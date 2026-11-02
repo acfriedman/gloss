@@ -54,6 +54,20 @@ struct ContentView: View {
                 }
             }
             ToolbarItemGroup(placement: .primaryAction) {
+                Picker(selection: $workspace.comparison) {
+                    Text("No Comparison").tag(Workspace.Comparison.off)
+                    if let branch = workspace.defaultBranch {
+                        Text("Since \(branch)").tag(Workspace.Comparison.branch(branch))
+                    }
+                    Text("Since Last Commit").tag(Workspace.Comparison.lastCommit)
+                    if case .revision(let revision) = workspace.comparison {
+                        Text("Since \(revision)").tag(Workspace.Comparison.revision(revision))
+                    }
+                } label: {
+                    Label("Changes", systemImage: "plusminus")
+                }
+                .pickerStyle(.menu)
+                .help(workspace.comparisonProblem ?? "Mark what changed since a base: where this branch left \(workspace.defaultBranch ?? "main"), or the last commit")
                 Picker("Access", selection: $workspace.minimumRank) {
                     Text("Public").tag(3)
                     Text("Internal").tag(1)

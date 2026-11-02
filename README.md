@@ -146,6 +146,14 @@ its roles before and after, so a type that was only used inside bodies and is no
 reads as entering the interface. `Revision` reads the base straight from git, at any revision, without
 checking it out, choosing files as the working tree's are chosen.
 
+The app marks what changed on the map. The toolbar's Changes menu picks the base: where the branch
+left `main` (or `master`), which a pull request compares against and the app picks by default, the
+last commit, or nothing. The base is read once per commit and compared again on every reload. A new
+type's box gets a green `+` badge and a box holding a change, its nested types', or for a module or
+folder any of its types', an amber `~`; in a focus, new and changed dependencies are drawn green and
+amber. A line under the map counts what is new, changed, and gone across the interface and names the
+gone types, which the map cannot draw yet.
+
 The page is three panes on one screen: every type listed on the left, the text of one type in the
 middle, and the dependency map on the right, where it takes whatever width the other two leave.
 Nothing navigates away, so the map stays in view. A toolbar across the top holds what applies to

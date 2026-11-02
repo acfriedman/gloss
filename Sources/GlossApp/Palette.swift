@@ -23,6 +23,12 @@ enum Palette {
     static let danger = adaptive(light: 0xB4321C, dark: 0xFF8A73)
     /// The color of the findings count in the list's summary when there are none.
     static let ok = adaptive(light: 0x2C7A4B, dark: 0x6FCF97)
+    /// The mark of what is new since the base a comparison reads: a badge on a box, an edge's stroke.
+    static let added = adaptive(light: 0x1A7F37, dark: 0x3FB950)
+    /// The mark of what changed since the base: a badge on a box holding a change, an edge's stroke.
+    static let changed = adaptive(light: 0x9A6700, dark: 0xD29922)
+    /// The mark of what is gone since the base, in the count of changes.
+    static let removed = adaptive(light: 0xCF222E, dark: 0xF85149)
 
     /// The soft tint a module's containers and boxes are filled with.
     ///

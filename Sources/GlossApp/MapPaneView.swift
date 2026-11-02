@@ -62,12 +62,19 @@ struct MapPaneView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, 16)
                 .padding(.bottom, 8)
+            if workspace.comparison != .off {
+                ChangesLineView()
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 16)
+                    .padding(.bottom, 8)
+            }
             Divider()
             GeometryReader { proxy in
                 let scale = zoom ?? Self.fit(drawing.layout, in: proxy.size)
                 ScrollView([.horizontal, .vertical]) {
                     MapCanvasView(layout: drawing.layout, lit: workspace.litID, trail: workspace.litTrail, anchor: workspace.anchorID,
-                                  scale: scale, colors: workspace.atlas?.moduleColors ?? [:])
+                                  scale: scale, colors: workspace.atlas?.moduleColors ?? [:],
+                                  marks: workspace.boxMarks, edgeMarks: workspace.edgeMarks)
                         .padding(Self.inset)
                         .frame(minWidth: proxy.size.width, minHeight: proxy.size.height)
                 }
@@ -159,6 +166,42 @@ struct MagnifierView: View {
     }
 }
 
+/// How the interface differs from the base the comparison reads, counted across the whole interface:
+/// what is new, what changed, and what is gone, with the gone types named, since the map cannot draw
+/// them.
+struct ChangesLineView: View {
+    @Environment(Workspace.self) private var workspace
+
+    var body: some View {
+        HStack(spacing: 10) {
+            if let problem = workspace.comparisonProblem {
+                Text("\(workspace.comparisonTitle): \(problem)").foregroundStyle(.secondary).lineLimit(1)
+            } else if let diff = workspace.diff {
+                let count = { (change: InterfaceDiff.Change) in diff.nodes.filter { $0.change == change }.count }
+                let removed = diff.nodes.filter { $0.change == .removed }.map(\.node.name)
+                if diff.isEmpty {
+                    Text("No changes \(workspace.comparisonPhrase)").foregroundStyle(.secondary)
+                } else {
+                    Text("+\(count(.added)) new").foregroundStyle(Palette.added)
+                    Text("~\(count(.changed)) changed").foregroundStyle(Palette.changed)
+                    Text("−\(count(.removed)) gone").foregroundStyle(Palette.removed)
+                    Text(workspace.comparisonPhrase).foregroundStyle(.secondary)
+                    if !removed.isEmpty {
+                        Text("· gone: " + removed.joined(separator: ", "))
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                            .truncationMode(.tail)
+                            .help(removed.joined(separator: "\n"))
+                    }
+                }
+            } else {
+                Text("Reading what changed \(workspace.comparisonPhrase)…").foregroundStyle(.secondary)
+            }
+        }
+        .font(.caption.monospacedDigit())
+    }
+}
+
 /// One placed figure at a scale: edges drawn on a canvas under the boxes, the lit box's edges and
 /// neighbors standing out and the rest dimmed. Everything is drawn at the scale rather than stretched,
 /// so text stays sharp at any magnification.
@@ -176,6 +219,10 @@ struct MapCanvasView: View {
     var scale: CGFloat
     /// Each module's color slot, which tints its lanes and its module and folder boxes.
     var colors: [String: Int] = [:]
+    /// How each box differs from the base a comparison reads, by box id; a box with no entry is the same.
+    var marks: [String: InterfaceDiff.Change] = [:]
+    /// How each drawn dependency differs from the base, keyed by its ends joined with a tab.
+    var edgeMarks: [String: InterfaceDiff.Change] = [:]
 
     var body: some View {
         let trailed = Set(trail.map { [$0.from, $0.to] })
@@ -206,7 +253,10 @@ struct MapCanvasView: View {
                 }
                 for curve in layout.curves {
                     let isLit = isLighting && lights(curve.link)
-                    let color: Color = isLit ? Palette.accent : Palette.edge.opacity(isLighting ? 0.2 : 0.75)
+                    // A new or changed dependency keeps its mark's color, quieter while another box is lit.
+                    let mark = edgeMarks[curve.link.from + "\t" + curve.link.to].map { $0 == .added ? Palette.added : Palette.changed }
+                    let color: Color = isLit ? Palette.accent : mark.map { $0.opacity(isLighting ? 0.35 : 0.95) }
+                        ?? Palette.edge.opacity(isLighting ? 0.2 : 0.75)
                     let style = StrokeStyle(lineWidth: (isLit ? 1.8 : 1.2) * weight, dash: curve.link.dashed ? [4 * weight, 3 * weight] : [])
                     context.stroke(Self.path(curve.points, scale: scale), with: .color(color), style: style)
                     context.fill(Self.arrowhead(curve, scale: scale, size: weight), with: .color(color))
@@ -216,7 +266,8 @@ struct MapCanvasView: View {
             ForEach(Array(layout.boxes.enumerated()), id: \.offset) { _, box in
                 MapBoxView(box: box, scale: scale, isCurrent: (isLighting && box.item.id == lit) || box.item.id == anchor,
                        isDimmed: isLighting && !near.contains(box.item.id) && box.item.id != lit,
-                       tint: Self.module(of: box.item.unit).flatMap { colors[$0] }.map(Palette.moduleTint))
+                       tint: Self.module(of: box.item.unit).flatMap { colors[$0] }.map(Palette.moduleTint),
+                       mark: marks[box.item.id])
                     .offset(x: box.x * scale, y: box.y * scale)
             }
         }
@@ -291,6 +342,9 @@ struct MapBoxView: View {
     var isDimmed: Bool
     /// The module's tint for a module or folder box, or `nil` for a type, which stays neutral.
     var tint: Color?
+    /// How the box differs from the base a comparison reads, drawn as a badge on its corner; `nil` for
+    /// none.
+    var mark: InterfaceDiff.Change?
 
     /// The tooltip: what a click and a double click do here.
     private var help: String {
@@ -322,6 +376,18 @@ struct MapBoxView: View {
         // Every box is opaque, dashed ones included, so edges passing behind never show through the text.
         .background(shape.fill(isCurrent ? Palette.accentSoft : flags.contains(.scope) ? (tint ?? Palette.panel) : Palette.surface))
         .overlay(shape.strokeBorder(stroke, style: StrokeStyle(lineWidth: isCurrent ? 2 : 1, dash: flags.contains(.boundary) ? [4, 3] : [])))
+        // The mark is a badge on the corner, not a border, so a box with findings keeps its red edge.
+        .overlay(alignment: .topTrailing) {
+            if let mark, mark != .removed {
+                Text(mark == .added ? "+" : "~")
+                    .font(.system(size: 10 * scale, weight: .heavy, design: .monospaced))
+                    .foregroundStyle(Palette.surface)
+                    .frame(width: 15 * scale, height: 15 * scale)
+                    .background(Circle().fill(mark == .added ? Palette.added : Palette.changed))
+                    .offset(x: 6 * scale, y: -6 * scale)
+                    .help(mark == .added ? "New since the base" : "Holds a change since the base")
+            }
+        }
         .opacity(isDimmed ? 0.4 : flags.contains(.private) ? 0.7 : 1)
         .contentShape(shape)
         .onTapGesture {

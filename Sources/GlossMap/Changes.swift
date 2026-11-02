@@ -29,6 +29,27 @@ extension Atlas {
     }
 }
 
+/// One way a change since a base reaches a type that did not change itself, which is why the Changes
+/// level draws the type.
+public struct ChangeReason: Sendable, Equatable {
+    /// How the change reaches the type.
+    public enum Kind: Sendable, Equatable {
+        /// The dependency between the two is new, or what it is or which declarations make it changed.
+        case dependency(InterfaceDiff.EdgeChange)
+        /// The type uses the changed type, whose own declaration changed.
+        case declaration(InterfaceDiff.DeclarationChange)
+        /// The type reaches a member of the changed type whose signature changed or that is gone.
+        case member(InterfaceDiff.DeclarationChange)
+    }
+
+    /// The id of the changed type.
+    public var changed: String
+    /// How the change reaches the type.
+    public var kind: Kind
+    /// For a member, the type's declarations that reach it, by qualified name; empty otherwise.
+    public var via: [String]
+}
+
 /// What changed since a base and the types it reaches, drawn as one figure: the blast radius of a
 /// change at a glance.
 public struct ChangesFigure: Sendable {
@@ -92,28 +113,7 @@ extension Atlas {
         }
         let changedSet = Set(changed)
 
-        // What a user can break on in each changed type: the type's own declaration, and the members
-        // whose signature changed or that are gone.
-        var declarationChanged: Set<String> = []
-        var breaking: [String: Set<String>] = [:]
-        for node in diff.nodes where node.change == .changed {
-            for declaration in node.declarations where declaration.change == .removed || declaration.signatureChanged {
-                if ["struct", "class", "enum", "protocol", "actor"].contains(declaration.keyword) {
-                    declarationChanged.insert(node.node.id)
-                } else {
-                    breaking[node.node.id, default: []].insert(String(declaration.name.prefix { $0 != "(" }))
-                }
-            }
-        }
-        func reaches(user: String, changed type: String) -> Bool {
-            if declarationChanged.contains(type) { return true }
-            guard let names = breaking[type] else { return false }
-            let group = group(user)
-            let reached = ([group.head].compactMap { $0 } + group.members)
-                .flatMap { $0.contract.mentions.filter { $0.resolved == type }.flatMap(\.members) }
-            return !names.isDisjoint(with: reached)
-        }
-
+        let breakable = Breakable(diff)
         var touches: [String: Int] = [:]
         var reached: Set<String> = []
         for edge in edges {
@@ -123,8 +123,9 @@ extension Atlas {
             let neighbor = fromChanged ? edge.to : edge.from
             guard shown(neighbor) else { continue }
             touches[neighbor, default: 0] += 1
-            let moved = diff.change(from: edge.from, to: edge.to).map { $0.change != .removed } ?? false
-            if moved || (toChanged && reaches(user: edge.from, changed: edge.to)) { reached.insert(neighbor) }
+            if !reasons(across: edge, changed: fromChanged ? edge.from : edge.to, in: diff, breakable: breakable).isEmpty {
+                reached.insert(neighbor)
+            }
         }
         let byTouch = ranked(Array(touches.keys)) { touches[$0] ?? 0 }
         let untouched = byTouch.filter { !reached.contains($0) }
@@ -150,5 +151,86 @@ extension Atlas {
         }
         return ChangesFigure(layout: GraphLayout.layered(items, links), changed: changed.count, around: around.count, overflow: overflow,
                              untouched: includeUntouched ? [] : untouched)
+    }
+}
+
+extension Atlas {
+    /// How the changes since a base reach a type that did not change itself: each new or changed
+    /// dependency it has with a changed type, and each use it makes of a changed type that can break
+    /// on the change, as ``changesFigure(_:minimumRank:budget:includeUntouched:)`` decides it.
+    ///
+    /// - Parameters:
+    ///   - id: A node id.
+    ///   - diff: How the interface differs from the base.
+    /// - Returns: The reasons, in the order the dependencies are listed and, for each, the order the
+    ///   changed type declares what changed; empty for a type that changed itself or that no change reaches.
+    public func changeReasons(of id: String, in diff: InterfaceDiff) -> [ChangeReason] {
+        let changed = Set(diff.nodes.filter { $0.change != .removed }.map(\.node.id))
+        guard !changed.contains(id) else { return [] }
+        let breakable = Breakable(diff)
+        return edges.flatMap { edge -> [ChangeReason] in
+            if edge.from == id, changed.contains(edge.to) { return reasons(across: edge, changed: edge.to, in: diff, breakable: breakable) }
+            if edge.to == id, changed.contains(edge.from) { return reasons(across: edge, changed: edge.from, in: diff, breakable: breakable) }
+            return []
+        }
+    }
+
+    /// What a user can break on in each changed type: the type's own declaration, and the members
+    /// whose signature changed or that are gone. A member added breaks no one, and a change to docs
+    /// alone breaks no one.
+    private struct Breakable {
+        /// The changed types whose own declaration changed, by id.
+        var declarations: [String: InterfaceDiff.DeclarationChange] = [:]
+        /// The members of each changed type that changed signature or are gone, in source order.
+        var members: [String: [InterfaceDiff.DeclarationChange]] = [:]
+
+        /// Gathers what can break from a diff.
+        ///
+        /// - Parameter diff: How the interface differs from the base.
+        init(_ diff: InterfaceDiff) {
+            for node in diff.nodes where node.change == .changed {
+                for declaration in node.declarations where declaration.change == .removed || declaration.signatureChanged {
+                    if ["struct", "class", "enum", "protocol", "actor"].contains(declaration.keyword) {
+                        declarations[node.node.id] = declaration
+                    } else {
+                        members[node.node.id, default: []].append(declaration)
+                    }
+                }
+            }
+        }
+    }
+
+    /// How a change reaches the other end of one dependency of a changed type: the dependency itself
+    /// when it is new or changed, and when the other end uses the changed type, its declaration if that
+    /// changed and each changed member the other end's declarations reach by name.
+    ///
+    /// - Parameters:
+    ///   - edge: A dependency with the changed type at one end.
+    ///   - changed: The id of the changed type at its end.
+    ///   - diff: How the interface differs from the base.
+    ///   - breakable: What can break in each changed type.
+    /// - Returns: The reasons, the dependency's first.
+    private func reasons(across edge: Graph.Edge, changed: String, in diff: InterfaceDiff, breakable: Breakable) -> [ChangeReason] {
+        var reasons: [ChangeReason] = []
+        if let change = diff.change(from: edge.from, to: edge.to), change.change != .removed {
+            reasons.append(ChangeReason(changed: changed, kind: .dependency(change), via: []))
+        }
+        guard edge.to == changed else { return reasons }
+        if let declaration = breakable.declarations[changed] {
+            reasons.append(ChangeReason(changed: changed, kind: .declaration(declaration), via: []))
+        }
+        guard let members = breakable.members[changed] else { return reasons }
+        let group = group(edge.from)
+        var reachedBy: [String: [String]] = [:]
+        for contract in ([group.head].compactMap { $0 } + group.members).map(\.contract) {
+            for name in Set(contract.mentions.filter { $0.resolved == changed }.flatMap(\.members)) {
+                reachedBy[name, default: []].append(contract.qualifiedName)
+            }
+        }
+        for member in members {
+            guard let via = reachedBy[String(member.name.prefix { $0 != "(" })] else { continue }
+            reasons.append(ChangeReason(changed: changed, kind: .member(member), via: via))
+        }
+        return reasons
     }
 }

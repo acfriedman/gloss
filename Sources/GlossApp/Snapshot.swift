@@ -3,7 +3,8 @@ import AppKit
 /// Writes the window to a PNG and quits, so the app can be reviewed from a script without screen access.
 ///
 /// Set `GLOSS_SNAPSHOT` to the output path. `GLOSS_SELECT` names what to select first: a node id such
-/// as `GlossCore/Linter`, `module:Name`, or `changes`. `GLOSS_ZOOM` is how many times to zoom in after that, and
+/// as `GlossCore/Linter`, `module:Name`, or `changes`, or several to select in turn, joined by commas,
+/// such as `changes,GlossMap/Atlas`. `GLOSS_ZOOM` is how many times to zoom in after that, and
 /// `GLOSS_PREVIEW` names a node to preview as if the pointer rested on it. Without `--root`, the
 /// snapshot is of the welcome window. A snapshot run leaves the folders the next launch lists alone.
 extension Workspace {
@@ -12,16 +13,26 @@ extension Workspace {
         ProcessInfo.processInfo.environment["GLOSS_SNAPSHOT"] != nil
     }
 
-    /// Takes the snapshot the environment asks for, once the interface is read; does nothing otherwise.
+    /// Takes the snapshot the environment asks for, once the interface and any comparison are read;
+    /// does nothing otherwise.
     func snapshotIfAsked() {
         let environment = ProcessInfo.processInfo.environment
         guard let output = environment["GLOSS_SNAPSHOT"] else { return }
-        if let target = environment["GLOSS_SELECT"] {
-            select(target == "changes" ? .changes : target.hasPrefix("module:") ? .module(String(target.dropFirst("module:".count))) : .type(target))
+        Task {
+            // The comparison is read after the sources, and the changes level draws nothing until it is,
+            // so a type selected there before would move to a level of its own.
+            var waited = 0
+            while comparison != .off, diff == nil, comparisonProblem == nil, waited < 100 {
+                try? await Task.sleep(for: .milliseconds(100))
+                waited += 1
+            }
+            for target in (environment["GLOSS_SELECT"] ?? "").split(separator: ",").map(String.init) {
+                select(target == "changes" ? .changes : target.hasPrefix("module:") ? .module(String(target.dropFirst("module:".count))) : .type(target))
+            }
+            for _ in 0..<(Int(environment["GLOSS_ZOOM"] ?? "") ?? 0) { zoom(to: zoomInTarget) }
+            if let target = environment["GLOSS_PREVIEW"] { hoverBegan(.type(target)) }
+            Self.capture(to: output, after: .seconds(2))
         }
-        for _ in 0..<(Int(environment["GLOSS_ZOOM"] ?? "") ?? 0) { zoom(to: zoomInTarget) }
-        if let target = environment["GLOSS_PREVIEW"] { hoverBegan(.type(target)) }
-        Self.capture(to: output, after: .seconds(2))
     }
 
     /// Takes the snapshot the environment asks for of the welcome window, when the launch shows it;

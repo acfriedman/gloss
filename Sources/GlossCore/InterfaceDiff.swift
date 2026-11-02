@@ -31,6 +31,10 @@ public struct InterfaceDiff: Sendable, Equatable {
         public var signatureChanged: Bool
         /// For a changed declaration, whether its doc says something different.
         public var docChanged: Bool
+        /// The declaration as the base writes it, for a changed or a gone one; `nil` for a new one.
+        public var was: String?
+        /// The declaration as written now, for a new or a changed one; `nil` for a gone one.
+        public var now: String?
     }
 
     /// One node that differs from the base: new, gone, or holding declarations that differ.
@@ -180,19 +184,20 @@ public struct InterfaceDiff: Sendable, Equatable {
         for (index, contract) in head.enumerated() {
             guard let match = partner[index] else {
                 changes.append(DeclarationChange(node: node, name: contract.callName, keyword: contract.keyword, change: .added,
-                                                 signatureChanged: false, docChanged: false))
+                                                 signatureChanged: false, docChanged: false, was: nil, now: contract.declaration))
                 continue
             }
             let signature = base[match].declaration != contract.declaration
             let doc = Self.doc(of: base[match]) != Self.doc(of: contract)
             guard signature || doc else { continue }
             changes.append(DeclarationChange(node: node, name: contract.callName, keyword: contract.keyword, change: .changed,
-                                             signatureChanged: signature, docChanged: doc))
+                                             signatureChanged: signature, docChanged: doc, was: base[match].declaration,
+                                             now: contract.declaration))
         }
         let removed = unmatched.values.flatMap { $0 }.sorted()
         for index in removed {
             changes.append(DeclarationChange(node: node, name: base[index].callName, keyword: base[index].keyword, change: .removed,
-                                             signatureChanged: false, docChanged: false))
+                                             signatureChanged: false, docChanged: false, was: base[index].declaration, now: nil))
         }
         return changes
     }

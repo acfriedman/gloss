@@ -175,6 +175,17 @@ signature or the doc did, the gone types struck through, and the dependencies of
 already there that entered or left the interface. A click selects a type and keeps the level; a
 double click focuses on it, and zooming out of that focus returns to Changes.
 
+On this level a type's page, hovered or selected, shows only what the change means for it. A changed
+type's page lists its declarations that changed, each unfolding to its contract, with what the base
+wrote beside a changed signature (`was`, carried by `InterfaceDiff`), the gone ones struck through,
+its nested types that changed, and its dependencies that changed: what it depends on, and the types
+already there that depend on it.
+A new type's page lists what it declares. A neighbor's page says how the changes reach it
+(`Atlas.changeReasons`): a dependency that is new or changed, a changed declaration of the type it
+uses, or a member it uses whose signature changed or that is gone, naming its declarations that use
+it, with the signature before and now. An untouched neighbor's page says that no change reaches it.
+The bar over a selected type's page trades it for the whole page and back.
+
 The page is three panes on one screen: every type listed on the left, the text of one type in the
 middle, and the dependency map on the right, where it takes whatever width the other two leave.
 Nothing navigates away, so the map stays in view. A toolbar across the top holds what applies to

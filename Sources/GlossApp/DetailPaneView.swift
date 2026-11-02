@@ -21,8 +21,14 @@ struct DetailPaneView: View {
                 }
                 .id("inspected " + inspected)
             } else {
-                DetailPageView(target: workspace.selection)
-                    .id(workspace.selection)
+                VStack(spacing: 0) {
+                    if workspace.scopeID == Workspace.changes, workspace.diff != nil, case .type(let id) = workspace.selection {
+                        ChangePageBarView(id: id)
+                        Divider()
+                    }
+                    DetailPageView(target: workspace.selection, changes: workspace.changesOnly(for: workspace.selection))
+                }
+                .id(workspace.selection)
             }
             if let preview = workspace.preview {
                 VStack(spacing: 0) {
@@ -40,7 +46,7 @@ struct DetailPaneView: View {
                     .background(.bar)
                     Divider()
                     let why = workspace.previewTrails
-                    DetailPageView(target: preview, trails: why.trails, more: why.more)
+                    DetailPageView(target: preview, trails: why.trails, more: why.more, changes: workspace.changesOnly(for: preview))
                 }
                 .id(preview)
             }
@@ -92,6 +98,9 @@ struct DetailPageView: View {
     var trails: [[GraphLayout.Link]] = []
     /// How many more trails the type has than are given.
     var more = 0
+    /// The comparison whose changes a type's page shows instead of the whole page, as the changes level
+    /// asks; `nil` shows the whole page.
+    var changes: InterfaceDiff?
 
     var body: some View {
         ScrollView {
@@ -105,7 +114,9 @@ struct DetailPageView: View {
                     case .folder(let module, let folder): FolderView(atlas: atlas, module: module, folder: folder)
                     case .type(let id):
                         if let node = atlas.byID[id] {
-                            if trails.isEmpty {
+                            if let changes {
+                                ChangePageView(atlas: atlas, node: node, diff: changes)
+                            } else if trails.isEmpty {
                                 TypeView(atlas: atlas, node: node)
                             } else {
                                 RelationView(atlas: atlas, node: node, trails: trails, more: more, root: workspace.anchorID)

@@ -97,6 +97,33 @@ final class DiffTests: XCTestCase {
         XCTAssertNil(change("add(_:)"), "A declaration written and documented the same is no change.")
     }
 
+    func testDeclarationChangesKeepWhatWasWrittenAndWhatIs() throws {
+        let cart = try XCTUnwrap(diff().change(ofNode: "Shop/Cart"))
+        func change(_ name: String) -> InterfaceDiff.DeclarationChange? { cart.declarations.first { $0.name == name } }
+        XCTAssertEqual(change("total()")?.was, "func total() -> Int")
+        XCTAssertEqual(change("total()")?.now, "func total() -> Double")
+        XCTAssertEqual(change("coupon")?.was, "var coupon: Coupon?")
+        XCTAssertNil(try XCTUnwrap(change("coupon")).now, "Only the base has a gone one.")
+        XCTAssertNil(try XCTUnwrap(change("discount")).was, "Only the head has a new one.")
+        XCTAssertEqual(change("discount")?.now, "var discount: Discount")
+    }
+
+    func testChangeReasonsSayHowAChangeReachesANeighbor() throws {
+        let atlas = Atlas(Interface.build(sources: [("Sources/Shop/Cart.swift", head)]))
+        let diff = diff()
+        let checkout = atlas.changeReasons(of: "Shop/Checkout", in: diff)
+        XCTAssertEqual(checkout.count, 1)
+        guard case .member(let total)? = checkout.first?.kind else { return XCTFail("Checkout reaches a member.") }
+        XCTAssertEqual(total.name, "total()")
+        XCTAssertEqual(checkout.first?.changed, "Shop/Cart")
+        XCTAssertEqual(checkout.first?.via, ["Checkout.charge"], "The declaration that calls it.")
+        let helper = atlas.changeReasons(of: "Shop/Helper", in: diff)
+        guard case .dependency(let edge)? = helper.first?.kind else { return XCTFail("Helper is reached by its dependency.") }
+        XCTAssertEqual([edge.from, edge.to], ["Shop/Cart", "Shop/Helper"])
+        XCTAssertTrue(atlas.changeReasons(of: "Shop/Receipt", in: diff).isEmpty, "add(_:) did not change.")
+        XCTAssertTrue(atlas.changeReasons(of: "Shop/Cart", in: diff).isEmpty, "A changed type is not reached; it changed.")
+    }
+
     func testEdgesSayWhenADependencyEntersTheInterface() throws {
         let diff = diff()
         XCTAssertEqual(diff.change(from: "Shop/Cart", to: "Shop/Discount")?.change, .added)

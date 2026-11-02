@@ -106,6 +106,9 @@ final class Workspace {
         var reachDepth: Int?
         /// The drawn type whose tie to the focused type the details pin, or `nil` for the focused type's page.
         var inspected: String?
+        /// On the changes level, whether the details show the selected type's whole page rather than only
+        /// what changed in it, or how a change reaches it.
+        var showsFullPage = false
         /// The places Back returns to, the most recent last.
         var back: [Place] = []
         /// The places Forward returns to after going back, the nearest last.
@@ -124,6 +127,7 @@ final class Workspace {
             focusMode = other.focusMode
             reachDepth = other.reachDepth
             inspected = other.inspected
+            showsFullPage = other.showsFullPage
         }
     }
 
@@ -132,6 +136,23 @@ final class Workspace {
     /// The tab the details and the map show.
     private(set) var currentTabID: Tab.ID
     private var current: Int { tabs.firstIndex { $0.id == currentTabID } ?? 0 }
+
+    /// On the changes level, whether the current tab's details show the selected type's whole page rather
+    /// than only what changed in it, or how a change reaches it; each selection starts with only that.
+    var showsFullPage: Bool {
+        get { tabs[current].showsFullPage }
+        set { tabs[current].showsFullPage = newValue }
+    }
+
+    /// The comparison a type's page shows only the changes of: the current one on the changes level,
+    /// unless the reader asked for the selected type's whole page.
+    ///
+    /// - Parameter target: What a page shows, the selection or a preview.
+    /// - Returns: The diff, or `nil` for the whole page.
+    func changesOnly(for target: Selection) -> InterfaceDiff? {
+        guard scopeID == Self.changes, case .type = target else { return nil }
+        return target == selection && showsFullPage ? nil : diff
+    }
 
     /// What the focus draws in the current tab: the type's neighbors, or all it reaches one way.
     var focusMode: FocusMode {
@@ -525,6 +546,7 @@ final class Workspace {
             let rerooted = target != selection
             selection = target
             inspected = nil
+            showsFullPage = false
             if case .type(let id) = target { reveal(id) }
             scopeID = scope(for: target)
             // A new type starts at the default depth; switching modes keeps the chosen one.

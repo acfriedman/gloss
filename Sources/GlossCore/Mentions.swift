@@ -32,6 +32,13 @@ public struct Mention: Sendable, Equatable, Codable {
     /// The internal names of the parameters whose types mention the name, in signature order; empty for
     /// every role but `parameter`.
     public var parameters: [String] = []
+    /// The members of the type a body reaches, by base name in source order, as `select` in
+    /// `workspace.select(…)` or `colorSlots` in `Atlas.colorSlots(…)`; empty when it reaches none.
+    public var members: [String] = []
+    /// The variable a body reaches the type through, as `workspace` in `workspace.select(…)`, or `nil` for
+    /// a type named outright. ``name`` stays empty until ``Graph/build(_:)`` finds the variable's type
+    /// among the declaration's parameters and its type's properties.
+    public var variable: String?
 }
 
 /// Collects the type names a declaration mentions, tagged with where each appears.
@@ -83,7 +90,68 @@ enum Mentions {
         add(syntax.as(FunctionDeclSyntax.self)?.body, .body)
         add(syntax.as(InitializerDeclSyntax.self)?.body, .body)
         add(syntax.as(SubscriptDeclSyntax.self)?.accessorBlock, .body)
+
+        // The members a body reaches: on a type named outright, onto that name's mention; through a
+        // variable, onto a mention of the variable, whose type the graph finds later.
+        func reach(_ syntax: (some SyntaxProtocol)?) {
+            guard let syntax else { return }
+            for (base, member) in accesses(in: syntax) {
+                let index = base.first?.isUppercase == true
+                    ? mentions.firstIndex { $0.name == base && $0.variable == nil }
+                    : mentions.firstIndex { $0.variable == base }
+                if let index {
+                    if !mentions[index].members.contains(member) { mentions[index].members.append(member) }
+                } else if base.first?.isLowercase == true {
+                    mentions.append(Mention(name: "", role: .body, members: [member], variable: base))
+                }
+            }
+        }
+        if let variable = syntax.as(VariableDeclSyntax.self) {
+            for binding in variable.bindings {
+                reach(binding.initializer)
+                reach(binding.accessorBlock)
+            }
+        }
+        reach(syntax.as(FunctionDeclSyntax.self)?.body)
+        reach(syntax.as(InitializerDeclSyntax.self)?.body)
+        reach(syntax.as(SubscriptDeclSyntax.self)?.accessorBlock)
         return mentions
+    }
+
+    /// The member accesses in a piece of syntax whose base is a plain name or a property of `self`.
+    ///
+    /// - Parameter syntax: A body.
+    /// - Returns: Each access's base and member names, in source order; a projected `$name` reads as
+    ///   `name`, and an optional or forced unwrap of the base is looked through.
+    static func accesses(in syntax: some SyntaxProtocol) -> [(base: String, member: String)] {
+        let collector = AccessCollector(viewMode: .sourceAccurate)
+        collector.walk(syntax)
+        return collector.accesses
+    }
+
+    /// Walks expressions, keeping `name.member` and `self.name.member` accesses to lowercase members.
+    private final class AccessCollector: SyntaxVisitor {
+        var accesses: [(base: String, member: String)] = []
+
+        override func visit(_ node: MemberAccessExprSyntax) -> SyntaxVisitorContinueKind {
+            let member = node.declName.baseName.text
+            guard member.first?.isLowercase == true else { return .visitChildren }
+            var base = node.base
+            if let optional = base?.as(OptionalChainingExprSyntax.self) { base = optional.expression }
+            if let forced = base?.as(ForceUnwrapExprSyntax.self) { base = forced.expression }
+            var name: String?
+            if let reference = base?.as(DeclReferenceExprSyntax.self) {
+                name = reference.baseName.text
+            } else if let inner = base?.as(MemberAccessExprSyntax.self),
+                      inner.base?.as(DeclReferenceExprSyntax.self)?.baseName.text == "self" {
+                name = inner.declName.baseName.text
+            }
+            if var name, name != "self", name != "super" {
+                if name.hasPrefix("$") { name.removeFirst() }
+                accesses.append((name, member))
+            }
+            return .visitChildren
+        }
     }
 
     /// The capitalized type names in a piece of syntax, in source order.

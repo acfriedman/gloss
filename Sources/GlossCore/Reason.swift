@@ -5,6 +5,26 @@
 /// where the type is used already: in the entry for the parameter that takes it, in the `- Returns:` or
 /// `- Throws:` entry, or in the summary of the property that holds it or the member that uses it inside.
 public struct Reason: Sendable, Equatable {
+    /// Doc carried over from the type a declaration uses, standing in where the declaration's own says
+    /// nothing: the summary of a member it reaches, or of the type itself.
+    public struct Forward: Sendable, Equatable {
+        /// What the doc belongs to: a member of the used type as a caller writes it, or the type's name.
+        public var name: String
+        /// The forwarded summary.
+        public var summary: String
+
+        /// Creates a forwarded doc.
+        ///
+        /// - Parameters:
+        ///   - name: What the doc belongs to: a member of the used type as a caller writes it, or the
+        ///     type's name.
+        ///   - summary: The forwarded summary.
+        public init(name: String, summary: String) {
+            self.name = name
+            self.summary = summary
+        }
+    }
+
     /// One doc entry that speaks to the type itself.
     public struct Entry: Sendable, Equatable {
         /// The role the entry documents: `parameter`, `returns`, or `throws`.
@@ -31,6 +51,11 @@ public struct Reason: Sendable, Equatable {
     public var file: String
     /// The declaration's 1-based line.
     public var line: Int
+    /// The members of the type the declaration's body reaches, by base name in source order.
+    public var members: [String] = []
+    /// Docs carried over from the type when the declaration's own says nothing, set by whoever holds the
+    /// type's contracts; empty when the declaration explains itself.
+    public var forwarded: [Forward] = []
 
     /// `true` when nothing written says why: no summary, and no entry with text.
     public var isUnexplained: Bool {
@@ -53,7 +78,10 @@ extension Contract {
         }
         if roles.contains(.returns) { entries.append(Reason.Entry(role: .returns, text: returns)) }
         if roles.contains(.throws) { entries.append(Reason.Entry(role: .throws, text: throwsDoc)) }
-        return Reason(name: callName, keyword: keyword, roles: roles, entries: entries, summary: summary, file: file, line: line)
+        var members: [String] = []
+        for member in mentions.flatMap(\.members) where !members.contains(member) { members.append(member) }
+        return Reason(name: callName, keyword: keyword, roles: roles, entries: entries, summary: summary, file: file, line: line,
+                      members: members)
     }
 
     /// The name a caller writes: a callable's base name with its argument labels, the way this one is

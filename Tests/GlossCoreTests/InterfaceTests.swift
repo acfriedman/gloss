@@ -438,6 +438,40 @@ final class InterfaceTests: XCTestCase {
         XCTAssertEqual(root.x + root.width / 2, lane.x + lane.width / 2, accuracy: 0.5, "The root sits centered in its lane.")
     }
 
+    func testUndocumentedUsesForwardTheDocsOfWhatTheyReach() throws {
+        let atlas = Atlas(Interface.build(sources: [("Sources/Shop/Store.swift", """
+        /// Keeps the shopper's cart.
+        struct Store {
+            private var cart: Cart
+            private var note: Note
+            func clear() { cart.empty() }
+            func restart() { _ = Cart.make(); self.cart.empty() }
+            func read() -> Int { note.count }
+        }
+        /// A cart.
+        struct Cart {
+            /// Removes every line.
+            func empty() {}
+            /// Makes an empty cart.
+            static func make() -> Cart { Cart() }
+        }
+        /// A note left at checkout.
+        struct Note {
+            var count = 0
+        }
+        """)]))
+        let cart = atlas.reasons(from: "Shop/Store", to: "Shop/Cart")
+        XCTAssertEqual(cart.map(\.name), ["cart", "clear()", "restart()"],
+                       "A body that reaches a type only through a property still depends on it.")
+        XCTAssertEqual(cart[1].forwarded, [Reason.Forward(name: "empty()", summary: "Removes every line.")])
+        XCTAssertEqual(cart[2].forwarded.map(\.name), ["make()", "empty()"], "Members named outright and through self alike.")
+        XCTAssertEqual(cart[0].forwarded, [Reason.Forward(name: "Cart", summary: "A cart.")],
+                       "A use that reaches no documented member forwards the type's own summary.")
+        let note = atlas.reasons(from: "Shop/Store", to: "Shop/Note")
+        XCTAssertEqual(note.last?.forwarded, [Reason.Forward(name: "Note", summary: "A note left at checkout.")],
+                       "An undocumented member falls back to the type's summary.")
+    }
+
     func testRoleWordsReadAsOneEnglishPhrase() {
         XCTAssertEqual(Wording.words([.property]), "holds")
         XCTAssertEqual(Wording.words([.parameter, .body]), "takes and uses")

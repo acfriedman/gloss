@@ -256,10 +256,30 @@ public struct Atlas: Sendable {
     ///   - to: The id of the node it depends on.
     /// - Returns: One reason per declaration of `from` that mentions `to`: those in its signature first,
     ///   then those that use it only inside a body, each in scan order; empty when there is no such edge.
+    ///
+    /// A declaration whose own doc says nothing about the type, such as a view's `body` or a private
+    /// property, gets docs forwarded from `to` instead: the summaries of the members its body reaches,
+    /// or, when it reaches none that have one, the type's own summary.
     public func reasons(from: String, to: String) -> [Reason] {
         let group = group(from)
         let reasons = ([group.head].compactMap { $0 } + group.members).compactMap { $0.contract.reason(toward: to) }
-        return reasons.filter { $0.roles != [.body] } + reasons.filter { $0.roles == [.body] }
+        let target = self.group(to)
+        let forwarded = reasons.map { reason -> Reason in
+            guard reason.isUnexplained else { return reason }
+            var reason = reason
+            var named = Set<String>()
+            for name in reason.members {
+                for member in target.members where member.name == name {
+                    guard let summary = member.summary, named.insert(member.contract.callName).inserted else { continue }
+                    reason.forwarded.append(Reason.Forward(name: member.contract.callName, summary: summary))
+                }
+            }
+            if reason.forwarded.isEmpty, let summary = target.head?.summary, let node = byID[to] {
+                reason.forwarded = [Reason.Forward(name: label(node), summary: summary)]
+            }
+            return reason
+        }
+        return forwarded.filter { $0.roles != [.body] } + forwarded.filter { $0.roles == [.body] }
     }
 
     /// The finding count of a node together with every type nested in it.

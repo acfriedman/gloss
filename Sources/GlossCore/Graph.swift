@@ -105,6 +105,27 @@ public struct Graph: Sendable, Equatable, Codable {
             }
         }
 
+        // A body that reaches a type through a variable, as in `workspace.select(…)`, depends on the type
+        // the variable's declaration names: a parameter's, else a property's of the same type, when exactly
+        // one name it mentions is a scanned type.
+        var held: [String: [String: [String]]] = [:]
+        for contract in contracts where ["var", "let"].contains(contract.keyword) {
+            let owner = Self.id(contract.module, Self.key(of: contract))
+            held[owner, default: [:]][contract.name] = contract.mentions.filter { $0.role == .property }.map(\.name)
+        }
+        for index in contracts.indices {
+            let contract = contracts[index]
+            let owner = Self.id(contract.module, Self.key(of: contract))
+            let scope = contract.opensScope ? contract.container + [contract.name] : contract.container
+            for mention in contract.mentions.indices {
+                guard let variable = contract.mentions[mention].variable else { continue }
+                let taken = contract.mentions.filter { $0.role == .parameter && $0.parameters.contains(variable) }.map(\.name)
+                let named = taken.isEmpty ? held[owner]?[variable] ?? [] : taken
+                let types = Set(named.filter { resolve($0, module: contract.module, scope: scope) != nil })
+                if types.count == 1, let type = types.first { contracts[index].mentions[mention].name = type }
+            }
+        }
+
         var edges: [Edge] = []
         var edgeIndex: [String: Int] = [:]
         for index in contracts.indices {

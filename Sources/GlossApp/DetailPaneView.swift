@@ -450,7 +450,8 @@ struct HopView: View {
 }
 
 /// One declaration a dependency runs through, and what its doc says: the entry for each parameter that
-/// takes the type and for the return or thrown error, then the summary.
+/// takes the type and for the return or thrown error, then the summary; or, when it says nothing, the
+/// docs forwarded from what it uses.
 struct ReasonView: View {
     @Environment(Workspace.self) private var workspace
     /// The declaration and the doc text that answers for the dependency.
@@ -497,6 +498,17 @@ struct ReasonView: View {
             if let summary = reason.summary {
                 DocTextView(text: summary, codeColor: Self.code).font(.callout)
                     .foregroundStyle(reason.entries.contains { $0.text != nil } ? .secondary : .primary)
+            } else if !reason.forwarded.isEmpty {
+                // Forwarded docs are the used type's words, not this declaration's, so they read quieter
+                // and each names where it comes from.
+                ForEach(Array(reason.forwarded.enumerated()), id: \.offset) { _, forward in
+                    HStack(alignment: .firstTextBaseline, spacing: 6) {
+                        Text("via").font(.caption).foregroundStyle(.tertiary)
+                        Text(forward.name).font(.system(.callout, design: .monospaced)).foregroundStyle(Self.code ?? .primary)
+                            .fixedSize()
+                        DocTextView(text: forward.summary, codeColor: Self.code).font(.callout).foregroundStyle(.secondary)
+                    }
+                }
             } else if reason.entries.isEmpty {
                 Text("Undocumented.").font(.callout).foregroundStyle(.secondary)
             }

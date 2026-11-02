@@ -123,7 +123,12 @@ mention but are not graph nodes. A parameter mention also records which paramete
 so `Contract.reason(toward:)` can say why a declaration depends on a type from its own doc: the entry
 for each parameter that takes it, the `- Returns:` or `- Throws:` entry, and the summary, which
 answers for a property, a conformance, or a use inside a body. Since gloss requires those docs, the
-reason is usually already written where the type is used.
+reason is usually already written where the type is used. Where it is not, as for a view's `body` or
+a private property, which owe no doc, the docs of what the declaration uses are forwarded and marked
+as such: the summaries of the members its body reaches, on the type named outright (`Atlas.make()`)
+or through a variable whose declared type is known (`workspace.select(…)`, from a parameter or a
+property of the same type), matched by name; else the used type's own summary. Reaching a type
+through such a variable also counts as using it inside a body.
 
 The page is three panes on one screen: every type listed on the left, the text of one type in the
 middle, and the dependency map on the right, where it takes whatever width the other two leave.

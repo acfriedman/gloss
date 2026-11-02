@@ -310,8 +310,14 @@ struct MapBoxView: View {
         .overlay(shape.strokeBorder(stroke, style: StrokeStyle(lineWidth: isCurrent ? 2 : 1, dash: flags.contains(.boundary) ? [4, 3] : [])))
         .opacity(isDimmed ? 0.4 : flags.contains(.private) ? 0.7 : 1)
         .contentShape(shape)
-        .onTapGesture { workspace.select(unit: box.item.unit) }
+        .onTapGesture {
+            let target = Workspace.selection(of: box.item.unit)
+            if NSEvent.modifierFlags.contains(.command) { workspace.openInNewTab(target) } else { workspace.select(target) }
+        }
         .onHover { $0 ? workspace.hoverBegan(Workspace.selection(of: box.item.unit)) : workspace.hoverEnded() }
+        .contextMenu {
+            Button("Open in New Tab") { workspace.openInNewTab(Workspace.selection(of: box.item.unit)) }
+        }
         .help(box.item.flags.contains(.boundary) ? "Outside this level; select to step into it" : box.item.label)
     }
 }

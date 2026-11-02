@@ -64,7 +64,12 @@ struct QuickOpenView: View {
     private func open(_ match: QuickOpenMatch?) {
         guard let match else { return }
         workspace.isQuickOpenShown = false
-        workspace.focus(on: match.node.id)
+        // Option-Return opens the type in a new tab, as Xcode's Open Quickly does.
+        if NSEvent.modifierFlags.contains(.option) {
+            workspace.focusInNewTab(on: match.node.id)
+        } else {
+            workspace.focus(on: match.node.id)
+        }
     }
 }
 

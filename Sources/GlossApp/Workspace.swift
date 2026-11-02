@@ -69,12 +69,65 @@ final class Workspace {
     /// The level id of the selected type's focus, beside the atlas's own levels.
     static let focus = "focus"
 
-    /// What the focus draws: the type's neighbors, or all it reaches one way.
-    var focusMode = FocusMode.neighbors { didSet { redraw() } }
-    /// The steps a reach draws, chosen with the depth stepper and kept across modes until another type is
-    /// selected; `nil`, the default, draws 1 for Neighbors and as many whole steps as fit
+    /// One tab over the details and the map: a place in the interface with its own way back and forth, so
+    /// a reader can keep several open beside the one list.
+    struct Tab: Identifiable {
+        /// What tells the tab apart, kept when it moves.
+        let id = UUID()
+        /// What the details pane shows when nothing is previewed, and what the map lights.
+        var selection = Selection.overview
+        /// The level the map draws: an id from ``Workspace/scopes``, or ``Workspace/focus``.
+        var scopeID = ""
+        /// The level the focus was entered from, which zooming out returns to while it draws the type.
+        var focusFrom: String?
+        /// What the focus draws: the type's neighbors, or all it reaches one way.
+        var focusMode = FocusMode.neighbors
+        /// The steps a reach draws, or `nil` for the default.
+        var reachDepth: Int?
+        /// The places Back returns to, the most recent last.
+        var back: [Place] = []
+        /// The places Forward returns to after going back, the nearest last.
+        var forward: [Place] = []
+
+        /// A tab at the start: the overview, at the default level.
+        init() {}
+
+        /// A new tab at another tab's place, with no way back of its own.
+        ///
+        /// - Parameter other: The tab whose place to open.
+        init(at other: Tab) {
+            selection = other.selection
+            scopeID = other.scopeID
+            focusFrom = other.focusFrom
+            focusMode = other.focusMode
+            reachDepth = other.reachDepth
+        }
+    }
+
+    /// The open tabs, left to right; never empty.
+    private(set) var tabs = [Tab()]
+    /// The tab the details and the map show.
+    private(set) var currentTabID: Tab.ID
+    private var current: Int { tabs.firstIndex { $0.id == currentTabID } ?? 0 }
+
+    /// What the focus draws in the current tab: the type's neighbors, or all it reaches one way.
+    var focusMode: FocusMode {
+        get { tabs[current].focusMode }
+        set {
+            tabs[current].focusMode = newValue
+            redraw()
+        }
+    }
+    /// The steps a reach draws in the current tab, chosen with the depth stepper and kept across modes until
+    /// another type is selected; `nil`, the default, draws 1 for Neighbors and as many whole steps as fit
     /// ``GlossMap/Atlas/mapBudget`` for the others.
-    var reachDepth: Int? { didSet { redraw() } }
+    var reachDepth: Int? {
+        get { tabs[current].reachDepth }
+        set {
+            tabs[current].reachDepth = newValue
+            redraw()
+        }
+    }
 
     /// The open folder, or `nil` before one is opened; file paths in the interface are relative to it.
     private(set) var root: URL?
@@ -92,13 +145,23 @@ final class Workspace {
     private(set) var isLoading = false
     /// Why the folder could not be read, shown where the panes would be, or `nil` when it could.
     private(set) var problem: String?
-    /// What the details pane shows when nothing is previewed, and what the map lights.
-    private(set) var selection = Selection.overview
-    /// The level the map draws: an id from ``scopes``, or ``focus``.
-    private(set) var scopeID = ""
-    /// The map for ``scopeID``, laid out once per change rather than per frame.
+    /// What the details pane shows in the current tab when nothing is previewed, and what the map lights.
+    private(set) var selection: Selection {
+        get { tabs[current].selection }
+        set { tabs[current].selection = newValue }
+    }
+    /// The level the map draws in the current tab: an id from ``scopes``, or ``focus``.
+    private(set) var scopeID: String {
+        get { tabs[current].scopeID }
+        set { tabs[current].scopeID = newValue }
+    }
+    /// The map for ``scopeID``, laid out once per change rather than per frame, and again when another
+    /// tab comes forward.
     private(set) var drawing = Drawing()
-    private var focusFrom: String?
+    private var focusFrom: String? {
+        get { tabs[current].focusFrom }
+        set { tabs[current].focusFrom = newValue }
+    }
 
     /// The narrowest access shown, as ``GlossCore/Contract/rank(_:)``: 3 for public, 1 for internal, 0 for all.
     var minimumRank = Atlas.defaultMinimumRank { didSet { redraw() } }
@@ -108,7 +171,7 @@ final class Workspace {
     var findingsOnly = false
     /// Whether Open Quickly is showing over the window.
     var isQuickOpenShown = false
-    /// Which panes the window shows: all three, or the details and the map with the list hidden.
+    /// Which panes the window shows: the list beside the tabs, or the tabs alone with the list hidden.
     var columns = NavigationSplitViewVisibility.all
     /// The chip under the pointer, whose box the map lights instead of what the details pane shows.
     var hovered: String?
@@ -139,6 +202,9 @@ final class Workspace {
                 return FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory) && isDirectory.boolValue
             }
         launchFolder = folder
+        let first = Tab()
+        tabs = [first]
+        currentTabID = first.id
     }
 
     /// Opens the launch folder, once.
@@ -185,10 +251,8 @@ final class Workspace {
         if !Self.isSnapshotting { UserDefaults.standard.set(url.path, forKey: Self.lastFolderKey) }
         root = url
         name = url.lastPathComponent
-        selection = .overview
-        scopeID = ""
-        back.removeAll()
-        forward.removeAll()
+        tabs = [Tab()]
+        currentTabID = tabs[0].id
         reload()
     }
 
@@ -295,10 +359,14 @@ final class Workspace {
     // MARK: History
 
     /// A place the reader has been: what was selected, the level the map drew, and the depth chosen there.
-    private struct Place: Equatable {
+    struct Place: Equatable {
+        /// What was selected.
         var selection: Selection
+        /// The level the map drew.
         var scopeID: String
+        /// The level a focus was entered from.
         var focusFrom: String?
+        /// The depth chosen there, or `nil` for the default.
         var reachDepth: Int?
     }
 
@@ -307,10 +375,14 @@ final class Workspace {
         Place(selection: selection, scopeID: scopeID, focusFrom: focusFrom, reachDepth: reachDepth)
     }
 
-    /// The places Back returns to, the most recent last.
-    private var back: [Place] = []
-    /// The places Forward returns to after going back, the nearest last.
-    private var forward: [Place] = []
+    private var back: [Place] {
+        get { tabs[current].back }
+        set { tabs[current].back = newValue }
+    }
+    private var forward: [Place] {
+        get { tabs[current].forward }
+        set { tabs[current].forward = newValue }
+    }
     /// How many navigations are under way, so one made of others records a single step.
     private var navigating = 0
 
@@ -355,9 +427,105 @@ final class Workspace {
         if case .type(let id) = place.selection { reveal(id) }
         scopeID = place.scopeID
         focusFrom = place.focusFrom
-        if reachDepth != place.reachDepth { reachDepth = place.reachDepth }
+        tabs[current].reachDepth = place.reachDepth
         // A place read before a reload may name what is gone; it falls back as a reload does.
         restore()
+    }
+
+    // MARK: Tabs
+
+    /// Opens a tab at the current place, beside the current one, and shows it.
+    func newTab() {
+        insert(Tab(at: tabs[current]))
+    }
+
+    /// Opens something in a new tab, from the current place, leaving the current tab where it is.
+    ///
+    /// - Parameter target: What to select in the new tab.
+    func openInNewTab(_ target: Selection) {
+        newTab()
+        select(target)
+        back.removeAll()
+    }
+
+    /// Opens a type's focus in a new tab, leaving the current tab where it is.
+    ///
+    /// - Parameter id: A node id.
+    func focusInNewTab(on id: String) {
+        newTab()
+        focus(on: id)
+        back.removeAll()
+    }
+
+    /// Shows a tab, as it was left.
+    ///
+    /// - Parameter id: A tab's id; an unknown one does nothing.
+    func activate(_ id: Tab.ID) {
+        guard id != currentTabID, tabs.contains(where: { $0.id == id }) else { return }
+        showing?.cancel()
+        hiding?.cancel()
+        preview = nil
+        hovered = nil
+        currentTabID = id
+        if case .type(let node) = selection { reveal(node) }
+        restore()
+    }
+
+    /// Closes a tab, showing its neighbor if it was the current one; the last tab stays.
+    ///
+    /// - Parameter id: A tab's id.
+    func closeTab(_ id: Tab.ID) {
+        guard tabs.count > 1, let index = tabs.firstIndex(where: { $0.id == id }) else { return }
+        if id == currentTabID { activate(tabs[index + 1 < tabs.count ? index + 1 : index - 1].id) }
+        tabs.remove(at: index)
+    }
+
+    /// Shows the tab beside the current one, wrapping around at the ends.
+    ///
+    /// - Parameter offset: 1 for the next tab, -1 for the previous one.
+    func showTab(by offset: Int) {
+        activate(tabs[((current + offset) % tabs.count + tabs.count) % tabs.count].id)
+    }
+
+    /// Moves a tab to where another one is, for dragging tabs into order.
+    ///
+    /// - Parameters:
+    ///   - id: The tab being moved.
+    ///   - target: The tab whose place it takes.
+    func moveTab(_ id: Tab.ID, to target: Tab.ID) {
+        guard let from = tabs.firstIndex(where: { $0.id == id }), let to = tabs.firstIndex(where: { $0.id == target }), from != to else { return }
+        tabs.move(fromOffsets: [from], toOffset: to > from ? to + 1 : to)
+    }
+
+    /// What a tab is named in the tab bar: the name of what it shows.
+    ///
+    /// - Parameter tab: An open tab.
+    /// - Returns: `Overview`, a module's or folder's name, or a type's.
+    func title(of tab: Tab) -> String {
+        switch tab.selection {
+        case .overview: "Overview"
+        case .modules: "Modules"
+        case .module(let module): module
+        case .folder(_, let folder): Wording.folderLabel(folder)
+        case .type(let id): atlas?.byID[id].map { atlas?.label($0) ?? id } ?? id
+        }
+    }
+
+    /// The module a tab's place belongs to, whose color marks the tab; `nil` for the overview and modules.
+    ///
+    /// - Parameter tab: An open tab.
+    /// - Returns: The module's name.
+    func module(of tab: Tab) -> String? {
+        switch tab.selection {
+        case .overview, .modules: nil
+        case .module(let module), .folder(let module, _): module
+        case .type(let id): atlas?.byID[id]?.module
+        }
+    }
+
+    private func insert(_ tab: Tab) {
+        tabs.insert(tab, at: current + 1)
+        activate(tab.id)
     }
 
     // MARK: Previewing
@@ -603,12 +771,12 @@ final class Workspace {
 
     /// Whether the list is shown.
     var showsList: Bool {
-        columns != .doubleColumn && columns != .detailOnly
+        columns != .detailOnly
     }
 
-    /// Hides the list, or shows it again, keeping the details and the map.
+    /// Hides the list, or shows it again, keeping the tabs with the details and the map.
     func toggleList() {
-        columns = showsList ? .doubleColumn : .all
+        columns = showsList ? .detailOnly : .all
     }
 
     // MARK: Expanding

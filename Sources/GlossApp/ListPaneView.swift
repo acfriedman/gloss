@@ -11,7 +11,11 @@ struct ListPaneView: View {
         @Bindable var workspace = workspace
         let selection = Binding<Workspace.Selection?>(
             get: { workspace.selection },
-            set: { if let target = $0 { workspace.select(target) } }
+            set: { target in
+                guard let target else { return }
+                // Command-click opens the row in a new tab and leaves this one where it is.
+                if NSEvent.modifierFlags.contains(.command) { workspace.openInNewTab(target) } else { workspace.select(target) }
+            }
         )
         // Tags are the plain selection type: a List selects only rows whose tag type matches its
         // selection's value type exactly, so an optional tag would hover but never select.
@@ -142,6 +146,9 @@ extension RowHover: ViewModifier {
             .onHover { inside in
                 isHovered = inside
                 if inside { workspace.hoverBegan(target) } else { workspace.hoverEnded() }
+            }
+            .contextMenu {
+                Button("Open in New Tab") { workspace.openInNewTab(target) }
             }
     }
 }

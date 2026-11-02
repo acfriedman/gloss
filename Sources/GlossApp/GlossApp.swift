@@ -31,6 +31,15 @@ struct GlossApp: App {
                 Button("Open Quickly…") { workspace.isQuickOpenShown = true }
                     .keyboardShortcut("o", modifiers: [.command, .shift])
                     .disabled(workspace.atlas == nil)
+                Divider()
+                Button("New Tab") { workspace.newTab() }
+                    .keyboardShortcut("t")
+                    .disabled(workspace.atlas == nil)
+                // With one tab left, Close Tab steps aside and Command-W closes the window, as in Xcode.
+                Button("Close Tab") { workspace.closeTab(workspace.currentTabID) }
+                    .keyboardShortcut("w")
+                    .disabled(workspace.tabs.count < 2)
+                Divider()
                 Button("Reload") { workspace.reload() }
                     .keyboardShortcut("r")
                     .disabled(workspace.root == nil)
@@ -54,6 +63,13 @@ struct GlossApp: App {
                 Button("Forward") { travel(workspace.goForward, orMoveBy: #selector(NSResponder.moveToEndOfLine(_:))) }
                     .keyboardShortcut(.rightArrow)
                     .disabled(!workspace.canGoForward)
+                Divider()
+                Button("Show Previous Tab") { workspace.showTab(by: -1) }
+                    .keyboardShortcut("[", modifiers: [.command, .shift])
+                    .disabled(workspace.tabs.count < 2)
+                Button("Show Next Tab") { workspace.showTab(by: 1) }
+                    .keyboardShortcut("]", modifiers: [.command, .shift])
+                    .disabled(workspace.tabs.count < 2)
             }
         }
     }
@@ -77,6 +93,11 @@ struct GlossApp: App {
 final class AppDelegate: NSObject {}
 
 extension AppDelegate: NSApplicationDelegate {
+    // The window's own tabs are gloss's tab bar, so the system's window tabs and their menu items stay off.
+    func applicationWillFinishLaunching(_ notification: Notification) {
+        NSWindow.allowsAutomaticWindowTabbing = false
+    }
+
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.activate()
     }

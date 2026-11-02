@@ -1,7 +1,8 @@
 import GlossCore
 import SwiftUI
 
-/// The three panes, List | Detail | Map, with the controls that apply to all of them in the toolbar.
+/// The three panes, List | Detail | Map, the details and the map under a bar of tabs as Xcode's editor
+/// is, with the controls that apply to all of them in the toolbar.
 struct ContentView: View {
     @Environment(Workspace.self) private var workspace
 
@@ -12,11 +13,11 @@ struct ContentView: View {
                 NavigationSplitView(columnVisibility: $workspace.columns) {
                     ListPaneView()
                         .navigationSplitViewColumnWidth(min: 180, ideal: 240, max: 420)
-                } content: {
-                    DetailPaneView()
-                        .navigationSplitViewColumnWidth(min: 320, ideal: 440, max: 760)
                 } detail: {
-                    MapPaneView()
+                    VStack(spacing: 0) {
+                        TabBarView()
+                        EditorSplitView()
+                    }
                 }
             } else {
                 EmptyStateView()
@@ -72,6 +73,42 @@ struct ContentView: View {
                     .help("Read the sources again (⌘R)")
                     .disabled(workspace.root == nil || workspace.isLoading)
             }
+        }
+    }
+}
+
+/// The details beside the map, under the tabs: the details as wide as the reader last dragged the line
+/// between them, 440 points at first, and the map taking the rest.
+struct EditorSplitView: View {
+    @AppStorage("detailWidth") private var width = 440.0
+    @State private var dragStart: Double?
+
+    var body: some View {
+        HStack(spacing: 0) {
+            DetailPaneView()
+                .frame(width: width)
+            Rectangle()
+                .fill(Palette.line.opacity(0.6))
+                .frame(width: 1)
+                .overlay {
+                    Color.clear
+                        .frame(width: 9)
+                        .contentShape(Rectangle())
+                        .onHover { inside in
+                            if inside { NSCursor.resizeLeftRight.push() } else { NSCursor.pop() }
+                        }
+                        .gesture(
+                            DragGesture(minimumDistance: 1)
+                                .onChanged { drag in
+                                    let start = dragStart ?? width
+                                    dragStart = start
+                                    width = min(760, max(320, start + drag.translation.width))
+                                }
+                                .onEnded { _ in dragStart = nil }
+                        )
+                }
+            MapPaneView()
+                .frame(minWidth: 320, maxWidth: .infinity)
         }
     }
 }

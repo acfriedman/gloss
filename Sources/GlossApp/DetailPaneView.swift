@@ -841,7 +841,10 @@ struct ChipView: View {
     var body: some View {
         let dirty: Bool = if case .type(let id) = unit { atlas.group(id).findingCount > 0 } else { false }
         let lights: String = if case .type(let id) = unit { atlas.byID[id]?.root ?? id } else { unit.id }
-        Button { workspace.select(unit: unit) } label: {
+        Button {
+            let target = Workspace.selection(of: unit)
+            if NSEvent.modifierFlags.contains(.command) { workspace.openInNewTab(target) } else { workspace.select(target) }
+        } label: {
             Text(atlas.label(of: unit))
                 .font(.system(.callout, design: .monospaced))
                 .padding(.horizontal, 7)
@@ -855,6 +858,9 @@ struct ChipView: View {
         .onHover { inside in
             isHovered = inside
             workspace.hovered = inside ? lights : nil
+        }
+        .contextMenu {
+            Button("Open in New Tab") { workspace.openInNewTab(Workspace.selection(of: unit)) }
         }
     }
 }

@@ -91,7 +91,11 @@ the map; moving into the pane keeps the preview to read, and moving away returns
 In a focus, the preview is a page of its own about the box's tie to the focused type: its
 declaration and doc, then each trail of drawn dependencies from it back to the focused type, read
 top to bottom as the map draws them, in the words of the declarations each runs through, every step
-open so the chain reads whole, and the map lights the same trails; Keep shows the type's whole page. A box reached from several types gets
+open so the chain reads whole, and the map lights the same trails. Clicking a box in a focus pins
+that page, under a bar that closes it, or Esc, back to the focused type's page, with the map keeping
+the trail lit; the pin is a place Back returns from, and Keep on a preview pins it too. Double-clicking
+a box focuses on it; outside a focus, a click selects a type and a double click focuses on it. A
+single click acts at once, never waiting to see whether a second follows. A box reached from several types gets
 a trail through each, up to three, and each trail climbs on by one way only. A type's page lists the same under Why for every
 type beside it, one row per neighbor that unfolds to its reasons. Hovering a chip in the pane lights
 its box. Declarations are colored as Xcode's default themes color

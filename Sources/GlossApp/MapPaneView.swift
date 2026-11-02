@@ -277,7 +277,8 @@ struct MapCanvasView: View {
     }
 }
 
-/// One box on the map: a type, a module, or a folder, selecting it when clicked.
+/// One box on the map: a type, a module, or a folder. A click selects it, or in a focus pins its tie
+/// to the focused type; a double click on a type focuses on it.
 struct MapBoxView: View {
     @Environment(Workspace.self) private var workspace
     /// The placed box: its label and detail, its flags and width, and what clicking it selects.
@@ -290,6 +291,19 @@ struct MapBoxView: View {
     var isDimmed: Bool
     /// The module's tint for a module or folder box, or `nil` for a type, which stays neutral.
     var tint: Color?
+
+    /// The tooltip: what a click and a double click do here.
+    private var help: String {
+        guard case .type = box.item.unit else {
+            return box.item.flags.contains(.boundary) ? "Outside this level; select to step into it" : box.item.label
+        }
+        if workspace.scopeID == Workspace.focus {
+            return box.item.id == workspace.anchorID
+                ? box.item.label
+                : "\(box.item.label): click to see how it ties here, double-click to focus on it"
+        }
+        return "\(box.item.label): double-click to focus on it"
+    }
 
     var body: some View {
         let flags = box.item.flags
@@ -311,13 +325,16 @@ struct MapBoxView: View {
         .opacity(isDimmed ? 0.4 : flags.contains(.private) ? 0.7 : 1)
         .contentShape(shape)
         .onTapGesture {
-            let target = Workspace.selection(of: box.item.unit)
-            if NSEvent.modifierFlags.contains(.command) { workspace.openInNewTab(target) } else { workspace.select(target) }
+            if NSEvent.modifierFlags.contains(.command) {
+                workspace.openInNewTab(Workspace.selection(of: box.item.unit))
+            } else {
+                workspace.clicked(box.item.unit, count: NSApp.currentEvent?.clickCount ?? 1)
+            }
         }
         .onHover { $0 ? workspace.hoverBegan(Workspace.selection(of: box.item.unit)) : workspace.hoverEnded() }
         .contextMenu {
             Button("Open in New Tab") { workspace.openInNewTab(Workspace.selection(of: box.item.unit)) }
         }
-        .help(box.item.flags.contains(.boundary) ? "Outside this level; select to step into it" : box.item.label)
+        .help(help)
     }
 }

@@ -84,6 +84,8 @@ final class Workspace {
         var focusMode = FocusMode.neighbors
         /// The steps a reach draws, or `nil` for the default.
         var reachDepth: Int?
+        /// The drawn type whose tie to the focused type the details pin, or `nil` for the focused type's page.
+        var inspected: String?
         /// The places Back returns to, the most recent last.
         var back: [Place] = []
         /// The places Forward returns to after going back, the nearest last.
@@ -101,6 +103,7 @@ final class Workspace {
             focusFrom = other.focusFrom
             focusMode = other.focusMode
             reachDepth = other.reachDepth
+            inspected = other.inspected
         }
     }
 
@@ -161,6 +164,12 @@ final class Workspace {
     private var focusFrom: String? {
         get { tabs[current].focusFrom }
         set { tabs[current].focusFrom = newValue }
+    }
+    /// The drawn type whose tie to the focused type the details pin in the current tab, or `nil` for the
+    /// focused type's own page; always `nil` outside a focus.
+    private(set) var inspected: String? {
+        get { tabs[current].inspected }
+        set { tabs[current].inspected = newValue }
     }
 
     /// The narrowest access shown, as ``GlossCore/Contract/rank(_:)``: 3 for public, 1 for internal, 0 for all.
@@ -319,6 +328,7 @@ final class Workspace {
             preview = nil
             let rerooted = target != selection
             selection = target
+            inspected = nil
             if case .type(let id) = target { reveal(id) }
             scopeID = scope(for: target)
             // A new type starts at the default depth; switching modes keeps the chosen one.
@@ -334,6 +344,57 @@ final class Workspace {
         navigate {
             select(.type(id))
             zoom(to: Self.focus)
+        }
+    }
+
+    /// Pins a drawn type's tie to the focused type in the details, leaving the focus where it is.
+    ///
+    /// - Parameter id: A type the focus draws other than its root; clicking the root unpins instead.
+    func inspect(_ id: String) {
+        guard scopeID == Self.focus, case .type(let root) = selection else { return }
+        navigate {
+            showing?.cancel()
+            hiding?.cancel()
+            preview = nil
+            inspected = id == root || drawing.reach?.parents[id] == nil ? nil : id
+        }
+    }
+
+    /// Unpins the type the details show, returning them to the focused type's own page.
+    func closeInspection() {
+        guard inspected != nil else { return }
+        navigate { inspected = nil }
+    }
+
+    /// Answers a click on a box: in a focus, one click pins the box's tie to the root and a second
+    /// re-roots the focus on it; elsewhere, one click selects a box and a second zooms into a type's
+    /// focus. The first click acts at once, so a single click never waits to see whether a second
+    /// follows.
+    ///
+    /// - Parameters:
+    ///   - unit: What the box stands for.
+    ///   - count: The click count of the event, 2 for the second click of a double click.
+    func clicked(_ unit: MapScope.Unit, count: Int) {
+        let target = Self.selection(of: unit)
+        guard case .type(let id) = target else { return select(target) }
+        if scopeID == Self.focus {
+            if count >= 2 { select(target) } else { inspect(id) }
+        } else if count >= 2 {
+            focus(on: id)
+        } else {
+            select(target)
+        }
+    }
+
+    /// Keeps what a preview shows: in a focus, a drawn type's tie to the root is pinned; anything else is
+    /// selected.
+    ///
+    /// - Parameter target: The previewed selection.
+    func keep(_ target: Selection) {
+        if scopeID == Self.focus, case .type(let id) = target, drawing.reach?.parents[id] != nil {
+            inspect(id)
+        } else {
+            select(target)
         }
     }
 
@@ -368,11 +429,13 @@ final class Workspace {
         var focusFrom: String?
         /// The depth chosen there, or `nil` for the default.
         var reachDepth: Int?
+        /// The type whose tie to the focused type was pinned there.
+        var inspected: String?
     }
 
     /// Where the reader is now.
     private var here: Place {
-        Place(selection: selection, scopeID: scopeID, focusFrom: focusFrom, reachDepth: reachDepth)
+        Place(selection: selection, scopeID: scopeID, focusFrom: focusFrom, reachDepth: reachDepth, inspected: inspected)
     }
 
     private var back: [Place] {
@@ -428,6 +491,7 @@ final class Workspace {
         scopeID = place.scopeID
         focusFrom = place.focusFrom
         tabs[current].reachDepth = place.reachDepth
+        inspected = place.inspected
         // A place read before a reload may name what is gone; it falls back as a reload does.
         restore()
     }
@@ -661,6 +725,7 @@ final class Workspace {
         guard let target else { return }
         navigate {
             if target == Self.focus, scopeID != Self.focus { focusFrom = scopeID }
+            if target != Self.focus { inspected = nil }
             scopeID = target
             redraw()
         }
@@ -676,8 +741,9 @@ final class Workspace {
         case .folder(let module, let folder): return MapScope.Unit.folder(module, folder).id
         case .type(let id):
             guard scopeID == Self.focus else { return atlas?.byID[id]?.root }
-            // A focus is about the whole reach, so its root is marked, not lit; a previewed box still lights.
-            return preview == nil ? nil : id
+            // A focus is about the whole reach, so its root is marked, not lit; a previewed or pinned box
+            // still lights.
+            return preview == nil ? inspected : id
         }
     }
 
@@ -688,11 +754,18 @@ final class Workspace {
         return reach.trails(to: id)
     }
 
-    /// The drawn dependencies the map lights beyond the lit box's own: a previewed type's trails back to
-    /// the root, so the map shows the chain the details pane reads; none while a chip lights another box.
+    /// The trails that bring the pinned type into the focus; none when nothing is pinned.
+    var inspectedTrails: (trails: [[GraphLayout.Link]], more: Int) {
+        guard scopeID == Self.focus, let inspected, let reach = drawing.reach else { return ([], 0) }
+        return reach.trails(to: inspected)
+    }
+
+    /// The drawn dependencies the map lights beyond the lit box's own: the previewed or else the pinned
+    /// type's trails back to the root, so the map shows the chain the details pane reads; none while a
+    /// chip lights another box.
     var litTrail: [GraphLayout.Link] {
         guard hovered == nil else { return [] }
-        return previewTrails.trails.flatMap { $0 }
+        return (preview == nil ? inspectedTrails : previewTrails).trails.flatMap { $0 }
     }
 
     /// The box the focus grows from, drawn as the current one without dimming the rest; `nil` outside it.
@@ -723,6 +796,8 @@ final class Workspace {
                               caption: "Depth \(reach.depth) of \(reach.totalDepth) · \(counted) of \(reach.total) types" + cut,
                               overflow: reach.overflow.map { .type($0) },
                               depth: (reach.depth, reach.totalDepth), reach: reach)
+            // A pinned type the reach no longer draws, after a change of depth or mode, unpins.
+            if let inspected, reach.parents[inspected] == nil { tabs[current].inspected = nil }
             return
         }
         guard let scope = scopes.first(where: { $0.id == scopeID }) ?? scopes.first else {

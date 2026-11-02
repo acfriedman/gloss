@@ -5,21 +5,32 @@ import SwiftUI
 /// The middle pane: the text of whatever is selected, from the overview down to one type's members.
 ///
 /// A preview is laid over the selection rather than replacing it, so when the preview ends the
-/// selection is back where the reader left it: scrolled to the same place, members still open.
+/// selection is back where the reader left it: scrolled to the same place, members still open. In a
+/// focus, a pinned type's tie to the focused type takes the selection's place until it is closed.
 struct DetailPaneView: View {
     @Environment(Workspace.self) private var workspace
 
     var body: some View {
         ZStack(alignment: .top) {
-            DetailPageView(target: workspace.selection)
-                .id(workspace.selection)
+            if let inspected = workspace.inspected {
+                VStack(spacing: 0) {
+                    InspectionBarView(inspected: inspected)
+                    Divider()
+                    let why = workspace.inspectedTrails
+                    DetailPageView(target: .type(inspected), trails: why.trails, more: why.more)
+                }
+                .id("inspected " + inspected)
+            } else {
+                DetailPageView(target: workspace.selection)
+                    .id(workspace.selection)
+            }
             if let preview = workspace.preview {
                 VStack(spacing: 0) {
                     HStack(spacing: 8) {
                         Image(systemName: "eye")
                         Text("Previewing. Click it to keep it here.")
                         Spacer()
-                        Button("Keep") { workspace.select(preview) }
+                        Button("Keep") { workspace.keep(preview) }
                             .controlSize(.small)
                     }
                     .font(.callout)
@@ -35,6 +46,38 @@ struct DetailPaneView: View {
             }
         }
         .onHover { workspace.detailsHovered($0) }
+    }
+}
+
+/// The bar over a pinned type's tie to the focused type, naming both and closing back to the focused
+/// type's page from its button or Esc.
+struct InspectionBarView: View {
+    @Environment(Workspace.self) private var workspace
+    /// The id of the pinned type.
+    var inspected: String
+
+    var body: some View {
+        let name = { (id: String?) in id.flatMap { workspace.atlas?.byID[$0] }.map { workspace.atlas?.label($0) ?? "" } ?? "" }
+        let root = name(workspace.anchorID)
+        HStack(spacing: 8) {
+            Image(systemName: "point.topleft.down.to.point.bottomright.curvepath")
+            Text("How \(name(inspected)) ties to \(root)")
+                .lineLimit(1)
+                .truncationMode(.middle)
+            Spacer()
+            Button { workspace.closeInspection() } label: {
+                Label("Close", systemImage: "xmark")
+            }
+            .controlSize(.small)
+            .keyboardShortcut(.cancelAction)
+            .disabled(workspace.isQuickOpenShown)
+            .help("Back to \(root)'s page (Esc)")
+        }
+        .font(.callout)
+        .foregroundStyle(.secondary)
+        .padding(.horizontal, 24)
+        .padding(.vertical, 8)
+        .background(.bar)
     }
 }
 

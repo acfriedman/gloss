@@ -25,11 +25,22 @@ public enum SourceFiles {
         guard let enumerator = FileManager.default.enumerator(atPath: path) else { return [] }
         var files: [String] = []
         for case let relative as String in enumerator {
-            let components = relative.split(separator: "/")
-            if components.contains(".build") || components.contains(".swiftpm") { enumerator.skipDescendants(); continue }
-            if !includeTests, components.contains(where: { $0.hasSuffix("Tests") }) { enumerator.skipDescendants(); continue }
+            if isSkipped(relative, includeTests: includeTests) { enumerator.skipDescendants(); continue }
             if relative.hasSuffix(".swift") { files.append((path as NSString).appendingPathComponent(relative)) }
         }
         return files.sorted()
+    }
+
+    /// Whether a path under a scanned directory is left out, it or a directory it is in being a build
+    /// directory, or a test directory when tests are not wanted.
+    ///
+    /// - Parameters:
+    ///   - relative: The path under the scanned directory, components joined by `/`.
+    ///   - includeTests: `false` leaves out anything in a directory whose name ends in `Tests`.
+    /// - Returns: `true` when the path is not scanned.
+    public static func isSkipped(_ relative: String, includeTests: Bool) -> Bool {
+        let components = relative.split(separator: "/")
+        if components.contains(".build") || components.contains(".swiftpm") { return true }
+        return !includeTests && components.contains { $0.hasSuffix("Tests") }
     }
 }

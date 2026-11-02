@@ -139,6 +139,13 @@ or through a variable whose declared type is known (`workspace.select(…)`, fro
 property of the same type), matched by name; else the used type's own summary. Reaching a type
 through such a variable also counts as using it inside a body.
 
+An interface can be compared with a base (`InterfaceDiff`): the types, declarations, and dependencies
+added, removed, or changed, matched by name rather than place, so code that only moves is no change.
+A changed declaration says whether its signature or its doc changed, and a changed dependency gives
+its roles before and after, so a type that was only used inside bodies and is now taken or returned
+reads as entering the interface. `Revision` reads the base straight from git, at any revision, without
+checking it out, choosing files as the working tree's are chosen.
+
 The page is three panes on one screen: every type listed on the left, the text of one type in the
 middle, and the dependency map on the right, where it takes whatever width the other two leave.
 Nothing navigates away, so the map stays in view. A toolbar across the top holds what applies to

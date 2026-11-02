@@ -22,6 +22,20 @@ final class DiffTests: XCTestCase {
     struct Coupon {}
     /// Helps.
     struct Helper {}
+    /// Checks out.
+    struct Checkout {
+        /// The cart checked out.
+        var cart: Cart
+        /// Charges the cart.
+        func charge() { _ = cart.total() }
+    }
+    /// Prints a receipt.
+    struct Receipt {
+        /// The cart printed.
+        var cart: Cart
+        /// Prints it.
+        func print(_ line: Line) { cart.add(line) }
+    }
     """
 
     private let head = """
@@ -46,6 +60,20 @@ final class DiffTests: XCTestCase {
     struct Discount {}
     /// Helps.
     struct Helper {}
+    /// Checks out.
+    struct Checkout {
+        /// The cart checked out.
+        var cart: Cart
+        /// Charges the cart.
+        func charge() { _ = cart.total() }
+    }
+    /// Prints a receipt.
+    struct Receipt {
+        /// The cart printed.
+        var cart: Cart
+        /// Prints it.
+        func print(_ line: Line) { cart.add(line) }
+    }
     """
 
     private func diff() -> InterfaceDiff {
@@ -95,18 +123,22 @@ final class DiffTests: XCTestCase {
         XCTAssertEqual(atlas.change(of: .folder("Shop", ""), in: diff), .changed)
     }
 
-    func testTheChangesFigureDrawsChangesAndWhatTouchesThem() {
+    func testTheChangesFigureDrawsOnlyWhatAChangeReaches() {
         let atlas = Atlas(Interface.build(sources: [("Sources/Shop/Cart.swift", head)]))
         let diff = diff()
-        let whole = atlas.changesFigure(diff, minimumRank: 0)
-        XCTAssertEqual(Set(whole.layout.boxes.map(\.item.label)), ["Cart", "Discount", "Line", "Helper"],
-                       "The changed types and one step around them; the removed one is not drawn.")
-        XCTAssertEqual([whole.changed, whole.around], [2, 2])
-        XCTAssertTrue(whole.layout.curves.allSatisfy { ["Shop/Cart", "Shop/Discount"].contains($0.link.from) || ["Shop/Cart", "Shop/Discount"].contains($0.link.to) },
+        let figure = atlas.changesFigure(diff, minimumRank: 0)
+        XCTAssertEqual(Set(figure.layout.boxes.map(\.item.label)), ["Cart", "Discount", "Helper", "Checkout"],
+                       "Helper's dependency changed and Checkout calls total(), whose signature changed.")
+        XCTAssertEqual(Set(figure.untouched), ["Shop/Line", "Shop/Receipt"],
+                       "Cart uses Line as it did, and Receipt only calls add(_:), which did not change.")
+        XCTAssertTrue(figure.layout.curves.allSatisfy { ["Shop/Cart", "Shop/Discount"].contains($0.link.from) || ["Shop/Cart", "Shop/Discount"].contains($0.link.to) },
                       "Only dependencies with a change at an end.")
+        let everything = atlas.changesFigure(diff, minimumRank: 0, includeUntouched: true)
+        XCTAssertEqual(everything.layout.boxes.count, 6, "Asked for, the untouched are drawn too.")
+        XCTAssertTrue(everything.untouched.isEmpty)
         let tight = atlas.changesFigure(diff, minimumRank: 0, budget: 2)
         XCTAssertEqual(tight.layout.boxes.count, 2)
-        XCTAssertEqual(Set(tight.overflow), ["Shop/Line", "Shop/Helper"], "Neighbors give way to changes.")
+        XCTAssertEqual(Set(tight.overflow), ["Shop/Helper", "Shop/Checkout"], "Neighbors give way to changes.")
         let tighter = atlas.changesFigure(diff, minimumRank: 0, budget: 1)
         XCTAssertEqual(tighter.layout.boxes.map(\.item.label), ["Cart"], "The most connected change stays.")
         XCTAssertEqual(tighter.overflow.first, "Shop/Discount")

@@ -46,6 +46,9 @@ final class Workspace {
         /// The reach the focus draws, which says how each drawn type leads back to the root; `nil` at the
         /// other levels.
         var reach: Reach?
+        /// At the changes level, the neighbors no change reaches, left undrawn and listed under the map;
+        /// empty elsewhere and while they are drawn.
+        var untouched: [MapScope.Unit] = []
     }
 
     /// What the focus draws around the selected type.
@@ -207,6 +210,9 @@ final class Workspace {
     private var bases: [String: Interface] = [:]
     /// Whether the reader picked a comparison, which the default then leaves alone.
     private var comparisonChosen = false
+
+    /// Whether the changes level draws the neighbors no change reaches as well as those it does.
+    var showsUntouched = false { didSet { if scopeID == Self.changes { redraw() } } }
 
     /// The narrowest access shown, as ``GlossCore/Contract/rank(_:)``: 3 for public, 1 for internal, 0 for all.
     var minimumRank = Atlas.defaultMinimumRank { didSet { redraw() } }
@@ -959,10 +965,13 @@ final class Workspace {
                 drawing = Drawing(crumbs: crumbs, caption: caption)
                 return
             }
-            let figure = atlas.changesFigure(diff, minimumRank: minimumRank)
+            let figure = atlas.changesFigure(diff, minimumRank: minimumRank, includeUntouched: showsUntouched)
+            let around = showsUntouched ? "around them" : "they reach"
+            let untouched = figure.untouched.isEmpty ? "" : ", \(figure.untouched.count) around them untouched"
             let caption = diff.isEmpty ? "Nothing changed \(comparisonPhrase)."
-                : "\(figure.changed) changed type\(figure.changed == 1 ? "" : "s") and \(figure.around) around them."
-            drawing = Drawing(layout: figure.layout, crumbs: crumbs, caption: caption, overflow: figure.overflow.map { .type($0) })
+                : "\(figure.changed) changed type\(figure.changed == 1 ? "" : "s"), \(figure.around) \(around)\(untouched)."
+            drawing = Drawing(layout: figure.layout, crumbs: crumbs, caption: caption, overflow: figure.overflow.map { .type($0) },
+                              untouched: figure.untouched.map { .type($0) })
             return
         }
         guard let scope = scopes.first(where: { $0.id == scopeID }) ?? scopes.first else {

@@ -31,6 +31,12 @@ struct MapPaneView: View {
                     }
                 }
                 Spacer()
+                if workspace.scopeID == Workspace.changes, workspace.diff.map({ !$0.isEmpty }) == true {
+                    Toggle("Untouched", isOn: $workspace.showsUntouched)
+                        .toggleStyle(.checkbox)
+                        .font(.callout)
+                        .help("Also draw the types around the changes that no change reaches: users of a changed type that touch none of what changed, and types a changed type uses as it did")
+                }
                 if workspace.scopeID == Workspace.focus {
                     if let depth = drawing.depth, depth.total > 1 {
                         Stepper {
@@ -93,13 +99,14 @@ struct MapPaneView: View {
                         .padding(12)
                 }
             }
-            if let atlas = workspace.atlas, !drawing.loose.isEmpty || !drawing.overflow.isEmpty {
+            if let atlas = workspace.atlas, !drawing.loose.isEmpty || !drawing.overflow.isEmpty || !drawing.untouched.isEmpty {
                 Divider()
                 ScrollView {
                     VStack(alignment: .leading, spacing: 12) {
                         ChipBlockView(title: "Not connected", units: drawing.loose, atlas: atlas)
-                        ChipBlockView(title: workspace.scopeID == Workspace.changes ? "Also changed or touching a change, not drawn"
+                        ChipBlockView(title: workspace.scopeID == Workspace.changes ? "Also changed or reached by a change, not drawn"
                                           : "Least connected, not drawn", units: drawing.overflow, atlas: atlas)
+                        ChipBlockView(title: "Around the changes, untouched by them", units: drawing.untouched, atlas: atlas)
                     }
                     .padding(16)
                     .frame(maxWidth: .infinity, alignment: .leading)

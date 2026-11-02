@@ -155,8 +155,13 @@ amber. A line under the map counts what is new, changed, and gone across the int
 gone types, which the map cannot draw yet.
 
 With a comparison on, the list opens with Changes, a level of its own (`Atlas.changesFigure`): the
-changed types and the types one step around them, those touching the most changes first, with only
-the dependencies that have a change at an end, since those are the ones a change can break. When the
+changed types and the neighbors a change reaches, those touching the most changes first, with only
+the dependencies that have a change at an end, since those are the ones a change can break. A
+neighbor is reached when its dependency with a changed type is itself new or changed, or when it uses
+a changed type and either the type's declaration changed or it reaches a member whose signature
+changed or that is gone; an added member breaks no one, and a change to docs alone reaches no one.
+Members are matched by name as bodies reach them, so the untouched neighbors are counted and listed
+under the map rather than dropped, and the Untouched checkbox draws them too. When the
 changes alone are over 30 boxes, the most connected are drawn and the rest are listed. Its page lists
 the changes module by module, each changed type with its declarations that changed and whether the
 signature or the doc did, the gone types struck through, and the dependencies of types that were

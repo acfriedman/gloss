@@ -29,34 +29,49 @@ extension Atlas {
     }
 }
 
-/// What changed since a base and the types one step around it, drawn as one figure: the blast radius of
-/// a change at a glance.
+/// What changed since a base and the types it reaches, drawn as one figure: the blast radius of a
+/// change at a glance.
 public struct ChangesFigure: Sendable {
-    /// The drawing: the changed types, their neighbors, and the dependencies between a change and the rest.
+    /// The drawing: the changed types, the types they reach, and the dependencies between a change and
+    /// the rest.
     public var layout: GraphLayout
     /// How many changed types are drawn.
     public var changed: Int
     /// How many types around them are drawn.
     public var around: Int
-    /// The changed types and neighbors left out to stay within the budget, most connected first.
+    /// The changed types and reached neighbors left out to stay within the budget, most connected first.
     public var overflow: [String]
+    /// The neighbors a change does not reach, left out unless asked for: types that use a changed type
+    /// but none of what changed in it, and types a changed type uses just as it did. Those touching the
+    /// most changes come first.
+    public var untouched: [String]
 }
 
 extension Atlas {
-    /// Lays out what changed since a base, with the types that use a change or that a change uses.
+    /// Lays out what changed since a base, with the neighbors the change reaches.
     ///
     /// - Parameters:
     ///   - diff: How the interface differs from the base.
     ///   - minimumRank: The narrowest access, as ``GlossCore/Contract/rank(_:)``, a type needs to be drawn.
     ///   - budget: The most boxes to draw.
+    ///   - includeUntouched: `true` to draw the neighbors the change does not reach as well, after those
+    ///     it does.
     /// - Returns: The figure, every type its own box, nested ones included.
     ///
+    /// A neighbor is reached when its dependency with a changed type is itself new or changed, either
+    /// way, or when it uses a changed type and either the type's own declaration changed or the
+    /// neighbor reaches a member of it whose signature changed or that is gone. A member added breaks
+    /// no one, and a change to docs alone reaches no one. Members are matched by name as the bodies
+    /// reach them, on a type named outright or through a property or parameter of known type, so a
+    /// member reached through a local variable goes unseen; the untouched are listed for that reason.
+    ///
     /// The changed types come first: when they alone are over the budget, the most connected of them
-    /// are drawn and nothing around them. Otherwise the neighbors fill what is left, those touching the
-    /// most changes first. Only dependencies with a change at one end or both are drawn, since those
-    /// are the ones a change can break; removed types are gone from the interface, so they are not
-    /// drawn.
-    public func changesFigure(_ diff: InterfaceDiff, minimumRank: Int, budget: Int = mapBudget) -> ChangesFigure {
+    /// are drawn and nothing around them. Otherwise the reached neighbors fill what is left, those
+    /// touching the most changes first. Only dependencies with a change at one end or both are drawn,
+    /// since those are the ones a change can break; removed types are gone from the interface, so they
+    /// are not drawn.
+    public func changesFigure(_ diff: InterfaceDiff, minimumRank: Int, budget: Int = mapBudget,
+                              includeUntouched: Bool = false) -> ChangesFigure {
         let shown = { (id: String) in self.byID[id].map { self.rank(of: $0) >= minimumRank } ?? false }
         let position = Dictionary(uniqueKeysWithValues: nodes.enumerated().map { ($0.element.id, $0.offset) })
         var degree: [String: Int] = [:]
@@ -76,17 +91,47 @@ extension Atlas {
             changed = changed.filter(kept.contains)
         }
         let changedSet = Set(changed)
+
+        // What a user can break on in each changed type: the type's own declaration, and the members
+        // whose signature changed or that are gone.
+        var declarationChanged: Set<String> = []
+        var breaking: [String: Set<String>] = [:]
+        for node in diff.nodes where node.change == .changed {
+            for declaration in node.declarations where declaration.change == .removed || declaration.signatureChanged {
+                if ["struct", "class", "enum", "protocol", "actor"].contains(declaration.keyword) {
+                    declarationChanged.insert(node.node.id)
+                } else {
+                    breaking[node.node.id, default: []].insert(String(declaration.name.prefix { $0 != "(" }))
+                }
+            }
+        }
+        func reaches(user: String, changed type: String) -> Bool {
+            if declarationChanged.contains(type) { return true }
+            guard let names = breaking[type] else { return false }
+            let group = group(user)
+            let reached = ([group.head].compactMap { $0 } + group.members)
+                .flatMap { $0.contract.mentions.filter { $0.resolved == type }.flatMap(\.members) }
+            return !names.isDisjoint(with: reached)
+        }
+
         var touches: [String: Int] = [:]
+        var reached: Set<String> = []
         for edge in edges {
             let fromChanged = changedSet.contains(edge.from)
             let toChanged = changedSet.contains(edge.to)
-            if fromChanged, !toChanged, shown(edge.to) { touches[edge.to, default: 0] += 1 }
-            if toChanged, !fromChanged, shown(edge.from) { touches[edge.from, default: 0] += 1 }
+            guard fromChanged != toChanged else { continue }
+            let neighbor = fromChanged ? edge.to : edge.from
+            guard shown(neighbor) else { continue }
+            touches[neighbor, default: 0] += 1
+            let moved = diff.change(from: edge.from, to: edge.to).map { $0.change != .removed } ?? false
+            if moved || (toChanged && reaches(user: edge.from, changed: edge.to)) { reached.insert(neighbor) }
         }
-        let neighbors = ranked(Array(touches.keys)) { touches[$0] ?? 0 }
+        let byTouch = ranked(Array(touches.keys)) { touches[$0] ?? 0 }
+        let untouched = byTouch.filter { !reached.contains($0) }
+        let candidates = byTouch.filter(reached.contains) + (includeUntouched ? untouched : [])
         let room = overflow.isEmpty ? max(budget - changed.count, 0) : 0
-        let around = Array(neighbors.prefix(room))
-        overflow += neighbors.dropFirst(room)
+        let around = Array(candidates.prefix(room))
+        overflow += candidates.dropFirst(room)
 
         let drawn = changed + around.sorted { (position[$0] ?? 0) < (position[$1] ?? 0) }
         let drawnSet = Set(drawn)
@@ -103,6 +148,7 @@ extension Atlas {
             GraphLayout.Link(from: edge.from, to: edge.to, dashed: edge.roles == [.body],
                              title: "\(label(of: .type(edge.from))) \(Wording.words(edge.roles)) \(label(of: .type(edge.to)))")
         }
-        return ChangesFigure(layout: GraphLayout.layered(items, links), changed: changed.count, around: around.count, overflow: overflow)
+        return ChangesFigure(layout: GraphLayout.layered(items, links), changed: changed.count, around: around.count, overflow: overflow,
+                             untouched: includeUntouched ? [] : untouched)
     }
 }

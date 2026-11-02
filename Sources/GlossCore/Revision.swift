@@ -130,6 +130,18 @@ public enum Revision {
     /// - Returns: The standard output.
     /// - Throws: ``Failure`` when git cannot run or exits with an error.
     private static func git(_ arguments: [String], in directory: String, input: Data? = nil) throws -> Data {
+        try Timing.measure("git", arguments.prefix(2).joined(separator: " ")) { try run(arguments, in: directory, input: input) }
+    }
+
+    /// Runs git, as ``git(_:in:input:)`` does once it is timed.
+    ///
+    /// - Parameters:
+    ///   - arguments: The arguments after `git -C directory`.
+    ///   - directory: The directory git runs in.
+    ///   - input: What to write to git's standard input, or `nil` for none.
+    /// - Returns: The standard output.
+    /// - Throws: ``Failure`` when git cannot run or exits with an error.
+    private static func run(_ arguments: [String], in directory: String, input: Data?) throws -> Data {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
         process.arguments = ["git", "-C", directory] + arguments
@@ -139,6 +151,10 @@ public enum Revision {
         process.standardOutput = output
         process.standardError = errors
         process.standardInput = input == nil ? FileHandle.nullDevice : feed
+        // `waitUntilExit()` polls the run loop and adds tens of milliseconds to every call; the exit is
+        // waited for exactly instead.
+        let exited = DispatchSemaphore(value: 0)
+        process.terminationHandler = { _ in exited.signal() }
         do {
             try process.run()
         } catch {
@@ -154,7 +170,7 @@ public enum Revision {
         }
         let data = output.fileHandleForReading.readDataToEndOfFile()
         let complaint = errors.fileHandleForReading.readDataToEndOfFile()
-        process.waitUntilExit()
+        exited.wait()
         guard process.terminationStatus == 0 else {
             let message = String(decoding: complaint, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
             throw Failure(message: message.isEmpty ? "git \(arguments.first ?? "") failed" : message)

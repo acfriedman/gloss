@@ -23,21 +23,26 @@ public struct Interface: Sendable, Equatable, Codable {
     /// - Returns: The interface in file order, then source order, with each contract's module named
     ///   from its path and its mentions resolved.
     public static func build(sources: [(file: String, source: String)]) -> Interface {
-        var contracts: [Contract] = []
-        var assessments: [Assessment] = []
-        let readings = sources.map { (file: $0.file, entries: DeclarationReader.read(source: $0.source, file: $0.file)) }
-        let index = SymbolIndex(readings)
-        for (file, entries) in readings {
-            let module = Self.module(of: file)
-            for entry in entries {
-                var contract = Contract.make(entry)
-                contract.module = module
-                contracts.append(contract)
-                assessments.append(Linter.assess(entry, index: index))
+        // Each file is read, and its declarations made into contracts and linted, on its own, so the
+        // files are spread over every core; the results keep the files' order.
+        let readings = Timing.measure("parse", "\(sources.count) files") {
+            concurrentMap(sources) { (file: $0.file, entries: DeclarationReader.read(source: $0.source, file: $0.file)) }
+        }
+        let index = Timing.measure("index symbols") { SymbolIndex(readings) }
+        let made = Timing.measure("contracts and lint") {
+            concurrentMap(readings) { reading -> (contracts: [Contract], assessments: [Assessment]) in
+                let module = Self.module(of: reading.file)
+                let contracts = reading.entries.map { entry -> Contract in
+                    var contract = Contract.make(entry)
+                    contract.module = module
+                    return contract
+                }
+                return (contracts, reading.entries.map { Linter.assess($0, index: index) })
             }
         }
-        let graph = Graph.build(&contracts)
-        return Interface(files: sources.map(\.file), contracts: contracts, assessments: assessments, graph: graph)
+        var contracts = made.flatMap(\.contracts)
+        let graph = Timing.measure("graph", "\(contracts.count) declarations") { Graph.build(&contracts) }
+        return Interface(files: sources.map(\.file), contracts: contracts, assessments: made.flatMap(\.assessments), graph: graph)
     }
 
     /// Names the module a file belongs to by the SwiftPM layout: the directory right under `Sources`

@@ -345,13 +345,57 @@ public enum SymbolReference {
     /// - Returns: `true` for a call with argument labels, with or without a type prefix, and for a
     ///   capitalized type path ending in a lowercase member; `false` otherwise.
     public static func isReference(_ span: String) -> Bool {
-        let isCall = span.wholeMatch(of: /(?:[A-Z][A-Za-z0-9_]*\.)*[a-z_][A-Za-z0-9_]*\([A-Za-z0-9_:]*\)/) != nil
-        let isMember = span.wholeMatch(of: /[A-Z][A-Za-z0-9_]*(?:\.[A-Z][A-Za-z0-9_]*)*\.[a-z_][A-Za-z0-9_]*/) != nil
-        guard isCall || isMember else { return false }
+        guard isCall(span) || isMember(span) else { return false }
         let segments = span.split(separator: ".").map(String.init)
         if let last = segments.last, fileExtensions.contains(last) { return false }
         if let base = span.split(separator: "(").first, keywordForms.contains(String(base)) { return false }
         return !externalPrefixes.contains(segments[0])
+    }
+
+    /// Whether a span is a call with argument labels: capitalized type segments and dots, if any, then
+    /// a lowercase name and its labels in parentheses. Matched by hand, since a regex literal is
+    /// compiled again each time it is evaluated, and the linter asks for every span.
+    ///
+    /// - Parameter span: The text between single backticks.
+    /// - Returns: `true` for the call shape.
+    static func isCall(_ span: String) -> Bool {
+        guard span.last == ")", let open = span.firstIndex(of: "(") else { return false }
+        let labels = span[span.index(after: open)..<span.index(before: span.endIndex)]
+        guard labels.allSatisfy({ isIdentifierPart($0) || $0 == ":" }) else { return false }
+        let path = span[..<open].split(separator: ".", omittingEmptySubsequences: false)
+        return path.last.map { isIdentifier($0, capitalized: false) } == true && path.dropLast().allSatisfy { isIdentifier($0, capitalized: true) }
+    }
+
+    /// Whether a span is a member under a type path: one or more capitalized segments, then a lowercase
+    /// one, joined by dots.
+    ///
+    /// - Parameter span: The text between single backticks.
+    /// - Returns: `true` for the member shape.
+    static func isMember(_ span: String) -> Bool {
+        let path = span.split(separator: ".", omittingEmptySubsequences: false)
+        return path.count >= 2 && isIdentifier(path[path.count - 1], capitalized: false)
+            && path.dropLast().allSatisfy { isIdentifier($0, capitalized: true) }
+    }
+
+    /// Whether text is one ASCII identifier that starts with an uppercase letter, or with a lowercase
+    /// letter or an underscore.
+    ///
+    /// - Parameters:
+    ///   - text: The text.
+    ///   - capitalized: `true` for a type's name, `false` for a member's.
+    /// - Returns: `true` when the first character fits and every other is a letter, digit, or underscore.
+    private static func isIdentifier(_ text: Substring, capitalized: Bool) -> Bool {
+        guard let first = text.first, first.isASCII else { return false }
+        let fits = capitalized ? first.isUppercase : first.isLowercase || first == "_"
+        return fits && text.dropFirst().allSatisfy(isIdentifierPart)
+    }
+
+    /// Whether a character can continue an ASCII identifier.
+    ///
+    /// - Parameter character: The character.
+    /// - Returns: `true` for an ASCII letter, digit, or underscore.
+    private static func isIdentifierPart(_ character: Character) -> Bool {
+        character.isASCII && (character.isLetter || character.isNumber || character == "_")
     }
 
     /// The DocC spelling of a reference: dots between path segments become slashes.

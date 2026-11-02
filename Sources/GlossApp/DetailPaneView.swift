@@ -104,7 +104,8 @@ struct DetailPageView: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 24) {
+            // Lazy, so a type of hundreds of members and neighbors builds only the rows on screen.
+            LazyVStack(alignment: .leading, spacing: 24) {
                 if let atlas = workspace.atlas {
                     switch target {
                     case .overview: OverviewView(atlas: atlas)
@@ -406,7 +407,7 @@ struct TypeView: View {
 
     var body: some View {
         let group = atlas.group(node.id)
-        let (incoming, outgoing, nested) = atlas.neighbors(of: node)
+        let (incoming, outgoing, nested) = Timing.measure("neighbors", node.id) { atlas.neighbors(of: node) }
         TypeHeaderView(atlas: atlas, node: node)
         FlowView(atlas: atlas, incoming: incoming, outgoing: outgoing, nested: nested)
         WhyView(atlas: atlas, node: node, incoming: incoming, outgoing: outgoing)
@@ -524,17 +525,15 @@ struct WhyView: View {
 
     var body: some View {
         if !incoming.isEmpty || !outgoing.isEmpty {
-            VStack(alignment: .leading, spacing: 2) {
+            LazyVStack(alignment: .leading, spacing: 2) {
                 EyebrowView(text: "Why · \(incoming.count + outgoing.count)")
                     .padding(.bottom, 6)
                 ForEach(incoming, id: \.from) { edge in
-                    WhyRowView(atlas: atlas, other: edge.from, roles: edge.roles, usesThis: true,
-                               reasons: atlas.reasons(from: edge.from, to: node.id))
+                    WhyRowView(atlas: atlas, other: edge.from, roles: edge.roles, usesThis: true, from: edge.from, to: node.id)
                     Divider()
                 }
                 ForEach(outgoing, id: \.to) { edge in
-                    WhyRowView(atlas: atlas, other: edge.to, roles: edge.roles, usesThis: false,
-                               reasons: atlas.reasons(from: node.id, to: edge.to))
+                    WhyRowView(atlas: atlas, other: edge.to, roles: edge.roles, usesThis: false, from: node.id, to: edge.to)
                     Divider()
                 }
             }
@@ -553,14 +552,21 @@ struct WhyRowView: View {
     /// `true` when the neighbor uses the type, read as "Neighbor holds it"; `false` when the type uses
     /// the neighbor, read as "holds Neighbor".
     var usesThis: Bool
-    /// What each declaration the dependency runs through says about it.
-    var reasons: [Reason]
+    /// The id of the dependent type.
+    var from: String
+    /// The id of the type it depends on.
+    var to: String
     @State private var isOpen = false
 
     var body: some View {
         DisclosureGroup(isExpanded: $isOpen) {
+            // The reasons are read only once the row opens: a type with hundreds of neighbors would
+            // otherwise read every declaration of each before showing anything.
             VStack(alignment: .leading, spacing: 12) {
-                ForEach(Array(reasons.enumerated()), id: \.offset) { _, reason in ReasonView(reason: reason) }
+                if isOpen {
+                    let reasons = Timing.measure("why reasons", from + " → " + to) { atlas.reasons(from: from, to: to) }
+                    ForEach(Array(reasons.enumerated()), id: \.offset) { _, reason in ReasonView(reason: reason) }
+                }
             }
             .padding(.leading, 4)
             .padding(.bottom, 8)
@@ -753,7 +759,7 @@ struct MembersView: View {
             ("Overrides", members.filter(\.isOverride))
         ]
         ForEach(sections.filter { !$0.1.isEmpty }, id: \.0) { title, list in
-            VStack(alignment: .leading, spacing: 2) {
+            LazyVStack(alignment: .leading, spacing: 2) {
                 EyebrowView(text: "\(title) · \(list.count)")
                     .padding(.bottom, 6)
                 ForEach(Array(list.enumerated()), id: \.offset) { _, member in
@@ -996,9 +1002,15 @@ struct ChipBlockView: View {
     var atlas: Atlas
     /// A tooltip for each chip, at the same index.
     var notes: [String] = []
+    @State private var showsAll = false
+
+    /// The most chips shown before the rest wait behind a button: about a screenful, since laying out
+    /// hundreds of chips at once holds up the page.
+    static let limit = 40
 
     var body: some View {
         if !units.isEmpty {
+            let shown = showsAll ? units.count : min(units.count, Self.limit)
             VStack(alignment: .leading, spacing: 6) {
                 if !title.isEmpty {
                     HStack(spacing: 6) {
@@ -1007,8 +1019,14 @@ struct ChipBlockView: View {
                     }
                 }
                 Wrap(spacing: 6) {
-                    ForEach(Array(units.enumerated()), id: \.offset) { index, unit in
+                    ForEach(Array(units.prefix(shown).enumerated()), id: \.offset) { index, unit in
                         ChipView(unit: unit, atlas: atlas, note: index < notes.count ? notes[index] : nil)
+                    }
+                    if shown < units.count {
+                        Button("\(units.count - shown) more") { showsAll = true }
+                            .buttonStyle(.link)
+                            .font(.callout)
+                            .help("Show every one")
                     }
                 }
             }
@@ -1071,18 +1089,30 @@ extension Wrap: Layout {
         for row in arrange(subviews, width: bounds.width) {
             var x = bounds.minX
             for index in row.indices {
-                let size = subviews[index].sizeThatFits(.unspecified)
+                let size = size(of: subviews[index], within: bounds.width)
                 subviews[index].place(at: CGPoint(x: x, y: bounds.minY + row.y), proposal: ProposedViewSize(size))
                 x += size.width + spacing
             }
         }
     }
 
+    /// A subview's size at its ideal width, or narrowed to the row's width when wider, so a long name
+    /// truncates rather than widening the page.
+    ///
+    /// - Parameters:
+    ///   - subview: The subview.
+    ///   - width: The width of a row.
+    /// - Returns: The size it takes.
+    private func size(of subview: LayoutSubview, within width: CGFloat) -> CGSize {
+        let ideal = subview.sizeThatFits(.unspecified)
+        return ideal.width <= width ? ideal : subview.sizeThatFits(ProposedViewSize(width: width, height: nil))
+    }
+
     private func arrange(_ subviews: Subviews, width: CGFloat) -> [(indices: [Int], y: CGFloat, width: CGFloat, height: CGFloat)] {
         var rows: [(indices: [Int], y: CGFloat, width: CGFloat, height: CGFloat)] = []
         var current: (indices: [Int], y: CGFloat, width: CGFloat, height: CGFloat) = ([], 0, 0, 0)
         for index in subviews.indices {
-            let size = subviews[index].sizeThatFits(.unspecified)
+            let size = size(of: subviews[index], within: width)
             let needed = current.indices.isEmpty ? size.width : current.width + spacing + size.width
             if needed > width, !current.indices.isEmpty {
                 rows.append(current)

@@ -11,7 +11,7 @@ import SwiftUI
 @MainActor @Observable
 final class Workspace {
     /// What the details pane shows and the map lights.
-    enum Selection: Hashable {
+    enum Selection: Hashable, Sendable {
         /// The overview of each module's entry points, drawn at the map's default level.
         case overview
         /// Every module with the modules it depends on, drawn at the modules level.
@@ -28,7 +28,7 @@ final class Workspace {
     }
 
     /// What the map pane draws for the current level.
-    struct Drawing {
+    struct Drawing: Sendable {
         /// The placed boxes and curves of the level, or of the selected type and its neighbors in the focus.
         var layout = GraphLayout()
         /// The path from the widest level to this one, each step with the level it returns to.
@@ -49,10 +49,45 @@ final class Workspace {
         /// At the changes level, the neighbors no change reaches, left undrawn and listed under the map;
         /// empty elsewhere and while they are drawn.
         var untouched: [MapScope.Unit] = []
+        /// How each box differs from the base, by box id; empty with no comparison.
+        var boxMarks: [String: InterfaceDiff.Change] = [:]
+        /// In a focus and at the changes level, how each drawn dependency differs from the base, keyed by
+        /// its ends joined with a tab; empty at the other levels, whose edges stand for many at once.
+        var edgeMarks: [String: InterfaceDiff.Change] = [:]
+    }
+
+    /// What a drawing is made from, read on the main thread so the drawing can be made off it.
+    struct DrawingRequest: Sendable {
+        /// The arranged interface.
+        var atlas: Atlas
+        /// The map's levels.
+        var scopes: [MapScope]
+        /// The level to draw.
+        var scopeID: String
+        /// What is selected, which a focus grows from.
+        var selection: Selection
+        /// What a focus draws.
+        var focusMode: FocusMode
+        /// The steps a reach draws, or `nil` for the default.
+        var reachDepth: Int?
+        /// The narrowest access a type needs to be drawn.
+        var minimumRank: Int
+        /// The level a focus was entered from.
+        var focusFrom: String?
+        /// The comparison's diff, or `nil` with none or before it is read.
+        var diff: InterfaceDiff?
+        /// The comparison.
+        var comparison: Comparison
+        /// The comparison as the end of a sentence.
+        var comparisonPhrase: String
+        /// Why the base could not be read, or `nil`.
+        var comparisonProblem: String?
+        /// Whether the changes level draws the untouched neighbors too.
+        var showsUntouched: Bool
     }
 
     /// What the focus draws around the selected type.
-    enum FocusMode: Hashable, CaseIterable {
+    enum FocusMode: Hashable, CaseIterable, Sendable {
         /// What uses the type above it and what it depends on below it, one step each way unless the
         /// depth stepper goes further.
         case neighbors
@@ -72,7 +107,7 @@ final class Workspace {
     }
 
     /// What the map's marks compare the interface with.
-    enum Comparison: Hashable {
+    enum Comparison: Hashable, Sendable {
         /// Nothing: no marks.
         case off
         /// Where the branch left the named one, as a pull request into it compares, uncommitted edits
@@ -109,9 +144,9 @@ final class Workspace {
     }
 
     /// The level id of the selected type's focus, beside the atlas's own levels.
-    static let focus = "focus"
+    nonisolated static let focus = "focus"
     /// The level id of what changed since the comparison's base and the types one step around it.
-    static let changes = "changes"
+    nonisolated static let changes = "changes"
 
     /// One tab over the details and the map: a place in the interface with its own way back and forth, so
     /// a reader can keep several open beside the one list.
@@ -271,6 +306,10 @@ final class Workspace {
 
     /// Whether the changes level draws the neighbors no change reaches as well as those it does.
     var showsUntouched = false { didSet { if scopeID == Self.changes { redraw() } } }
+    /// Whether a drawing is being made off the main thread, while the map shows the one before.
+    private(set) var isDrawing = false
+    /// How many drawings were asked for, so only the latest one asked for is shown.
+    private var drawingsAsked = 0
 
     /// The narrowest access shown, as ``GlossCore/Contract/rank(_:)``: 3 for public, 1 for internal, 0 for all.
     var minimumRank = Atlas.defaultMinimumRank { didSet { redraw() } }
@@ -379,23 +418,27 @@ final class Workspace {
         ///   ``GlossCore/Revision/Failure`` when git cannot read the revision.
         static func read(_ root: URL, head: String?) throws -> Loaded {
             let scanned = scanned(root)
-            let pairs: [(file: String, source: String)]
-            if let head {
-                pairs = try Revision.sources(at: head, under: scanned.path, relativeTo: root.path, includeTests: false)
-            } else {
+            let pairs: [(file: String, source: String)] = try Timing.measure("read files", head ?? "working tree") {
+                if let head {
+                    return try Revision.sources(at: head, under: scanned.path, relativeTo: root.path, includeTests: false)
+                }
                 let prefix = root.path.hasSuffix("/") ? root.path : root.path + "/"
-                pairs = try SourceFiles.swiftFiles(under: scanned.path, includeTests: false).compactMap { file in
+                return try SourceFiles.swiftFiles(under: scanned.path, includeTests: false).compactMap { file in
                     guard let source = try? String(contentsOfFile: file, encoding: .utf8) else { return nil }
                     return (file.hasPrefix(prefix) ? String(file.dropFirst(prefix.count)) : file, source)
                 }
             }
-            let interface = Interface.build(sources: pairs)
-            let atlas = Atlas(interface)
-            let scopes = atlas.mapScopes()
-            let branch = ["main", "master"].first { (try? Revision.commit($0, in: scanned.path)) != nil }
-            return Loaded(interface: interface, atlas: atlas, scopes: scopes, levels: atlas.levelsDrawing(scopes), defaultBranch: branch,
-                          refs: (try? Revision.refs(in: scanned.path)) ?? [],
-                          currentBranch: (try? Revision.currentBranch(in: scanned.path)) ?? nil)
+            let interface = Timing.measure("build interface") { Interface.build(sources: pairs) }
+            let atlas = Timing.measure("arrange") { Atlas(interface) }
+            let scopes = Timing.measure("scopes") { atlas.mapScopes() }
+            let levels = Timing.measure("levels drawing types") { atlas.levelsDrawing(scopes) }
+            let (branch, refs, current) = Timing.measure("read branches") {
+                (["main", "master"].first { (try? Revision.commit($0, in: scanned.path)) != nil },
+                 (try? Revision.refs(in: scanned.path)) ?? [],
+                 (try? Revision.currentBranch(in: scanned.path)) ?? nil)
+            }
+            return Loaded(interface: interface, atlas: atlas, scopes: scopes, levels: levels, defaultBranch: branch,
+                          refs: refs, currentBranch: current)
         }
     }
 
@@ -403,6 +446,7 @@ final class Workspace {
     ///
     /// - Parameter url: The package folder.
     func open(_ url: URL) {
+        Timing.event("open folder", url.path)
         recentFolders = [url] + recentFolders.filter { $0.path != url.path }.prefix(Self.recentLimit - 1)
         saveRecentFolders()
         opens += 1
@@ -461,7 +505,9 @@ final class Workspace {
         let head = self.head
         isLoading = true
         Task {
-            let result = await Task.detached(priority: .userInitiated) { Result { try Loaded.read(root, head: head) } }.value
+            let result = await Task.detached(priority: .userInitiated) {
+                Result { try Timing.measure("read folder", root.lastPathComponent) { try Loaded.read(root, head: head) } }
+            }.value
             guard root == self.root, head == self.head else { return }
             isLoading = false
             switch result {
@@ -469,6 +515,12 @@ final class Workspace {
                 problem = nil
                 interface = loaded.interface
                 atlas = loaded.atlas
+                // Pages color declarations as they show; working them all out now, in the background,
+                // keeps a type of hundreds of members from parsing them while the reader waits.
+                let contracts = loaded.interface.contracts
+                Task.detached(priority: .utility) {
+                    Timing.measure("warm highlighting", "\(contracts.count) declarations") { Highlight.warm(contracts) }
+                }
                 scopes = loaded.scopes
                 levels = loaded.levels
                 defaultBranch = loaded.defaultBranch
@@ -496,7 +548,7 @@ final class Workspace {
         guard comparison != .off, let root, let head = interface else {
             diff = nil
             comparisonProblem = nil
-            if scopeID == Self.changes { redraw() }
+            redraw()
             return
         }
         let comparison = self.comparison
@@ -511,9 +563,10 @@ final class Workspace {
                     case .branch(let branch): try Revision.mergeBase(of: headRevision ?? "HEAD", and: branch, in: scanned)
                     case .revision(let revision): try Revision.commit(revision, in: scanned)
                     }
-                    let base = try known[commit] ?? Interface.build(sources: Revision.sources(at: commit, under: scanned,
-                                                                                               relativeTo: root.path, includeTests: false))
-                    return (commit, base, InterfaceDiff(base: base, head: head))
+                    let base = try known[commit] ?? Timing.measure("read base", commit) {
+                        try Interface.build(sources: Revision.sources(at: commit, under: scanned, relativeTo: root.path, includeTests: false))
+                    }
+                    return (commit, base, Timing.measure("diff") { InterfaceDiff(base: base, head: head) })
                 }
             }.value
             guard root == self.root, comparison == self.comparison, head == self.interface else { return }
@@ -526,33 +579,22 @@ final class Workspace {
                 diff = nil
                 comparisonProblem = (error as? Revision.Failure)?.message ?? error.localizedDescription
             }
-            if scopeID == Self.changes { redraw() }
+            // Every level's boxes carry marks, so every level draws again.
+            redraw()
         }
     }
 
     /// The marks on the map's boxes: how each box differs from the base, by box id; empty with no
     /// comparison.
     var boxMarks: [String: InterfaceDiff.Change] {
-        guard let diff, let atlas else { return [:] }
-        var marks: [String: InterfaceDiff.Change] = [:]
-        for box in drawing.layout.boxes {
-            if let change = atlas.change(of: box.item.unit, in: diff) { marks[box.item.id] = change }
-        }
-        return marks
+        drawing.boxMarks
     }
 
     /// The marks on the edges of a focus and of the changes level: how each drawn dependency differs from
     /// the base, keyed by its ends joined with a tab; empty at the other levels, whose edges stand for
     /// many dependencies at once.
     var edgeMarks: [String: InterfaceDiff.Change] {
-        guard let diff, scopeID == Self.focus || scopeID == Self.changes else { return [:] }
-        var marks: [String: InterfaceDiff.Change] = [:]
-        for curve in drawing.layout.curves {
-            if let change = diff.change(from: curve.link.from, to: curve.link.to)?.change {
-                marks[curve.link.from + "\t" + curve.link.to] = change
-            }
-        }
-        return marks
+        drawing.edgeMarks
     }
 
     /// Compares with a base the reader picked, and keeps it as the folder's base for next time.
@@ -648,6 +690,7 @@ final class Workspace {
     /// A module or folder draws its own level. A type keeps the current level when that level draws it,
     /// re-centers the focus when focused, and otherwise moves to the widest level that draws it.
     func select(_ target: Selection) {
+        Timing.event("select", "\(target)")
         navigate {
             showing?.cancel()
             hiding?.cancel()
@@ -939,6 +982,7 @@ final class Workspace {
             try? await Task.sleep(for: .milliseconds(delay))
             guard !Task.isCancelled, let self else { return }
             preview = target == selection ? nil : target
+            Timing.event("preview", "\(target)")
         }
     }
 
@@ -1108,16 +1152,69 @@ final class Workspace {
         return id
     }
 
+    /// Draws the current level again, off the main thread, from what the current tab shows. The map
+    /// keeps the drawing before until the new one is made; a drawing asked for since replaces it unseen.
     private func redraw() {
         guard let atlas else {
             drawing = Drawing()
             return
         }
+        drawingsAsked += 1
+        let asked = drawingsAsked
+        let request = DrawingRequest(atlas: atlas, scopes: scopes, scopeID: scopeID, selection: selection, focusMode: focusMode,
+                                     reachDepth: reachDepth, minimumRank: minimumRank, focusFrom: focusFrom, diff: diff,
+                                     comparison: comparison, comparisonPhrase: comparisonPhrase, comparisonProblem: comparisonProblem,
+                                     showsUntouched: showsUntouched)
+        isDrawing = true
+        Task {
+            let drawn = await Task.detached(priority: .userInitiated) {
+                Timing.measure("draw", request.scopeID) { Self.draw(request) }
+            }.value
+            guard asked == drawingsAsked else { return }
+            drawing = drawn
+            isDrawing = false
+            // A pinned type the reach no longer draws, after a change of depth or mode, unpins.
+            if scopeID == Self.focus, let inspected, drawn.reach?.parents[inspected] == nil { tabs[current].inspected = nil }
+        }
+    }
+
+    /// Makes the drawing of a level: the selected type's reach in a focus, what changed at the changes
+    /// level, or one of the atlas's levels, each with its boxes' and dependencies' marks.
+    ///
+    /// - Parameter request: What to draw.
+    /// - Returns: The drawing.
+    nonisolated private static func draw(_ request: DrawingRequest) -> Drawing {
+        var drawing = drawingWithoutMarks(request)
+        guard let diff = request.diff else { return drawing }
+        Timing.measure("marks", request.scopeID) {
+            for box in drawing.layout.boxes {
+                if let change = request.atlas.change(of: box.item.unit, in: diff) { drawing.boxMarks[box.item.id] = change }
+            }
+            guard request.scopeID == Self.focus || request.scopeID == Self.changes else { return }
+            for curve in drawing.layout.curves {
+                if let change = diff.change(from: curve.link.from, to: curve.link.to)?.change {
+                    drawing.edgeMarks[curve.link.from + "\t" + curve.link.to] = change
+                }
+            }
+        }
+        return drawing
+    }
+
+    /// Makes the drawing of a level without its marks.
+    ///
+    /// - Parameter request: What to draw.
+    /// - Returns: The drawing.
+    nonisolated private static func drawingWithoutMarks(_ request: DrawingRequest) -> Drawing {
+        let atlas = request.atlas
+        let scopes = request.scopes
+        let focusMode = request.focusMode
         // Every focus is a reach: Neighbors goes both ways from depth 1, and the other two fit the budget.
-        if scopeID == Self.focus, case .type(let id) = selection, let node = atlas.byID[id],
-           let reach = atlas.reach(from: id, toward: focusMode.direction,
-                                   depth: reachDepth ?? (focusMode == .neighbors ? 1 : nil), minimumRank: minimumRank) {
-            let from = scopes.first { $0.id == focusFrom } ?? scopes.first
+        if request.scopeID == Self.focus, case .type(let id) = request.selection, let node = atlas.byID[id],
+           let reach = Timing.measure("reach", id, {
+               atlas.reach(from: id, toward: focusMode.direction,
+                           depth: request.reachDepth ?? (focusMode == .neighbors ? 1 : nil), minimumRank: request.minimumRank)
+           }) {
+            let from = scopes.first { $0.id == request.focusFrom } ?? scopes.first
             let what = switch focusMode {
             case .neighbors: "its neighbors"
             case .below: "all it depends on"
@@ -1125,42 +1222,37 @@ final class Workspace {
             }
             let counted = focusMode == .neighbors ? "\(reach.above) above, \(reach.below) below" : "\(reach.drawn)"
             let cut = reach.drawn < reach.total ? " · dashed boxes continue" : ""
-            drawing = Drawing(layout: reach.layout,
-                              crumbs: [(from?.id ?? "", from?.label ?? "Map"), (Self.focus, "\(atlas.label(node)) and \(what)")],
-                              caption: "Depth \(reach.depth) of \(reach.totalDepth) · \(counted) of \(reach.total) types" + cut,
-                              overflow: reach.overflow.map { .type($0) },
-                              depth: (reach.depth, reach.totalDepth), reach: reach)
-            // A pinned type the reach no longer draws, after a change of depth or mode, unpins.
-            if let inspected, reach.parents[inspected] == nil { tabs[current].inspected = nil }
-            return
+            return Drawing(layout: reach.layout,
+                           crumbs: [(from?.id ?? "", from?.label ?? "Map"), (Self.focus, "\(atlas.label(node)) and \(what)")],
+                           caption: "Depth \(reach.depth) of \(reach.totalDepth) · \(counted) of \(reach.total) types" + cut,
+                           overflow: reach.overflow.map { .type($0) },
+                           depth: (reach.depth, reach.totalDepth), reach: reach)
         }
-        if scopeID == Self.changes {
+        if request.scopeID == Self.changes {
+            let phrase = request.comparisonPhrase
             let first = scopes.first.map { [($0.id, $0.label)] } ?? []
-            let crumbs = first + [(Self.changes, "Changes " + comparisonPhrase)]
-            guard let diff else {
-                let caption = comparison == .off ? "Pick a base under Changes in the toolbar to see what changed."
-                    : comparisonProblem ?? "Reading what changed \(comparisonPhrase)…"
-                drawing = Drawing(crumbs: crumbs, caption: caption)
-                return
+            let crumbs = first + [(Self.changes, "Changes " + phrase)]
+            guard let diff = request.diff else {
+                let caption = request.comparison == .off ? "Pick a base under Changes in the toolbar to see what changed."
+                    : request.comparisonProblem ?? "Reading what changed \(phrase)…"
+                return Drawing(crumbs: crumbs, caption: caption)
             }
-            let figure = atlas.changesFigure(diff, minimumRank: minimumRank, includeUntouched: showsUntouched)
-            let around = showsUntouched ? "around them" : "they reach"
+            let figure = Timing.measure("changes figure") {
+                atlas.changesFigure(diff, minimumRank: request.minimumRank, includeUntouched: request.showsUntouched)
+            }
+            let around = request.showsUntouched ? "around them" : "they reach"
             let untouched = figure.untouched.isEmpty ? "" : ", \(figure.untouched.count) around them untouched"
-            let caption = diff.isEmpty ? "Nothing changed \(comparisonPhrase)."
+            let caption = diff.isEmpty ? "Nothing changed \(phrase)."
                 : "\(figure.changed) changed type\(figure.changed == 1 ? "" : "s"), \(figure.around) \(around)\(untouched)."
-            drawing = Drawing(layout: figure.layout, crumbs: crumbs, caption: caption, overflow: figure.overflow.map { .type($0) },
-                              untouched: figure.untouched.map { .type($0) })
-            return
+            return Drawing(layout: figure.layout, crumbs: crumbs, caption: caption, overflow: figure.overflow.map { .type($0) },
+                           untouched: figure.untouched.map { .type($0) })
         }
-        guard let scope = scopes.first(where: { $0.id == scopeID }) ?? scopes.first else {
-            drawing = Drawing()
-            return
-        }
-        let figure = atlas.figure(scope, includeBody: true)
-        drawing = Drawing(layout: GraphLayout.layered(figure.items, figure.links),
-                          crumbs: scope.path.compactMap { id in scopes.first { $0.id == id }.map { ($0.id, $0.label) } },
-                          caption: "\(figure.items.count) boxes, \(figure.links.count) dependencies.",
-                          loose: figure.loose, overflow: figure.overflow)
+        guard let scope = scopes.first(where: { $0.id == request.scopeID }) ?? scopes.first else { return Drawing() }
+        let figure = Timing.measure("figure", scope.label) { atlas.figure(scope, includeBody: true) }
+        return Drawing(layout: Timing.measure("layout", scope.label) { GraphLayout.layered(figure.items, figure.links) },
+                       crumbs: scope.path.compactMap { id in scopes.first { $0.id == id }.map { ($0.id, $0.label) } },
+                       caption: "\(figure.items.count) boxes, \(figure.links.count) dependencies.",
+                       loose: figure.loose, overflow: figure.overflow)
     }
 
     // MARK: Reading
@@ -1189,12 +1281,14 @@ final class Workspace {
     func outline(of module: String) -> [OutlineItem] {
         guard let atlas else { return [] }
         let query = search.trimmingCharacters(in: .whitespaces).lowercased()
-        return atlas.outline(of: module) { node in
-            guard isShown(node) else { return false }
-            let group = atlas.group(node.id)
-            if findingsOnly, group.findingCount == 0 { return false }
-            guard !query.isEmpty else { return true }
-            return ([node.name] + group.members.map(\.name)).contains { $0.lowercased().contains(query) }
+        return Timing.measure("outline", module) {
+            atlas.outline(of: module) { node in
+                guard isShown(node) else { return false }
+                let group = atlas.group(node.id)
+                if findingsOnly, group.findingCount == 0 { return false }
+                guard !query.isEmpty else { return true }
+                return ([node.name] + group.members.map(\.name)).contains { $0.lowercased().contains(query) }
+            }
         }
     }
 

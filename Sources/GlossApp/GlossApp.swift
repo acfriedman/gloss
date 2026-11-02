@@ -1,4 +1,5 @@
 import AppKit
+import GlossCore
 import SwiftUI
 
 /// The gloss window: every type listed on the left, the text of one type in the middle, and the
@@ -118,6 +119,7 @@ extension AppDelegate: NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.activate()
+        MainThreadWatch.start()
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {

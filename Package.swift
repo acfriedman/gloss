@@ -29,7 +29,7 @@ let package = Package(
             .product(name: "SwiftIDEUtils", package: "swift-syntax")
         ]),
         .target(name: "GlossPage", dependencies: ["GlossCore", "GlossMap"]),
-        .executableTarget(name: "gloss", dependencies: ["GlossCore", "GlossPage"]),
+        .executableTarget(name: "gloss", dependencies: ["GlossCore", "GlossMap", "GlossPage"]),
         .executableTarget(name: "GlossApp", dependencies: ["GlossCore", "GlossMap"]),
         .testTarget(name: "GlossCoreTests", dependencies: ["GlossCore", "GlossMap", "GlossPage"])
     ]

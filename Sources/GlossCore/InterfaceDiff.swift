@@ -82,6 +82,10 @@ public struct InterfaceDiff: Sendable, Equatable {
     public var nodes: [NodeChange]
     /// The dependencies that differ: the head's in its order, then the removed ones in the base's order.
     public var edges: [EdgeChange]
+    /// Where each node's change is in ``nodes``, by node id.
+    private var nodeIndex: [String: Int] = [:]
+    /// Where each dependency's change is in ``edges``, by its ends' ids joined.
+    private var edgeIndex: [String: Int] = [:]
 
     /// `true` when nothing differs.
     public var isEmpty: Bool {
@@ -138,6 +142,10 @@ public struct InterfaceDiff: Sendable, Equatable {
         }
         self.nodes = nodes
         self.edges = edges
+        for (index, change) in nodes.enumerated() where nodeIndex[change.node.id] == nil { nodeIndex[change.node.id] = index }
+        for (index, change) in edges.enumerated() where edgeIndex[change.from + "\u{0}" + change.to] == nil {
+            edgeIndex[change.from + "\u{0}" + change.to] = index
+        }
     }
 
     /// How a node differs from the base.
@@ -145,7 +153,7 @@ public struct InterfaceDiff: Sendable, Equatable {
     /// - Parameter id: A node id from either interface.
     /// - Returns: The change, or `nil` when the node is the same in both.
     public func change(ofNode id: String) -> NodeChange? {
-        nodes.first { $0.node.id == id }
+        nodeIndex[id].map { nodes[$0] }
     }
 
     /// How a dependency differs from the base.
@@ -155,7 +163,7 @@ public struct InterfaceDiff: Sendable, Equatable {
     ///   - to: The id of the node it depends on.
     /// - Returns: The change, or `nil` when the dependency is the same in both or in neither.
     public func change(from: String, to: String) -> EdgeChange? {
-        edges.first { $0.from == from && $0.to == to }
+        edgeIndex[from + "\u{0}" + to].map { edges[$0] }
     }
 
     /// The declarations of one node that differ, matched by keyword and name as a caller writes it:

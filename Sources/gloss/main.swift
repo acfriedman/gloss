@@ -1,16 +1,19 @@
 import GlossCore
+import GlossMap
 import GlossPage
 import Foundation
 
 /// Command-line entry: `gloss [--include-tests] [--summary] <path>...` lints;
-/// `gloss interface [--include-tests] [--json <file>] [--html <file>] [--title <name>] <path>...` exports.
+/// `gloss interface [--include-tests] [--json <file>] [--html <file>] [--title <name>] <path>...` exports;
+/// `gloss bench [--include-tests] [--base <revision>] <path>...` times what the app does with the paths.
 ///
 /// Paths may be files or directories; directories are walked for `.swift` files, skipping `.build`
 /// and, unless `--include-tests` is given, any directory whose name ends in `Tests`. The interface
 /// command writes JSON to standard output when neither `--json` nor `--html` names a file.
 var arguments = Array(CommandLine.arguments.dropFirst())
 let interfaceMode = arguments.first == "interface"
-if interfaceMode { arguments.removeFirst() }
+let benchMode = arguments.first == "bench"
+if interfaceMode || benchMode { arguments.removeFirst() }
 let includeTests = arguments.contains("--include-tests")
 let summaryOnly = arguments.contains("--summary")
 var options: [String: String] = [:]
@@ -20,7 +23,7 @@ while index < arguments.count {
     let argument = arguments[index]
     index += 1
     guard argument.hasPrefix("--") else { paths.append(argument); continue }
-    if interfaceMode, ["--json", "--html", "--title"].contains(argument) {
+    if (interfaceMode && ["--json", "--html", "--title"].contains(argument)) || (benchMode && argument == "--base") {
         guard index < arguments.count else {
             FileHandle.standardError.write(Data("gloss: \(argument) needs a value\n".utf8))
             exit(64)
@@ -34,6 +37,7 @@ guard !paths.isEmpty else {
     FileHandle.standardError.write(Data("""
     usage: gloss [--include-tests] [--summary] <path>...
            gloss interface [--include-tests] [--json <file>] [--html <file>] [--title <name>] <path>...
+           gloss bench [--include-tests] [--base <revision>] <path>...
 
     """.utf8))
     exit(64)
@@ -53,8 +57,18 @@ func swiftFiles(under path: String) -> [String] {
     }
 }
 
-let sources: [(file: String, source: String)] = paths.flatMap(swiftFiles(under:)).compactMap { file in
-    (try? String(contentsOfFile: file, encoding: .utf8)).map { (file, $0) }
+let (sources, readSamples) = Timing.record {
+    Timing.measure("read files") {
+        paths.flatMap(swiftFiles(under:)).compactMap { file -> (file: String, source: String)? in
+            (try? String(contentsOfFile: file, encoding: .utf8)).map { (file, $0) }
+        }
+    }
+}
+
+if benchMode {
+    let samples = readSamples + Bench.run(sources: sources, base: options["--base"], in: paths[0], includeTests: includeTests)
+    print(Bench.table(samples))
+    exit(0)
 }
 
 if interfaceMode {

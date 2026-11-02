@@ -275,4 +275,12 @@ extension RulesTests {
         XCTAssertEqual(lint("/// See `OrderStore.swift` and `plan.json.gz`.\nfunc f() {}"), [])
         XCTAssertEqual(lint("/// Uses `throws(E)` and `private(set)`.\nfunc f() {}"), [])
     }
+
+    func testReferenceShapesAreMatchedExactly() {
+        let references = ["advance(_:)", "_reset()", "Cache.load(from:)", "A.B.make(x:y:)", "Session.current", "Outer.Inner.value_2"]
+        for span in references { XCTAssertTrue(SymbolReference.isReference(span), span) }
+        let others = ["Date()", "load(from: x)", "Cache.Load", "cache.load", "Session..current", "Session.", ".current",
+                      "advance(_:", "a.b(c:)", "Café.menu", "Cache.load(from:)x", "nil", ""]
+        for span in others { XCTAssertFalse(SymbolReference.isReference(span), span) }
+    }
 }

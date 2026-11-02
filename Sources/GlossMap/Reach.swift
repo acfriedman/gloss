@@ -92,22 +92,17 @@ extension Atlas {
     public func reach(from id: String, toward direction: ReachDirection, depth: Int? = nil,
                       minimumRank: Int, budget: Int = mapBudget) -> Reach? {
         guard let root = byID[id] else { return nil }
-        var down: [String: [String]] = [:]
-        var up: [String: [String]] = [:]
-        var degree: [String: Int] = [:]
-        for link in edges {
-            down[link.from, default: []].append(link.to)
-            up[link.to, default: []].append(link.from)
-            degree[link.from, default: 0] += 1
-            degree[link.to, default: 0] += 1
-        }
+        // The indexes the atlas keeps, rather than a pass over every edge per reach.
+        let down = { (id: String) in (self.edgesFrom[id] ?? []).map(\.to) }
+        let up = { (id: String) in (self.edgesTo[id] ?? []).map(\.from) }
+        let degree = { (id: String) in (self.edgesFrom[id]?.count ?? 0) + (self.edgesTo[id]?.count ?? 0) }
         let shown = { (id: String) in self.byID[id].map { self.rank(of: $0) >= minimumRank } ?? false }
 
         var seen: Set<String> = [root.id]
-        func walk(_ next: [String: [String]]) -> [[String]] {
+        func walk(_ next: (String) -> [String]) -> [[String]] {
             var layers: [[String]] = [[root.id]]
             while let frontier = layers.last {
-                let step = frontier.flatMap { next[$0] ?? [] }.filter { shown($0) && seen.insert($0).inserted }
+                let step = frontier.flatMap(next).filter { shown($0) && seen.insert($0).inserted }
                 guard !step.isEmpty else { break }
                 layers.append(step)
             }
@@ -136,7 +131,7 @@ extension Atlas {
             func trim(_ layers: inout [[String]], keeping count: Int) {
                 guard layers.count > 1 else { return }
                 let ranked = layers[1].enumerated().sorted {
-                    (-(degree[$0.element] ?? 0), $0.offset) < (-(degree[$1.element] ?? 0), $1.offset)
+                    (-degree($0.element), $0.offset) < (-degree($1.element), $1.offset)
                 }.map(\.element)
                 let kept = Set(ranked.prefix(count))
                 overflow += layers[1].filter { !kept.contains($0) }
@@ -160,10 +155,10 @@ extension Atlas {
             var beyond = 0
             var further = ""
             if belowStep[id] == drawnDepth {
-                beyond = (down[id] ?? []).filter { shown($0) && !drawnSet.contains($0) }.count
+                beyond = down(id).filter { shown($0) && !drawnSet.contains($0) }.count
                 further = "below"
             } else if aboveStep[id] == drawnDepth {
-                beyond = (up[id] ?? []).filter { shown($0) && !drawnSet.contains($0) }.count
+                beyond = up(id).filter { shown($0) && !drawnSet.contains($0) }.count
                 further = "above"
             }
             var flags: GraphLayout.Flags = []

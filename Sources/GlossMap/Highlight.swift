@@ -1,3 +1,4 @@
+import Foundation
 import GlossCore
 import SwiftIDEUtils
 import SwiftParser
@@ -47,6 +48,35 @@ public enum Highlight {
     ///   - projectTypes: Type names the scanned sources declare, each path component on its own.
     /// - Returns: Runs that together spell `code` exactly, with neighbors of one kind merged.
     public static func runs(_ code: String, projectTypes: Set<String> = []) -> [Run] {
+        // A page draws its declarations again each time it shows, and parsing one is the slow part.
+        let key = code + "\u{0}" + projectTypes.sorted().joined(separator: ",")
+        if let cached = cache.runs(for: key) { return cached }
+        let runs = parsedRuns(code, projectTypes: projectTypes)
+        cache.store(runs, for: key)
+        return runs
+    }
+
+    /// The runs already worked out, by source and project types.
+    private static let cache = RunCache()
+
+    /// Works out the runs of many contracts ahead of time, on every core, so pages that show them later
+    /// draw from the cache rather than parsing while the reader waits.
+    ///
+    /// - Parameter contracts: The contracts, such as every one in an interface.
+    public static func warm(_ contracts: [Contract]) {
+        let chunk = 256
+        DispatchQueue.concurrentPerform(iterations: (contracts.count + chunk - 1) / chunk) { part in
+            for contract in contracts[(part * chunk)..<min(contracts.count, (part + 1) * chunk)] { _ = runs(of: contract) }
+        }
+    }
+
+    /// Splits source into runs by parsing it, which ``runs(_:projectTypes:)`` does once per source.
+    ///
+    /// - Parameters:
+    ///   - code: Swift source.
+    ///   - projectTypes: Type names the scanned sources declare, each path component on its own.
+    /// - Returns: The runs.
+    private static func parsedRuns(_ code: String, projectTypes: Set<String>) -> [Run] {
         let tree = Parser.parse(source: code)
         let declared = declaredNames(in: tree)
         var runs: [Run] = []
@@ -132,5 +162,34 @@ public enum Highlight {
             names += cases.elements.map(\.name)
         }
         return Set(names.map(\.positionAfterSkippingLeadingTrivia))
+    }
+}
+
+/// The runs ``Highlight`` has worked out, shared across threads. It holds at most ``limit`` sources and
+/// starts over when full, since an interface's declarations number in the tens of thousands at most.
+private final class RunCache: @unchecked Sendable {
+    /// The most sources kept.
+    private static let limit = 100_000
+    private let lock = NSLock()
+    private var runs: [String: [Highlight.Run]] = [:]
+
+    /// The runs kept for a key.
+    ///
+    /// - Parameter key: The source and its project types.
+    /// - Returns: The runs, or `nil` when none are kept.
+    func runs(for key: String) -> [Highlight.Run]? {
+        lock.withLock { runs[key] }
+    }
+
+    /// Keeps the runs for a key.
+    ///
+    /// - Parameters:
+    ///   - runs: The runs.
+    ///   - key: The source and its project types.
+    func store(_ runs: [Highlight.Run], for key: String) {
+        lock.withLock {
+            if self.runs.count >= Self.limit { self.runs.removeAll() }
+            self.runs[key] = runs
+        }
     }
 }

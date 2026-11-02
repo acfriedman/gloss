@@ -51,8 +51,11 @@ about what to show is made there, so the page and the app cannot disagree.
 ## App
 
 ```bash
-swift run GlossApp --root path/to/YourPackage
+swift run -c release GlossApp --root path/to/YourPackage
 ```
+
+Build it for release on a large codebase: a debug build parses several times slower and draws pages
+more slowly too.
 
 Without `--root` it opens on a welcome window, as Xcode does: Open Folder… (⌘O) on the left, or a
 folder or `Package.swift` dropped anywhere on it, and the folders opened most recently on the right,
@@ -117,6 +120,35 @@ that many times, and `GLOSS_PREVIEW` previews a node id as if hovered. `GLOSS_SE
 joined by commas, such as `changes,GlossMap/Atlas`, and `GLOSS_COMPARE` compares with a base first,
 `develop`, or a base and head, `develop..feature`. Without `--root`, the snapshot is of the welcome
 window.
+
+## Performance
+
+The work that grows with the codebase stays off the main thread: reading and parsing, which spreads
+files over every core; comparing with a base; drawing each map level, laid out in the background
+while the map keeps the drawing before; and working out every declaration's colors once after a read,
+so pages draw from a cache. Pages build only the rows on screen, a Why row reads its reasons only
+when it opens, and a row of chips shows the first 40 with the rest behind a button.
+
+Every phase is timed with `Timing` (`GlossCore`): an interval under Points of Interest in
+Instruments, a debug line in the unified log, and with `GLOSS_TIMING=1` a line on standard error.
+The app also logs `select`, `preview`, and `open folder` as they happen, and `main thread blocked`
+whenever the main thread answers more than 50 ms late, whatever held it, so a choppy moment shows
+beside what caused it:
+
+```bash
+log stream --level debug --predicate 'subsystem == "gloss"'
+```
+
+`gloss bench` runs the app's work without a window and prints a table of each phase: runs, total,
+and the slowest run with what it worked on. It reads and builds the interface, draws every map
+level, lists every module, runs Open Quickly, and for the 20 most connected types draws their
+reaches and works out their pages; `--base <revision>` adds the comparison, its figure, and its
+marks. Run it before and after a change to see a regression:
+
+```bash
+swift run -c release gloss bench Sources
+swift run -c release gloss bench --base main Sources
+```
 
 ## Interface
 

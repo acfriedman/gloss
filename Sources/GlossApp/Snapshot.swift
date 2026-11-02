@@ -36,10 +36,19 @@ extension Workspace {
                 try? await Task.sleep(for: .milliseconds(100))
                 waited += 1
             }
+            // The map draws off the main thread, and where a selection lands can depend on the drawing.
+            @MainActor func settle() async {
+                while isDrawing { try? await Task.sleep(for: .milliseconds(20)) }
+            }
+            await settle()
             for target in (environment["GLOSS_SELECT"] ?? "").split(separator: ",").map(String.init) {
                 select(target == "changes" ? .changes : target.hasPrefix("module:") ? .module(String(target.dropFirst("module:".count))) : .type(target))
+                await settle()
             }
-            for _ in 0..<(Int(environment["GLOSS_ZOOM"] ?? "") ?? 0) { zoom(to: zoomInTarget) }
+            for _ in 0..<(Int(environment["GLOSS_ZOOM"] ?? "") ?? 0) {
+                zoom(to: zoomInTarget)
+                await settle()
+            }
             if let target = environment["GLOSS_PREVIEW"] { hoverBegan(.type(target)) }
             Self.capture(to: output, after: .seconds(2))
         }

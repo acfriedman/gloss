@@ -68,8 +68,12 @@ public struct Atlas: Sendable {
     /// palette; see ``colorSlots(for:)``.
     public private(set) var moduleColors: [String: Int] = [:]
     // Indexes built once, so an interface of thousands of types never rescans every edge per type.
-    private var edgesFrom: [String: [Graph.Edge]] = [:]
-    private var edgesTo: [String: [Graph.Edge]] = [:]
+    /// Each node's edges out, by its id.
+    private(set) var edgesFrom: [String: [Graph.Edge]] = [:]
+    /// Each node's edges in, by its id.
+    private(set) var edgesTo: [String: [Graph.Edge]] = [:]
+    /// Each node's access rank, as ``rank(of:)`` gives it, by its id.
+    private var ranks: [String: Int] = [:]
     private var children: [String: [Graph.Node]] = [:]
     private var findingsUnder: [String: Int] = [:]
     private var directories: [String: [String]] = [:]
@@ -114,6 +118,7 @@ public struct Atlas: Sendable {
                 directories[node.id] = Array(parts[(index + 1)..<(parts.count - 1)])
             }
         }
+        for node in nodes { ranks[node.id] = rankUncached(of: node) }
         rolledWithBody = Self.roll(edges, byID: byID, includeBody: true)
         rolledSignature = Self.roll(edges, byID: byID, includeBody: false)
         moduleColors = Self.colorSlots(for: modules)
@@ -216,6 +221,14 @@ public struct Atlas: Sendable {
     /// - Returns: A rank from ``GlossCore/Contract/rank(_:)``; file scope counts as public, since it is
     ///   an entry point.
     public func rank(of node: Graph.Node) -> Int {
+        ranks[node.id] ?? rankUncached(of: node)
+    }
+
+    /// Works out a node's access rank from its contracts, which ``rank(of:)`` reads once per node.
+    ///
+    /// - Parameter node: A node.
+    /// - Returns: The rank.
+    private func rankUncached(of node: Graph.Node) -> Int {
         if node.keyword == "file" { return 3 }
         let group = group(node.id)
         let contracts = [group.head].compactMap { $0 } + group.members

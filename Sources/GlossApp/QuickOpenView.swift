@@ -11,7 +11,7 @@ struct QuickOpenView: View {
     @FocusState private var isFocused: Bool
 
     var body: some View {
-        let matches = workspace.atlas?.quickOpen(query, limit: 40) ?? []
+        let matches = Timing.measure("quick open", query) { workspace.atlas?.quickOpen(query, limit: 40) ?? [] }
         VStack(spacing: 0) {
             HStack(spacing: 10) {
                 Image(systemName: "magnifyingglass")

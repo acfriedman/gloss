@@ -4,9 +4,10 @@ import SwiftUI
 /// The gloss window: every type listed on the left, the text of one type in the middle, and the
 /// dependency map on the right.
 ///
-/// Run it on a package with `swift run GlossApp --root <folder>`, or open one from the File menu; it
-/// reopens the last folder on the next launch. The folder takes a flag because AppKit reads a bare
-/// path argument as a document to open, and then opens no window.
+/// It opens on a welcome window that lists the folders opened most recently, as Xcode does; with that
+/// turned off, it reopens the last folder. `swift run GlossApp --root <folder>` opens a folder
+/// straight away. The folder takes a flag because AppKit reads a bare path argument as a document to
+/// open, and then opens no window.
 @main
 struct GlossApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var delegate
@@ -19,6 +20,15 @@ struct GlossApp: App {
     }
 
     var body: some Scene {
+        // The welcome window comes first, so it is the one a launch opens.
+        Window("Welcome to gloss", id: "welcome") {
+            WelcomeView()
+                .environment(workspace)
+        }
+        .windowStyle(.hiddenTitleBar)
+        .windowResizability(.contentSize)
+        .defaultPosition(.center)
+        .keyboardShortcut("1", modifiers: [.command, .shift])
         Window("gloss", id: "main") {
             ContentView()
                 .environment(workspace)
@@ -28,6 +38,14 @@ struct GlossApp: App {
             CommandGroup(replacing: .newItem) {
                 Button("Open Folder…") { workspace.chooseFolder() }
                     .keyboardShortcut("o")
+                Menu("Open Recent") {
+                    ForEach(workspace.recentFolders, id: \.self) { url in
+                        Button(url.lastPathComponent) { workspace.open(url) }
+                    }
+                    Divider()
+                    Button("Clear Menu") { workspace.clearRecentFolders() }
+                        .disabled(workspace.recentFolders.isEmpty)
+                }
                 Button("Open Quickly…") { workspace.isQuickOpenShown = true }
                     .keyboardShortcut("o", modifiers: [.command, .shift])
                     .disabled(workspace.atlas == nil)
@@ -89,7 +107,7 @@ struct GlossApp: App {
     }
 }
 
-/// Brings a process started from the command line to the front, and quits with its window.
+/// Brings a process started from the command line to the front, and quits with its last window.
 final class AppDelegate: NSObject {}
 
 extension AppDelegate: NSApplicationDelegate {

@@ -5,6 +5,7 @@ import SwiftUI
 /// is, with the controls that apply to all of them in the toolbar.
 struct ContentView: View {
     @Environment(Workspace.self) private var workspace
+    @Environment(\.dismissWindow) private var dismissWindow
 
     var body: some View {
         @Bindable var workspace = workspace
@@ -40,6 +41,12 @@ struct ContentView: View {
         }
         .tint(Palette.accent)
         .task { workspace.start() }
+        // The welcome window hands over to this one, so it closes once this one is up.
+        .onAppear {
+            workspace.isMainWindowShown = true
+            dismissWindow(id: "welcome")
+        }
+        .onDisappear { workspace.isMainWindowShown = false }
         .navigationTitle(workspace.name)
         .navigationSubtitle(workspace.subtitle)
         .toolbar {

@@ -4,8 +4,8 @@ import AppKit
 ///
 /// Set `GLOSS_SNAPSHOT` to the output path. `GLOSS_SELECT` names what to select first: a node id such
 /// as `GlossCore/Linter`, `module:Name`, or `changes`. `GLOSS_ZOOM` is how many times to zoom in after that, and
-/// `GLOSS_PREVIEW` names a node to preview as if the pointer rested on it. A snapshot run leaves the
-/// folder the next launch reopens alone.
+/// `GLOSS_PREVIEW` names a node to preview as if the pointer rested on it. Without `--root`, the
+/// snapshot is of the welcome window. A snapshot run leaves the folders the next launch lists alone.
 extension Workspace {
     /// Whether this run only takes a snapshot, and so must not change what the reader's next launch opens.
     static var isSnapshotting: Bool {
@@ -21,8 +21,24 @@ extension Workspace {
         }
         for _ in 0..<(Int(environment["GLOSS_ZOOM"] ?? "") ?? 0) { zoom(to: zoomInTarget) }
         if let target = environment["GLOSS_PREVIEW"] { hoverBegan(.type(target)) }
+        Self.capture(to: output, after: .seconds(2))
+    }
+
+    /// Takes the snapshot the environment asks for of the welcome window, when the launch shows it;
+    /// does nothing otherwise.
+    func snapshotWelcomeIfAsked() {
+        guard let output = ProcessInfo.processInfo.environment["GLOSS_SNAPSHOT"] else { return }
+        Self.capture(to: output, after: .seconds(1))
+    }
+
+    /// Writes the window on screen to a PNG once it has settled, and quits.
+    ///
+    /// - Parameters:
+    ///   - output: The PNG's path.
+    ///   - delay: How long to let the window draw first.
+    private static func capture(to output: String, after delay: Duration) {
         Task {
-            try? await Task.sleep(for: .seconds(2))
+            try? await Task.sleep(for: delay)
             guard let view = NSApp.windows.first(where: \.isVisible)?.contentView?.superview,
                   let image = view.bitmapImageRepForCachingDisplay(in: view.bounds) else { return }
             view.cacheDisplay(in: view.bounds, to: image)

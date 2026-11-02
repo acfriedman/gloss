@@ -231,31 +231,55 @@ final class Workspace {
     private var showing: Task<Void, Never>?
     private var hiding: Task<Void, Never>?
 
-    /// The defaults key of the last folder opened, which the next launch reopens.
+    /// The folders opened most recently, newest first, which the welcome window and Open Recent list.
+    private(set) var recentFolders: [URL]
+    /// How many folders have been opened, which the welcome window watches to hand over to the main
+    /// window whatever opened one: its list, a drop, or the File menu.
+    private(set) var opens = 0
+    /// Whether the main window is up, so the welcome window can close at once on handing over.
+    var isMainWindowShown = false
+
+    /// The defaults key of the folders opened most recently.
+    private static let recentFoldersKey = "recentFolders"
+    /// The defaults key of the one folder gloss remembered before it kept a list, read to start the list.
     private static let lastFolderKey = "lastFolder"
+    /// The defaults key of whether a launch opens on the welcome window rather than the last folder.
+    static let showsWelcomeKey = "showsWelcome"
+    /// The most folders the recent list keeps.
+    private static let recentLimit = 10
 
-    /// The folder to open once the window appears.
-    private var launchFolder: URL?
+    /// The folder to open once the main window appears, set when the launch skips the welcome window.
+    private(set) var launchFolder: URL?
 
-    /// Chooses the folder named by `--root <folder>`, or else the folder opened last, if either exists.
+    /// Reads the folders opened most recently and chooses the folder a launch opens: the one
+    /// `--root <folder>` names, or else, with the welcome window turned off, the one opened last.
     /// Reading waits for ``start()``, since SwiftUI may build the app, and with it a workspace, more
     /// than once, and only the workspace the window keeps should read anything.
     ///
     /// - Parameter arguments: The process arguments, the executable first.
     init(arguments: [String]) {
+        let defaults = UserDefaults.standard
+        let remembered = defaults.stringArray(forKey: Self.recentFoldersKey) ?? defaults.string(forKey: Self.lastFolderKey).map { [$0] } ?? []
+        let recents = remembered.map { URL(fileURLWithPath: $0) }.filter(Self.isFolder)
+        recentFolders = recents
         let current = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
         let given = arguments.firstIndex(of: "--root").flatMap { $0 + 1 < arguments.count ? arguments[$0 + 1] : nil }
-        let candidates = [given, UserDefaults.standard.string(forKey: Self.lastFolderKey)].compactMap { $0 }
-        let folder = candidates
             .map { URL(fileURLWithPath: $0, relativeTo: current).standardizedFileURL }
-            .first { url in
-                var isDirectory: ObjCBool = false
-                return FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory) && isDirectory.boolValue
-            }
-        launchFolder = folder
+        // A snapshot without a folder is of the welcome window, whatever the reader turned off.
+        let showsWelcome = Self.isSnapshotting || (defaults.object(forKey: Self.showsWelcomeKey) as? Bool ?? true)
+        launchFolder = [given, showsWelcome ? nil : recents.first].compactMap { $0 }.first(where: Self.isFolder)
         let first = Tab()
         tabs = [first]
         currentTabID = first.id
+    }
+
+    /// Whether a folder exists at a URL.
+    ///
+    /// - Parameter url: A file URL.
+    /// - Returns: `true` when it names a directory.
+    static func isFolder(_ url: URL) -> Bool {
+        var isDirectory: ObjCBool = false
+        return FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory) && isDirectory.boolValue
     }
 
     /// Opens the launch folder, once.
@@ -309,7 +333,9 @@ final class Workspace {
     ///
     /// - Parameter url: The package folder.
     func open(_ url: URL) {
-        if !Self.isSnapshotting { UserDefaults.standard.set(url.path, forKey: Self.lastFolderKey) }
+        recentFolders = [url] + recentFolders.filter { $0.path != url.path }.prefix(Self.recentLimit - 1)
+        saveRecentFolders()
+        opens += 1
         root = url
         name = url.lastPathComponent
         tabs = [Tab()]
@@ -330,6 +356,27 @@ final class Workspace {
         panel.prompt = "Open"
         panel.message = "Choose a Swift package. gloss reads its Sources folder when it has one."
         if panel.runModal() == .OK, let url = panel.url { open(url) }
+    }
+
+    /// Takes a folder off the recent list.
+    ///
+    /// - Parameter url: A folder the list holds.
+    func forget(_ url: URL) {
+        recentFolders.removeAll { $0.path == url.path }
+        saveRecentFolders()
+    }
+
+    /// Empties the recent list.
+    func clearRecentFolders() {
+        recentFolders = []
+        saveRecentFolders()
+    }
+
+    /// Writes the recent list for the next launch, unless this run only takes a snapshot.
+    private func saveRecentFolders() {
+        guard !Self.isSnapshotting else { return }
+        UserDefaults.standard.set(recentFolders.map(\.path), forKey: Self.recentFoldersKey)
+        UserDefaults.standard.removeObject(forKey: Self.lastFolderKey)
     }
 
     /// Reads the open folder again, keeping the selection and the map level when they still exist.

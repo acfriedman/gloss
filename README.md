@@ -54,6 +54,12 @@ about what to show is made there, so the page and the app cannot disagree.
 swift run GlossApp --root path/to/YourPackage
 ```
 
+Without `--root` it opens on a welcome window, as Xcode does: Open Folder… (⌘O) on the left, or a
+folder or `Package.swift` dropped anywhere on it, and the folders opened most recently on the right,
+newest first and chosen, so Return or a double click opens it; each row's menu shows it in Finder or
+takes it off the list. File › Open Recent lists the same folders, and ⌘⇧1 brings the welcome window
+back. Turn off "Show this window when gloss opens" and a launch reopens the last folder instead.
+
 The same three panes as the page, in a native window: the list, one type's text, and the map, with
 the access level and zoom in the toolbar (zoom is also ⌘= and ⌘-). The toolbar's arrows, or ⌘← and
 ⌘→, go back and forward through the places visited: each selection, level, and focus, with the
@@ -101,13 +107,14 @@ type beside it, one row per neighbor that unfolds to its reasons. Hovering a chi
 its box. Declarations are colored as Xcode's default themes color
 them, from swift-syntax's own classification (`Highlight` in `GlossMap`), with the types the scanned
 sources declare told apart from the types they only use. It reads the folder's `Sources` directory
-when it has one, ⌘R reads it again, and the next launch reopens the last folder. A member's file and
+when it has one, and ⌘R reads it again. A member's file and
 line open in Xcode. The folder takes a flag because AppKit reads a bare path argument as a document
 to open and then opens no window.
 
 For reviews from a script, `GLOSS_SNAPSHOT=out.png` writes the window to a PNG once the sources are
 read and quits; `GLOSS_SELECT` selects a node id (or `module:Name`) first, `GLOSS_ZOOM` zooms in
-that many times, and `GLOSS_PREVIEW` previews a node id as if hovered.
+that many times, and `GLOSS_PREVIEW` previews a node id as if hovered. Without `--root`, the
+snapshot is of the welcome window.
 
 ## Interface
 

@@ -1,3 +1,5 @@
+import GlossCore
+
 /// Places boxes and edge curves for a dependency map, top to bottom.
 ///
 /// Layout runs once, in Swift, for every front end: the page draws it as fixed SVG that renders
@@ -191,6 +193,7 @@ public struct GraphLayout: Sendable, Equatable {
     /// band, and within a band, lanes whose rows never meet can stack in one column.
     public static func layered(_ items: [Item], _ links: [Link], emphasis: String? = nil,
                                splitAt: String? = nil) -> GraphLayout {
+        let phase = Timing.begin("layout"); defer { Timing.end(phase, "\(items.count) boxes, \(links.count) links") }
         let count = items.count
         var position: [String: Int] = [:]
         for (index, item) in items.enumerated() { position[item.id] = index }

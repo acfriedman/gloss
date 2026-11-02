@@ -73,7 +73,7 @@ struct ChangePageView: View {
                 }
             }
         } else {
-            ReachedView(atlas: atlas, reasons: Timing.measure("change reasons", node.id) { atlas.changeReasons(of: node.id, in: diff) })
+            ReachedView(atlas: atlas, reasons: atlas.changeReasons(of: node.id, in: diff))
         }
     }
 }

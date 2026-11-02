@@ -91,6 +91,7 @@ extension Atlas {
     /// the rest are listed as ``Reach/overflow``.
     public func reach(from id: String, toward direction: ReachDirection, depth: Int? = nil,
                       minimumRank: Int, budget: Int = mapBudget) -> Reach? {
+        let phase = Timing.begin("reach"); defer { Timing.end(phase, "\(id) \(direction)") }
         guard let root = byID[id] else { return nil }
         // The indexes the atlas keeps, rather than a pass over every edge per reach.
         let down = { (id: String) in (self.edgesFrom[id] ?? []).map(\.to) }

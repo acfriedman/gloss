@@ -84,6 +84,7 @@ public struct Atlas: Sendable {
     ///
     /// - Parameter interface: The interface to arrange.
     public init(_ interface: Interface) {
+        let phase = Timing.begin("arrange")
         nodes = interface.graph.nodes
         edges = interface.graph.edges
         var seenModules = Set<String>()
@@ -122,6 +123,7 @@ public struct Atlas: Sendable {
         rolledWithBody = Self.roll(edges, byID: byID, includeBody: true)
         rolledSignature = Self.roll(edges, byID: byID, includeBody: false)
         moduleColors = Self.colorSlots(for: modules)
+        Timing.end(phase, "\(nodes.count) types")
     }
 
     /// How many module colors every front end defines.
@@ -274,6 +276,7 @@ public struct Atlas: Sendable {
     /// property, gets docs forwarded from `to` instead: the summaries of the members its body reaches,
     /// or, when it reaches none that have one, the type's own summary.
     public func reasons(from: String, to: String) -> [Reason] {
+        let phase = Timing.begin("why reasons"); defer { Timing.end(phase, from + " → " + to) }
         let group = group(from)
         let reasons = ([group.head].compactMap { $0 } + group.members).compactMap { $0.contract.reason(toward: to) }
         let target = self.group(to)

@@ -42,6 +42,7 @@ extension Atlas {
     ///     is always seen in place.
     /// - Returns: The module's top rows, with no empty folders.
     public func outline(of module: String, showing shows: (Graph.Node) -> Bool) -> [OutlineItem] {
+        let phase = Timing.begin("outline"); defer { Timing.end(phase, module) }
         let members = nodes.filter { $0.module == module }
         var nestedIn: [String: [Graph.Node]] = [:]
         var placed: [Graph.Node] = []

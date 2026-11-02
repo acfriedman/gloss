@@ -27,6 +27,7 @@ extension Atlas {
     /// uppercase letter after a lowercase one, or a letter after `.` or `_`), more again for a letter
     /// right after the previous match, and most for an exact name or a prefix of the last component.
     public func quickOpen(_ query: String, limit: Int = 50) -> [QuickOpenMatch] {
+        let phase = Timing.begin("quick open"); defer { Timing.end(phase, query) }
         let letters = Array(query.lowercased().filter { !$0.isWhitespace })
         guard !letters.isEmpty else { return [] }
         var found: [(match: QuickOpenMatch, order: Int)] = []

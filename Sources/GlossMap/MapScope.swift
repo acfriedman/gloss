@@ -90,6 +90,7 @@ extension Atlas {
     /// overview, or the only module when there is just one. A module that is over the budget and spread
     /// across several folders is drawn as folders, and each of those folders gets a level of its own.
     public func mapScopes() -> [MapScope] {
+        let phase = Timing.begin("scopes"); defer { Timing.end(phase) }
         let atlas = self
         let multiModule = modules.count > 1
         let fitsAll = roots.count <= Self.mapBudget
@@ -151,6 +152,7 @@ extension Atlas {
     /// - Parameter scopes: The levels from ``mapScopes()``.
     /// - Returns: Level ids in level order, keyed by root id.
     public func levelsDrawing(_ scopes: [MapScope]) -> [String: [String]] {
+        let phase = Timing.begin("levels drawing types"); defer { Timing.end(phase, "\(scopes.count) levels") }
         var levels: [String: [String]] = [:]
         for scope in scopes {
             for id in figure(scope, includeBody: true).shown { levels[id, default: []].append(scope.id) }
@@ -166,6 +168,7 @@ extension Atlas {
     /// - Returns: The figure's parts. Boxes past the budget are the least connected ones, ranked with
     ///   body dependencies included so both variants keep the same boxes.
     public func figure(_ scope: MapScope, includeBody: Bool) -> MapFigure {
+        let phase = Timing.begin("figure"); defer { Timing.end(phase, scope.label) }
         var units: [String: MapScope.Unit] = [:]
         var inside: [MapScope.Unit] = []
         var insideSet = Set<MapScope.Unit>()

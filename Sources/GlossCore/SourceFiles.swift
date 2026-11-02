@@ -19,6 +19,7 @@ public enum SourceFiles {
     ///
     /// `.build` and `.swiftpm` directories are always skipped.
     public static func swiftFiles(under path: String, includeTests: Bool) throws -> [String] {
+        let phase = Timing.begin("list files"); defer { Timing.end(phase, path) }
         var isDirectory: ObjCBool = false
         guard FileManager.default.fileExists(atPath: path, isDirectory: &isDirectory) else { throw Missing(path: path) }
         guard isDirectory.boolValue else { return path.hasSuffix(".swift") ? [path] : [] }

@@ -98,6 +98,7 @@ public struct InterfaceDiff: Sendable, Equatable {
     ///   - base: The interface compared against, such as the one a branch started from.
     ///   - head: The interface as it is now.
     public init(base: Interface, head: Interface) {
+        let phase = Timing.begin("diff")
         func grouped(_ interface: Interface) -> [String: [Contract]] {
             Dictionary(grouping: interface.contracts) { Graph.id($0.module, Graph.key(of: $0)) }
         }
@@ -140,6 +141,7 @@ public struct InterfaceDiff: Sendable, Equatable {
             edges.append(EdgeChange(from: edge.from, to: edge.to, change: .removed, before: edge.roles, after: [],
                                     viaAdded: [], viaRemoved: edge.via))
         }
+        Timing.end(phase, "\(nodes.count) types and \(edges.count) dependencies differ")
         self.nodes = nodes
         self.edges = edges
         for (index, change) in nodes.enumerated() where nodeIndex[change.node.id] == nil { nodeIndex[change.node.id] = index }

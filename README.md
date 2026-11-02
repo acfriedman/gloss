@@ -131,6 +131,11 @@ when it opens, and a row of chips shows the first 40 with the rest behind a butt
 
 Every phase is timed with `Timing` (`GlossCore`): an interval under Points of Interest in
 Instruments, a debug line in the unified log, and with `GLOSS_TIMING=1` a line on standard error.
+The calls that can be slow time themselves, from their first line (`Timing.begin` and `Timing.end`):
+reading files and revisions, building, arranging, and comparing an interface, each level's figure
+and layout, reaches, outlines, Open Quickly, and a Why row's or a neighbor's reasons. Whatever calls
+them is timed without saying so, and views never mention `Timing`; the calls cheap enough to make
+thousands of times a frame, such as a label or a rank, are not measured.
 The app also logs `select`, `preview`, and `open folder` as they happen, and `main thread blocked`
 whenever the main thread answers more than 50 ms late, whatever held it, so a choppy moment shows
 beside what caused it:

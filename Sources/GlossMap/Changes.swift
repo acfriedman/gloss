@@ -93,6 +93,7 @@ extension Atlas {
     /// are not drawn.
     public func changesFigure(_ diff: InterfaceDiff, minimumRank: Int, budget: Int = mapBudget,
                               includeUntouched: Bool = false) -> ChangesFigure {
+        let phase = Timing.begin("changes figure"); defer { Timing.end(phase, "\(diff.nodes.count) types changed") }
         let shown = { (id: String) in self.byID[id].map { self.rank(of: $0) >= minimumRank } ?? false }
         let position = Dictionary(uniqueKeysWithValues: nodes.enumerated().map { ($0.element.id, $0.offset) })
         var degree: [String: Int] = [:]
@@ -165,6 +166,7 @@ extension Atlas {
     /// - Returns: The reasons, in the order the dependencies are listed and, for each, the order the
     ///   changed type declares what changed; empty for a type that changed itself or that no change reaches.
     public func changeReasons(of id: String, in diff: InterfaceDiff) -> [ChangeReason] {
+        let phase = Timing.begin("change reasons"); defer { Timing.end(phase, id) }
         let changed = Set(diff.nodes.filter { $0.change != .removed }.map(\.node.id))
         guard !changed.contains(id) else { return [] }
         let breakable = Breakable(diff)

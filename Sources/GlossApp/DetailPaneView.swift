@@ -407,7 +407,7 @@ struct TypeView: View {
 
     var body: some View {
         let group = atlas.group(node.id)
-        let (incoming, outgoing, nested) = Timing.measure("neighbors", node.id) { atlas.neighbors(of: node) }
+        let (incoming, outgoing, nested) = atlas.neighbors(of: node)
         TypeHeaderView(atlas: atlas, node: node)
         FlowView(atlas: atlas, incoming: incoming, outgoing: outgoing, nested: nested)
         WhyView(atlas: atlas, node: node, incoming: incoming, outgoing: outgoing)
@@ -564,8 +564,7 @@ struct WhyRowView: View {
             // otherwise read every declaration of each before showing anything.
             VStack(alignment: .leading, spacing: 12) {
                 if isOpen {
-                    let reasons = Timing.measure("why reasons", from + " → " + to) { atlas.reasons(from: from, to: to) }
-                    ForEach(Array(reasons.enumerated()), id: \.offset) { _, reason in ReasonView(reason: reason) }
+                    ForEach(Array(atlas.reasons(from: from, to: to).enumerated()), id: \.offset) { _, reason in ReasonView(reason: reason) }
                 }
             }
             .padding(.leading, 4)

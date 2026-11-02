@@ -19,20 +19,18 @@ enum Bench {
     /// - Returns: The phases in the order they finished.
     static func run(sources: [(file: String, source: String)], base: String?, in directory: String, includeTests: Bool) -> [Timing.Sample] {
         Timing.record {
-            let interface = Timing.measure("build interface") { Interface.build(sources: sources) }
-            let atlas = Timing.measure("arrange") { Atlas(interface) }
-            let scopes = Timing.measure("scopes") { atlas.mapScopes() }
-            _ = Timing.measure("levels drawing types") { atlas.levelsDrawing(scopes) }
+            // The calls that can be slow time themselves; only the steps made of several calls are
+            // measured here.
+            let interface = Interface.build(sources: sources)
+            let atlas = Atlas(interface)
+            let scopes = atlas.mapScopes()
+            _ = atlas.levelsDrawing(scopes)
             for scope in scopes {
-                let figure = Timing.measure("figure", scope.label) { atlas.figure(scope, includeBody: true) }
-                _ = Timing.measure("layout", scope.label) { GraphLayout.layered(figure.items, figure.links) }
+                let figure = atlas.figure(scope, includeBody: true)
+                _ = GraphLayout.layered(figure.items, figure.links)
             }
-            for module in atlas.modules {
-                _ = Timing.measure("outline", module) { atlas.outline(of: module, showing: { _ in true }) }
-            }
-            for query in ["a", "view", "syntax", "zz"] {
-                _ = Timing.measure("quick open", query) { atlas.quickOpen(query) }
-            }
+            for module in atlas.modules { _ = atlas.outline(of: module, showing: { _ in true }) }
+            for query in ["a", "view", "syntax", "zz"] { _ = atlas.quickOpen(query) }
             var degree: [String: Int] = [:]
             for edge in atlas.edges {
                 degree[edge.from, default: 0] += 1
@@ -41,15 +39,14 @@ enum Bench {
             let busiest = atlas.roots.sorted { (degree[$0.id] ?? 0, $1.id) > (degree[$1.id] ?? 0, $0.id) }.prefix(Self.busiest)
             for node in busiest {
                 for direction in [ReachDirection.both, .dependencies, .users] {
-                    let reach = Timing.measure("reach", "\(node.name) \(direction)") {
-                        atlas.reach(from: node.id, toward: direction, depth: direction == .both ? 1 : nil, minimumRank: Atlas.defaultMinimumRank)
-                    }
+                    let reach = atlas.reach(from: node.id, toward: direction, depth: direction == .both ? 1 : nil,
+                                            minimumRank: Atlas.defaultMinimumRank)
                     if let reach, let far = reach.layout.boxes.last?.item.id {
                         _ = Timing.measure("trails", node.name) { reach.trails(to: far) }
                     }
                 }
                 let (incoming, outgoing, _) = Timing.measure("neighbors", node.name) { atlas.neighbors(of: node) }
-                Timing.measure("why reasons", "\(node.name), \(incoming.count + outgoing.count) neighbors") {
+                Timing.measure("why section", "\(node.name), \(incoming.count + outgoing.count) neighbors") {
                     for edge in incoming + outgoing { _ = atlas.reasons(from: edge.from, to: edge.to) }
                 }
                 let group = atlas.group(node.id)
@@ -60,20 +57,16 @@ enum Bench {
             }
             guard let base else { return }
             do {
-                let read = try Timing.measure("read base", base) {
-                    try Revision.sources(at: base, under: directory, relativeTo: FileManager.default.currentDirectoryPath, includeTests: includeTests)
-                }
-                let baseInterface = Timing.measure("build base") { Interface.build(sources: read) }
-                let diff = Timing.measure("diff") { InterfaceDiff(base: baseInterface, head: interface) }
-                let changes = Timing.measure("changes figure") { atlas.changesFigure(diff, minimumRank: Atlas.defaultMinimumRank) }
+                let read = try Revision.sources(at: base, under: directory, relativeTo: FileManager.default.currentDirectoryPath,
+                                                includeTests: includeTests)
+                let diff = InterfaceDiff(base: Interface.build(sources: read), head: interface)
+                let changes = atlas.changesFigure(diff, minimumRank: Atlas.defaultMinimumRank)
                 Timing.measure("marks") {
                     for scope in scopes {
                         for item in atlas.figure(scope, includeBody: true).items { _ = atlas.change(of: item.unit, in: diff) }
                     }
                 }
-                for box in changes.layout.boxes {
-                    _ = Timing.measure("change reasons", box.item.label) { atlas.changeReasons(of: box.item.id, in: diff) }
-                }
+                for box in changes.layout.boxes { _ = atlas.changeReasons(of: box.item.id, in: diff) }
             } catch {
                 FileHandle.standardError.write(Data("gloss: cannot read \(base): \(error)\n".utf8))
             }

@@ -43,6 +43,7 @@ public enum Revision {
     ///   unknown.
     public static func sources(at revision: String, under directory: String, relativeTo root: String,
                                includeTests: Bool) throws -> [(file: String, source: String)] {
+        let phase = Timing.begin("read revision"); defer { Timing.end(phase, revision) }
         let top = try text(git(["rev-parse", "--show-toplevel"], in: directory))
         let scanned = try text(git(["rev-parse", "--show-prefix"], in: directory))
         let base = try text(git(["rev-parse", "--show-prefix"], in: root))

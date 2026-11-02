@@ -23,6 +23,7 @@ public struct Interface: Sendable, Equatable, Codable {
     /// - Returns: The interface in file order, then source order, with each contract's module named
     ///   from its path and its mentions resolved.
     public static func build(sources: [(file: String, source: String)]) -> Interface {
+        let phase = Timing.begin("build interface"); defer { Timing.end(phase, "\(sources.count) files") }
         // Each file is read, and its declarations made into contracts and linted, on its own, so the
         // files are spread over every core; the results keep the files' order.
         let readings = Timing.measure("parse", "\(sources.count) files") {

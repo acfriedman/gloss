@@ -64,6 +64,7 @@ public enum Highlight {
     ///
     /// - Parameter contracts: The contracts, such as every one in an interface.
     public static func warm(_ contracts: [Contract]) {
+        let phase = Timing.begin("warm highlighting"); defer { Timing.end(phase, "\(contracts.count) declarations") }
         let chunk = 256
         DispatchQueue.concurrentPerform(iterations: (contracts.count + chunk - 1) / chunk) { part in
             for contract in contracts[(part * chunk)..<min(contracts.count, (part + 1) * chunk)] { _ = runs(of: contract) }

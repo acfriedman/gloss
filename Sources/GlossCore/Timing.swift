@@ -5,6 +5,11 @@ import os
 
 /// How long gloss's work takes, so a slow phase can be found and a change that slows one seen.
 ///
+/// The work that can be slow measures itself, at the model's entry points: reading, building, and
+/// comparing an interface, and arranging, drawing, and searching it. Whatever calls them, a view
+/// included, is timed without saying so; the calls cheap enough to make thousands of times a frame
+/// are not measured, since measuring would cost more than they do.
+///
 /// Each phase measured is an interval under Points of Interest in Instruments, a debug line in the
 /// unified log under the `gloss` subsystem (`log stream --level debug --predicate 'subsystem == "gloss"'`),
 /// and, with `GLOSS_TIMING` set in the environment, a line on standard error. ``record(_:)`` collects
@@ -40,18 +45,48 @@ public enum Timing {
     /// - Throws: What the work throws, once it is measured.
     public static func measure<T>(_ name: StaticString, _ detail: @autoclosure () -> String = "",
                                   _ work: () throws -> T) rethrows -> T {
+        let phase = begin(name)
+        defer { end(phase, detail()) }
+        return try work()
+    }
+
+    /// A phase under way, from ``begin(_:)`` until ``end(_:_:)``.
+    public struct Phase {
+        /// The phase, which names the interval in Instruments.
+        fileprivate let name: StaticString
+        /// When it began.
+        fileprivate let start: ContinuousClock.Instant
+        #if canImport(os)
+        /// Its interval in Instruments.
+        fileprivate let interval: OSSignpostIntervalState
+        #endif
+    }
+
+    /// Starts measuring a phase, for a function that measures itself from its first line:
+    /// `let phase = Timing.begin("reach"); defer { Timing.end(phase, id) }`.
+    ///
+    /// - Parameter name: The phase, which names the interval in Instruments.
+    /// - Returns: The phase, to pass to ``end(_:_:)``.
+    public static func begin(_ name: StaticString) -> Phase {
         #if canImport(os)
         let interval = signposter.beginInterval(name, id: signposter.makeSignpostID())
+        return Phase(name: name, start: ContinuousClock.now, interval: interval)
+        #else
+        return Phase(name: name, start: ContinuousClock.now)
         #endif
-        let start = ContinuousClock.now
-        defer {
-            let duration = ContinuousClock.now - start
-            #if canImport(os)
-            signposter.endInterval(name, interval)
-            #endif
-            report(Sample(name: "\(name)", detail: detail(), duration: duration))
-        }
-        return try work()
+    }
+
+    /// Ends a phase and reports it.
+    ///
+    /// - Parameters:
+    ///   - phase: The phase ``begin(_:)`` started.
+    ///   - detail: What the phase worked on, read only now.
+    public static func end(_ phase: Phase, _ detail: @autoclosure () -> String = "") {
+        let duration = ContinuousClock.now - phase.start
+        #if canImport(os)
+        signposter.endInterval(phase.name, phase.interval)
+        #endif
+        report(Sample(name: "\(phase.name)", detail: detail(), duration: duration))
     }
 
     /// Marks a moment, such as a selection, so the phases after it read against it: an event in

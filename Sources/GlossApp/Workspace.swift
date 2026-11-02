@@ -428,10 +428,10 @@ final class Workspace {
                     return (file.hasPrefix(prefix) ? String(file.dropFirst(prefix.count)) : file, source)
                 }
             }
-            let interface = Timing.measure("build interface") { Interface.build(sources: pairs) }
-            let atlas = Timing.measure("arrange") { Atlas(interface) }
-            let scopes = Timing.measure("scopes") { atlas.mapScopes() }
-            let levels = Timing.measure("levels drawing types") { atlas.levelsDrawing(scopes) }
+            let interface = Interface.build(sources: pairs)
+            let atlas = Atlas(interface)
+            let scopes = atlas.mapScopes()
+            let levels = atlas.levelsDrawing(scopes)
             let (branch, refs, current) = Timing.measure("read branches") {
                 (["main", "master"].first { (try? Revision.commit($0, in: scanned.path)) != nil },
                  (try? Revision.refs(in: scanned.path)) ?? [],
@@ -518,9 +518,7 @@ final class Workspace {
                 // Pages color declarations as they show; working them all out now, in the background,
                 // keeps a type of hundreds of members from parsing them while the reader waits.
                 let contracts = loaded.interface.contracts
-                Task.detached(priority: .utility) {
-                    Timing.measure("warm highlighting", "\(contracts.count) declarations") { Highlight.warm(contracts) }
-                }
+                Task.detached(priority: .utility) { Highlight.warm(contracts) }
                 scopes = loaded.scopes
                 levels = loaded.levels
                 defaultBranch = loaded.defaultBranch
@@ -563,10 +561,9 @@ final class Workspace {
                     case .branch(let branch): try Revision.mergeBase(of: headRevision ?? "HEAD", and: branch, in: scanned)
                     case .revision(let revision): try Revision.commit(revision, in: scanned)
                     }
-                    let base = try known[commit] ?? Timing.measure("read base", commit) {
-                        try Interface.build(sources: Revision.sources(at: commit, under: scanned, relativeTo: root.path, includeTests: false))
-                    }
-                    return (commit, base, Timing.measure("diff") { InterfaceDiff(base: base, head: head) })
+                    let base = try known[commit]
+                        ?? Interface.build(sources: Revision.sources(at: commit, under: scanned, relativeTo: root.path, includeTests: false))
+                    return (commit, base, InterfaceDiff(base: base, head: head))
                 }
             }.value
             guard root == self.root, comparison == self.comparison, head == self.interface else { return }
@@ -1210,10 +1207,8 @@ final class Workspace {
         let focusMode = request.focusMode
         // Every focus is a reach: Neighbors goes both ways from depth 1, and the other two fit the budget.
         if request.scopeID == Self.focus, case .type(let id) = request.selection, let node = atlas.byID[id],
-           let reach = Timing.measure("reach", id, {
-               atlas.reach(from: id, toward: focusMode.direction,
-                           depth: request.reachDepth ?? (focusMode == .neighbors ? 1 : nil), minimumRank: request.minimumRank)
-           }) {
+           let reach = atlas.reach(from: id, toward: focusMode.direction,
+                                   depth: request.reachDepth ?? (focusMode == .neighbors ? 1 : nil), minimumRank: request.minimumRank) {
             let from = scopes.first { $0.id == request.focusFrom } ?? scopes.first
             let what = switch focusMode {
             case .neighbors: "its neighbors"
@@ -1237,9 +1232,7 @@ final class Workspace {
                     : request.comparisonProblem ?? "Reading what changed \(phrase)…"
                 return Drawing(crumbs: crumbs, caption: caption)
             }
-            let figure = Timing.measure("changes figure") {
-                atlas.changesFigure(diff, minimumRank: request.minimumRank, includeUntouched: request.showsUntouched)
-            }
+            let figure = atlas.changesFigure(diff, minimumRank: request.minimumRank, includeUntouched: request.showsUntouched)
             let around = request.showsUntouched ? "around them" : "they reach"
             let untouched = figure.untouched.isEmpty ? "" : ", \(figure.untouched.count) around them untouched"
             let caption = diff.isEmpty ? "Nothing changed \(phrase)."
@@ -1248,8 +1241,8 @@ final class Workspace {
                            untouched: figure.untouched.map { .type($0) })
         }
         guard let scope = scopes.first(where: { $0.id == request.scopeID }) ?? scopes.first else { return Drawing() }
-        let figure = Timing.measure("figure", scope.label) { atlas.figure(scope, includeBody: true) }
-        return Drawing(layout: Timing.measure("layout", scope.label) { GraphLayout.layered(figure.items, figure.links) },
+        let figure = atlas.figure(scope, includeBody: true)
+        return Drawing(layout: GraphLayout.layered(figure.items, figure.links),
                        crumbs: scope.path.compactMap { id in scopes.first { $0.id == id }.map { ($0.id, $0.label) } },
                        caption: "\(figure.items.count) boxes, \(figure.links.count) dependencies.",
                        loose: figure.loose, overflow: figure.overflow)
@@ -1281,14 +1274,12 @@ final class Workspace {
     func outline(of module: String) -> [OutlineItem] {
         guard let atlas else { return [] }
         let query = search.trimmingCharacters(in: .whitespaces).lowercased()
-        return Timing.measure("outline", module) {
-            atlas.outline(of: module) { node in
-                guard isShown(node) else { return false }
-                let group = atlas.group(node.id)
-                if findingsOnly, group.findingCount == 0 { return false }
-                guard !query.isEmpty else { return true }
-                return ([node.name] + group.members.map(\.name)).contains { $0.lowercased().contains(query) }
-            }
+        return atlas.outline(of: module) { node in
+            guard isShown(node) else { return false }
+            let group = atlas.group(node.id)
+            if findingsOnly, group.findingCount == 0 { return false }
+            guard !query.isEmpty else { return true }
+            return ([node.name] + group.members.map(\.name)).contains { $0.lowercased().contains(query) }
         }
     }
 

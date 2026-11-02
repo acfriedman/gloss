@@ -5,24 +5,34 @@ import AppKit
 /// Set `GLOSS_SNAPSHOT` to the output path. `GLOSS_SELECT` names what to select first: a node id such
 /// as `GlossCore/Linter`, `module:Name`, or `changes`, or several to select in turn, joined by commas,
 /// such as `changes,GlossMap/Atlas`. `GLOSS_ZOOM` is how many times to zoom in after that, and
-/// `GLOSS_PREVIEW` names a node to preview as if the pointer rested on it. Without `--root`, the
+/// `GLOSS_PREVIEW` names a node to preview as if the pointer rested on it. `GLOSS_COMPARE` compares
+/// with a base from where the head left it, `develop`, or names the head too, `develop..feature`, and
+/// it is read before anything is selected. Without `--root`, the
 /// snapshot is of the welcome window. A snapshot run leaves the folders the next launch lists alone.
 extension Workspace {
+    /// Whether a snapshot was started, so a second read of the folder starts no second one.
+    private static var isSnapshotUnderWay = false
+
     /// Whether this run only takes a snapshot, and so must not change what the reader's next launch opens.
     static var isSnapshotting: Bool {
         ProcessInfo.processInfo.environment["GLOSS_SNAPSHOT"] != nil
     }
 
     /// Takes the snapshot the environment asks for, once the interface and any comparison are read;
-    /// does nothing otherwise.
+    /// does nothing otherwise, or when one is under way: a head read from git reads the folder again.
     func snapshotIfAsked() {
         let environment = ProcessInfo.processInfo.environment
-        guard let output = environment["GLOSS_SNAPSHOT"] else { return }
+        guard let output = environment["GLOSS_SNAPSHOT"], !Self.isSnapshotUnderWay else { return }
+        Self.isSnapshotUnderWay = true
         Task {
+            if let asked = environment["GLOSS_COMPARE"] {
+                let ends = asked.components(separatedBy: "..")
+                _ = compare(base: ends[0], asItIs: false, head: ends.count > 1 ? ends[1] : nil)
+            }
             // The comparison is read after the sources, and the changes level draws nothing until it is,
             // so a type selected there before would move to a level of its own.
             var waited = 0
-            while comparison != .off, diff == nil, comparisonProblem == nil, waited < 100 {
+            while isLoading || (comparison != .off && diff == nil && comparisonProblem == nil), waited < 150 {
                 try? await Task.sleep(for: .milliseconds(100))
                 waited += 1
             }
@@ -50,7 +60,9 @@ extension Workspace {
     private static func capture(to output: String, after delay: Duration) {
         Task {
             try? await Task.sleep(for: delay)
-            guard let view = NSApp.windows.first(where: \.isVisible)?.contentView?.superview,
+            // A sheet up is what the reader sees, so it is the one taken.
+            let window = NSApp.windows.first(where: \.isVisible)
+            guard let view = (window?.attachedSheet ?? window)?.contentView?.superview,
                   let image = view.bitmapImageRepForCachingDisplay(in: view.bounds) else { return }
             view.cacheDisplay(in: view.bounds, to: image)
             try? image.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: output))

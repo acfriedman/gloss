@@ -217,6 +217,11 @@ final class DiffTests: XCTestCase {
         XCTAssertEqual(read.map(\.file), ["Sources/Shop/Cart.swift"], "Paths read as the working tree reports them, tests left out.")
         XCTAssertEqual(read.first?.source, base, "The committed text, not the edit on disk.")
         XCTAssertThrowsError(try Revision.sources(at: "nowhere", under: root.path, relativeTo: root.path, includeTests: false))
+
+        try git(["branch", "-q", "-M", "develop"], in: root)
+        try git(["tag", "v1"], in: root)
+        XCTAssertEqual(try Revision.currentBranch(in: root.path), "develop")
+        XCTAssertEqual(try Revision.refs(in: root.path), [Revision.Ref(name: "develop", kind: .branch), Revision.Ref(name: "v1", kind: .tag)])
     }
 
     private func git(_ arguments: [String], in directory: URL) throws {

@@ -113,8 +113,10 @@ to open and then opens no window.
 
 For reviews from a script, `GLOSS_SNAPSHOT=out.png` writes the window to a PNG once the sources are
 read and quits; `GLOSS_SELECT` selects a node id (or `module:Name`) first, `GLOSS_ZOOM` zooms in
-that many times, and `GLOSS_PREVIEW` previews a node id as if hovered. Without `--root`, the
-snapshot is of the welcome window.
+that many times, and `GLOSS_PREVIEW` previews a node id as if hovered. `GLOSS_SELECT` takes several,
+joined by commas, such as `changes,GlossMap/Atlas`, and `GLOSS_COMPARE` compares with a base first,
+`develop`, or a base and head, `develop..feature`. Without `--root`, the snapshot is of the welcome
+window.
 
 ## Interface
 
@@ -154,8 +156,14 @@ reads as entering the interface. `Revision` reads the base straight from git, at
 checking it out, choosing files as the working tree's are chosen.
 
 The app marks what changed on the map. The toolbar's Changes menu picks the base: where the branch
-left `main` (or `master`), which a pull request compares against and the app picks by default, the
-last commit, or nothing. The base is read once per commit and compared again on every reload. A new
+left `main` (or `master`), which a pull request compares against and the app picks by default, where
+it left another branch here (the eight committed to most recently are listed, so `develop` is there
+under git flow), the last commit, or nothing. Compare… takes any base and head: a branch, a remote's
+branch, a tag, or a commit, typed or picked, the base from where the head left it or as it is, and
+the head the working tree unless one is named; a named head is read from git (`Revision.sources`),
+the whole window shows it, its subtitle says which, and its source links, which would open the files
+on disk, are off. The base picked is kept for the folder. The base is read once per commit and
+compared again on every reload. A new
 type's box gets a green `+` badge and a box holding a change, its nested types', or for a module or
 folder any of its types', an amber `~`; in a focus, new and changed dependencies are drawn green and
 amber. A line under the map counts what is new, changed, and gone across the interface and names the

@@ -82,6 +82,30 @@ final class Workspace {
         case lastCommit
         /// A commit, tag, or branch as it is, without finding where the branch left it.
         case revision(String)
+
+        /// The comparison as the defaults keep it: `off`, `lastCommit`, `branch:` and a name, or
+        /// `revision:` and a name.
+        var stored: String {
+            switch self {
+            case .off: "off"
+            case .lastCommit: "lastCommit"
+            case .branch(let branch): "branch:" + branch
+            case .revision(let revision): "revision:" + revision
+            }
+        }
+
+        /// Reads a comparison the defaults kept.
+        ///
+        /// - Parameter stored: A value ``stored`` wrote.
+        init?(stored: String) {
+            switch stored {
+            case "off": self = .off
+            case "lastCommit": self = .lastCommit
+            case _ where stored.hasPrefix("branch:"): self = .branch(String(stored.dropFirst("branch:".count)))
+            case _ where stored.hasPrefix("revision:"): self = .revision(String(stored.dropFirst("revision:".count)))
+            default: return nil
+            }
+        }
     }
 
     /// The level id of the selected type's focus, beside the atlas's own levels.
@@ -227,10 +251,23 @@ final class Workspace {
     private(set) var comparisonProblem: String?
     /// The branch a pull request from here would go into, `main` or else `master`, or `nil` outside git.
     private(set) var defaultBranch: String?
+    /// The revision read in place of the files on disk, so the whole window shows it, or `nil` for the
+    /// working tree.
+    private(set) var head: String?
+    /// The repository's branches, remotes' branches, and tags, most recently committed to first; empty
+    /// outside git.
+    private(set) var refs: [Revision.Ref] = []
+    /// The branch checked out, or `nil` outside git or with a detached head.
+    private(set) var currentBranch: String?
+    /// Whether the sheet that picks a base and a head is up.
+    var isCompareShown = false
     /// The bases read so far, by commit, so a reload compares again without reading git again.
     private var bases: [String: Interface] = [:]
     /// Whether the reader picked a comparison, which the default then leaves alone.
     private var comparisonChosen = false
+    /// The defaults key of the comparison the reader last picked for each folder, by path, as
+    /// ``Comparison/stored`` writes it.
+    private static let comparisonsKey = "comparisons"
 
     /// Whether the changes level draws the neighbors no change reaches as well as those it does.
     var showsUntouched = false { didSet { if scopeID == Self.changes { redraw() } } }
@@ -319,6 +356,8 @@ final class Workspace {
         var scopes: [MapScope]
         var levels: [String: [String]]
         var defaultBranch: String?
+        var refs: [Revision.Ref]
+        var currentBranch: String?
 
         /// The folder read for a package: its `Sources` directory when it has one, else the folder itself.
         ///
@@ -329,24 +368,34 @@ final class Workspace {
             return FileManager.default.fileExists(atPath: sources.path) ? sources : root
         }
 
-        /// Reads a package: its `Sources` directory when it has one, and otherwise the folder itself.
+        /// Reads a package: its `Sources` directory when it has one, and otherwise the folder itself, from
+        /// disk or as a revision holds it.
         ///
-        /// - Parameter root: The folder.
+        /// - Parameters:
+        ///   - root: The folder.
+        ///   - head: The revision to read, or `nil` for the files on disk.
         /// - Returns: The interface and its arrangement, with files named relative to `root`.
-        /// - Throws: ``GlossCore/SourceFiles/Missing`` when the folder is gone.
-        static func read(_ root: URL) throws -> Loaded {
+        /// - Throws: ``GlossCore/SourceFiles/Missing`` when the folder is gone, or
+        ///   ``GlossCore/Revision/Failure`` when git cannot read the revision.
+        static func read(_ root: URL, head: String?) throws -> Loaded {
             let scanned = scanned(root)
-            let prefix = root.path.hasSuffix("/") ? root.path : root.path + "/"
-            let files = try SourceFiles.swiftFiles(under: scanned.path, includeTests: false)
-            let pairs = files.compactMap { file -> (file: String, source: String)? in
-                guard let source = try? String(contentsOfFile: file, encoding: .utf8) else { return nil }
-                return (file.hasPrefix(prefix) ? String(file.dropFirst(prefix.count)) : file, source)
+            let pairs: [(file: String, source: String)]
+            if let head {
+                pairs = try Revision.sources(at: head, under: scanned.path, relativeTo: root.path, includeTests: false)
+            } else {
+                let prefix = root.path.hasSuffix("/") ? root.path : root.path + "/"
+                pairs = try SourceFiles.swiftFiles(under: scanned.path, includeTests: false).compactMap { file in
+                    guard let source = try? String(contentsOfFile: file, encoding: .utf8) else { return nil }
+                    return (file.hasPrefix(prefix) ? String(file.dropFirst(prefix.count)) : file, source)
+                }
             }
             let interface = Interface.build(sources: pairs)
             let atlas = Atlas(interface)
             let scopes = atlas.mapScopes()
             let branch = ["main", "master"].first { (try? Revision.commit($0, in: scanned.path)) != nil }
-            return Loaded(interface: interface, atlas: atlas, scopes: scopes, levels: atlas.levelsDrawing(scopes), defaultBranch: branch)
+            return Loaded(interface: interface, atlas: atlas, scopes: scopes, levels: atlas.levelsDrawing(scopes), defaultBranch: branch,
+                          refs: (try? Revision.refs(in: scanned.path)) ?? [],
+                          currentBranch: (try? Revision.currentBranch(in: scanned.path)) ?? nil)
         }
     }
 
@@ -364,8 +413,14 @@ final class Workspace {
         bases = [:]
         diff = nil
         comparisonProblem = nil
+        head = nil
         comparison = .off
         comparisonChosen = false
+        // The base picked for this folder before, such as `develop` where branches merge there first.
+        if let stored = UserDefaults.standard.dictionary(forKey: Self.comparisonsKey)?[url.path] as? String,
+           let saved = Comparison(stored: stored) {
+            comparison = saved
+        }
         reload()
     }
 
@@ -403,10 +458,11 @@ final class Workspace {
     /// Reads the open folder again, keeping the selection and the map level when they still exist.
     func reload() {
         guard let root else { return }
+        let head = self.head
         isLoading = true
         Task {
-            let result = await Task.detached(priority: .userInitiated) { Result { try Loaded.read(root) } }.value
-            guard root == self.root else { return }
+            let result = await Task.detached(priority: .userInitiated) { Result { try Loaded.read(root, head: head) } }.value
+            guard root == self.root, head == self.head else { return }
             isLoading = false
             switch result {
             case .success(let loaded):
@@ -416,6 +472,8 @@ final class Workspace {
                 scopes = loaded.scopes
                 levels = loaded.levels
                 defaultBranch = loaded.defaultBranch
+                refs = loaded.refs
+                currentBranch = loaded.currentBranch
                 restore()
                 // A branch is compared with where it left the default branch until the reader picks.
                 if !comparisonChosen, let branch = loaded.defaultBranch, comparison == .off {
@@ -425,8 +483,9 @@ final class Workspace {
                     compare()
                 }
                 snapshotIfAsked()
-            case .failure:
-                problem = "There is nothing at \(root.path)."
+            case .failure(let error):
+                problem = (error as? Revision.Failure).map { "git could not read \(head ?? "HEAD"): \($0.message)" }
+                    ?? "There is nothing at \(root.path)."
             }
         }
     }
@@ -441,14 +500,15 @@ final class Workspace {
             return
         }
         let comparison = self.comparison
+        let headRevision = self.head
         let known = bases
         Task {
             let result = await Task.detached(priority: .utility) { () -> Result<(commit: String, base: Interface, diff: InterfaceDiff), Error> in
                 Result {
                     let scanned = Loaded.scanned(root).path
                     let commit = switch comparison {
-                    case .off, .lastCommit: try Revision.commit("HEAD", in: scanned)
-                    case .branch(let branch): try Revision.mergeBase(of: "HEAD", and: branch, in: scanned)
+                    case .off, .lastCommit: try Revision.commit(headRevision ?? "HEAD", in: scanned)
+                    case .branch(let branch): try Revision.mergeBase(of: headRevision ?? "HEAD", and: branch, in: scanned)
                     case .revision(let revision): try Revision.commit(revision, in: scanned)
                     }
                     let base = try known[commit] ?? Interface.build(sources: Revision.sources(at: commit, under: scanned,
@@ -495,13 +555,62 @@ final class Workspace {
         return marks
     }
 
+    /// Compares with a base the reader picked, and keeps it as the folder's base for next time.
+    ///
+    /// - Parameter comparison: The base.
+    func choose(_ comparison: Comparison) {
+        self.comparison = comparison
+        guard !Self.isSnapshotting, let root else { return }
+        var stored = UserDefaults.standard.dictionary(forKey: Self.comparisonsKey) ?? [:]
+        stored[root.path] = comparison.stored
+        UserDefaults.standard.set(stored, forKey: Self.comparisonsKey)
+    }
+
+    /// Compares a head with a base, each anything git names a commit by, once git knows them both. A
+    /// head other than the working tree is read from git, and the whole window shows it.
+    ///
+    /// - Parameters:
+    ///   - base: The base, such as `develop`, `v1.2`, or a hash.
+    ///   - asItIs: `true` compares with the base as it is; `false` with where the head left it, as a pull
+    ///     request into it compares.
+    ///   - head: The head, or `nil` for the working tree.
+    /// - Returns: Why the comparison cannot be made, or `nil` once it is under way.
+    func compare(base: String, asItIs: Bool, head: String?) -> String? {
+        guard let root else { return "No folder is open." }
+        let scanned = Loaded.scanned(root).path
+        for revision in [base, head].compactMap({ $0 }) where (try? Revision.commit(revision, in: scanned)) == nil {
+            return "git knows no commit named \(revision)."
+        }
+        choose(asItIs ? .revision(base) : .branch(base))
+        if head != self.head {
+            self.head = head
+            // The marks were made against the other head, so none show until this one is read.
+            diff = nil
+            reload()
+        }
+        return nil
+    }
+
+    /// The branches the Changes menu offers to compare with: the default branch, then the other
+    /// branches here most recently committed to, eight in all, then the one compared with now when it
+    /// is none of those; never the head's own branch, which has no changes since itself.
+    var baseChoices: [String] {
+        let own = head ?? currentBranch
+        var seen: Set<String> = []
+        let names = ([defaultBranch].compactMap { $0 } + refs.filter { $0.kind == .branch }.map(\.name))
+            .filter { $0 != own && seen.insert($0).inserted }
+        var choices = Array(names.prefix(8))
+        if case .branch(let branch) = comparison, !choices.contains(branch) { choices.append(branch) }
+        return choices
+    }
+
     /// What the comparison is with, for the toolbar and the map's count of changes.
     var comparisonTitle: String {
         switch comparison {
         case .off: "No Comparison"
         case .branch(let branch): "Since \(branch)"
         case .lastCommit: "Since Last Commit"
-        case .revision(let revision): "Since \(revision)"
+        case .revision(let revision): "Since \(revision) as It Is"
         }
     }
 
@@ -1056,11 +1165,13 @@ final class Workspace {
 
     // MARK: Reading
 
-    /// The window's subtitle: the size of the interface and how many findings it has.
+    /// The window's subtitle: the revision read when it is not the working tree, then the size of the
+    /// interface and how many findings it has.
     var subtitle: String {
         guard let interface else { return isLoading ? "Reading…" : "" }
         let findings = interface.assessments.reduce(0) { $0 + $1.findings.count }
-        return "\(interface.contracts.count) declarations · \(findings) finding\(findings == 1 ? "" : "s")"
+        let counts = "\(interface.contracts.count) declarations · \(findings) finding\(findings == 1 ? "" : "s")"
+        return head.map { "At \($0) · " + counts } ?? counts
     }
 
     /// Whether the access filter shows a node.

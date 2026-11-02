@@ -10,6 +10,24 @@ public enum Revision {
         public var message: String
     }
 
+    /// A name git gives a commit: a branch here, a branch on a remote, or a tag.
+    public struct Ref: Sendable, Hashable {
+        /// What kind of name a ref is.
+        public enum Kind: String, Sendable, Hashable {
+            /// A branch in this repository, such as `develop`.
+            case branch
+            /// A branch as a remote last had it, such as `origin/develop`.
+            case remote
+            /// A tag, such as `v1.2`.
+            case tag
+        }
+
+        /// The short name, such as `develop`, `origin/develop`, or `v1.2`, which git takes as a revision.
+        public var name: String
+        /// Whether it is a branch, a remote's branch, or a tag.
+        public var kind: Kind
+    }
+
     /// Reads the Swift files under a directory as a revision holds them, choosing them as
     /// ``SourceFiles/swiftFiles(under:includeTests:)`` chooses files on disk.
     ///
@@ -74,6 +92,33 @@ public enum Revision {
     /// - Throws: ``Failure`` when git cannot run, or the revision names no commit.
     public static func commit(_ revision: String, in directory: String) throws -> String {
         try text(git(["rev-parse", "--verify", "--quiet", revision + "^{commit}"], in: directory))
+    }
+
+    /// The branches, the remotes' branches, and the tags of a repository, those committed to most
+    /// recently first, without each remote's pointer to its default branch.
+    ///
+    /// - Parameter directory: A directory inside the repository.
+    /// - Returns: The refs.
+    /// - Throws: ``Failure`` when git cannot run or the directory is not in a repository.
+    public static func refs(in directory: String) throws -> [Ref] {
+        let output = try text(git(["for-each-ref", "--sort=-committerdate", "--format=%(refname)",
+                                   "refs/heads", "refs/remotes", "refs/tags"], in: directory))
+        let kinds: [(prefix: String, kind: Ref.Kind)] = [("refs/heads/", .branch), ("refs/remotes/", .remote), ("refs/tags/", .tag)]
+        return output.split(separator: "\n").compactMap { line in
+            guard let match = kinds.first(where: { line.hasPrefix($0.prefix) }) else { return nil }
+            let name = String(line.dropFirst(match.prefix.count))
+            return match.kind == .remote && name.hasSuffix("/HEAD") ? nil : Ref(name: name, kind: match.kind)
+        }
+    }
+
+    /// The branch checked out.
+    ///
+    /// - Parameter directory: A directory inside the repository.
+    /// - Returns: The branch's name, or `nil` when no branch is checked out, as when the head is detached.
+    /// - Throws: ``Failure`` when git cannot run or the directory is not in a repository.
+    public static func currentBranch(in directory: String) throws -> String? {
+        let name = try text(git(["branch", "--show-current"], in: directory))
+        return name.isEmpty ? nil : name
     }
 
     /// Runs git in a directory and collects what it prints.

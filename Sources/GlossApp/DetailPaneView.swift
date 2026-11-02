@@ -980,7 +980,9 @@ struct SourceLinkView: View {
                 .font(.caption)
         }
         .buttonStyle(.link)
-        .help("Open in Xcode")
+        // The file on disk is not the one read when the window shows another revision.
+        .disabled(workspace.head != nil)
+        .help(workspace.head.map { "This is \(file) at \($0); the file on disk may differ" } ?? "Open in Xcode")
     }
 }
 

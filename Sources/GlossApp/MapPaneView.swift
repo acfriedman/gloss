@@ -66,8 +66,8 @@ struct MapPaneView: View {
             GeometryReader { proxy in
                 let scale = zoom ?? Self.fit(drawing.layout, in: proxy.size)
                 ScrollView([.horizontal, .vertical]) {
-                    MapCanvasView(layout: drawing.layout, lit: workspace.litID, anchor: workspace.anchorID, scale: scale,
-                                  colors: workspace.atlas?.moduleColors ?? [:])
+                    MapCanvasView(layout: drawing.layout, lit: workspace.litID, trail: workspace.litTrail, anchor: workspace.anchorID,
+                                  scale: scale, colors: workspace.atlas?.moduleColors ?? [:])
                         .padding(Self.inset)
                         .frame(minWidth: proxy.size.width, minHeight: proxy.size.height)
                 }
@@ -167,6 +167,9 @@ struct MapCanvasView: View {
     var layout: GraphLayout
     /// The id of the box to light with its edges and neighbors; `nil`, or one not drawn, lights nothing.
     var lit: String?
+    /// Drawn dependencies to light beyond the lit box's own, with the boxes at their ends: a previewed
+    /// type's trails back to the root, so the map shows the chain the details pane reads.
+    var trail: [GraphLayout.Link] = []
     /// The box drawn as the current one whether or not anything is lit: a reach's root.
     var anchor: String?
     /// The figure's magnification, 1 for its natural size; line weights follow it, held between 0.6 and 1.5.
@@ -175,7 +178,9 @@ struct MapCanvasView: View {
     var colors: [String: Int] = [:]
 
     var body: some View {
-        let litEdges = layout.curves.filter { $0.link.from == lit || $0.link.to == lit }
+        let trailed = Set(trail.map { [$0.from, $0.to] })
+        let lights = { (link: GraphLayout.Link) in link.from == lit || link.to == lit || trailed.contains([link.from, link.to]) }
+        let litEdges = layout.curves.filter { lights($0.link) }
         let near = Set(litEdges.flatMap { [$0.link.from, $0.link.to] })
         let isLighting = lit != nil && layout.boxes.contains { $0.item.id == lit }
         let weight = min(1.5, max(0.6, scale))
@@ -200,7 +205,7 @@ struct MapCanvasView: View {
                     context.draw(name, at: CGPoint(x: rect.minX + 12 * scale, y: rect.minY + 9 * scale), anchor: .topLeading)
                 }
                 for curve in layout.curves {
-                    let isLit = isLighting && (curve.link.from == lit || curve.link.to == lit)
+                    let isLit = isLighting && lights(curve.link)
                     let color: Color = isLit ? Palette.accent : Palette.edge.opacity(isLighting ? 0.2 : 0.75)
                     let style = StrokeStyle(lineWidth: (isLit ? 1.8 : 1.2) * weight, dash: curve.link.dashed ? [4 * weight, 3 * weight] : [])
                     context.stroke(Self.path(curve.points, scale: scale), with: .color(color), style: style)

@@ -520,6 +520,13 @@ final class Workspace {
         return reach.trails(to: id)
     }
 
+    /// The drawn dependencies the map lights beyond the lit box's own: a previewed type's trails back to
+    /// the root, so the map shows the chain the details pane reads; none while a chip lights another box.
+    var litTrail: [GraphLayout.Link] {
+        guard hovered == nil else { return [] }
+        return previewTrails.trails.flatMap { $0 }
+    }
+
     /// The box the focus grows from, drawn as the current one without dimming the rest; `nil` outside it.
     var anchorID: String? {
         guard scopeID == Self.focus, case .type(let id) = selection else { return nil }

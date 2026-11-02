@@ -44,8 +44,8 @@ struct DetailPageView: View {
     /// What the page shows, the selection or the preview laid over it; a type the atlas no longer holds
     /// leaves the page empty.
     var target: Workspace.Selection
-    /// The trails that bring a previewed type into the focus, answered above its page; empty shows the
-    /// page alone.
+    /// The trails that bring a previewed type into the focus, which turn its page into how it ties to
+    /// the focused type; empty shows the type's whole page.
     var trails: [[GraphLayout.Link]] = []
     /// How many more trails the type has than are given.
     var more = 0
@@ -54,15 +54,19 @@ struct DetailPageView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
                 if let atlas = workspace.atlas {
-                    if case .type = target, !trails.isEmpty {
-                        WhyHereView(atlas: atlas, trails: trails, more: more, root: workspace.anchorID)
-                    }
                     switch target {
                     case .overview: OverviewView(atlas: atlas)
                     case .modules: ModulesView(atlas: atlas)
                     case .module(let module): ModuleView(atlas: atlas, module: module)
                     case .folder(let module, let folder): FolderView(atlas: atlas, module: module, folder: folder)
-                    case .type(let id): if let node = atlas.byID[id] { TypeView(atlas: atlas, node: node) }
+                    case .type(let id):
+                        if let node = atlas.byID[id] {
+                            if trails.isEmpty {
+                                TypeView(atlas: atlas, node: node)
+                            } else {
+                                RelationView(atlas: atlas, node: node, trails: trails, more: more, root: workspace.anchorID)
+                            }
+                        }
                     }
                 }
             }
@@ -215,6 +219,59 @@ struct TypeView: View {
     var body: some View {
         let group = atlas.group(node.id)
         let (incoming, outgoing, nested) = atlas.neighbors(of: node)
+        TypeHeaderView(atlas: atlas, node: node)
+        FlowView(atlas: atlas, incoming: incoming, outgoing: outgoing, nested: nested)
+        WhyView(atlas: atlas, node: node, incoming: incoming, outgoing: outgoing)
+        MembersView(members: group.members.filter { Contract.rank($0.access) >= workspace.minimumRank })
+    }
+}
+
+/// A type previewed from the focus: its declaration and doc, then only how it ties back to the type
+/// the focus grows from, each trail of drawn dependencies with what its declarations say.
+struct RelationView: View {
+    /// The arranged interface the page reads the type and the reasons from.
+    var atlas: Atlas
+    /// The previewed type.
+    var node: Graph.Node
+    /// The trails from ``GlossMap/Reach/trails(to:limit:)``, each read top to bottom as the map draws it.
+    var trails: [[GraphLayout.Link]]
+    /// How many more trails the type has than are shown.
+    var more: Int
+    /// The id of the type the focus grows from, which the section names.
+    var root: String?
+
+    var body: some View {
+        let rootName = root.map { atlas.label(of: .type($0)) } ?? "the root"
+        TypeHeaderView(atlas: atlas, node: node)
+        VStack(alignment: .leading, spacing: 12) {
+            EyebrowView(text: "How it ties to \(rootName)")
+            ForEach(Array(trails.enumerated()), id: \.offset) { index, trail in
+                if index > 0 { Divider() }
+                VStack(alignment: .leading, spacing: 6) {
+                    ForEach(Array(trail.enumerated()), id: \.offset) { _, hop in
+                        HopView(atlas: atlas, hop: hop)
+                    }
+                }
+            }
+            if more > 0 {
+                Text("\(more) more way\(more == 1 ? "" : "s") back to \(rootName)")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+}
+
+/// A type's declaration and its doc: what it is, before what it is tied to.
+struct TypeHeaderView: View {
+    /// The arranged interface the header reads the type's declaration and doc from.
+    var atlas: Atlas
+    /// The type, nested or not. For file scope or an extension of a type no scanned source declares, the
+    /// header shows only its label and says which it is.
+    var node: Graph.Node
+
+    var body: some View {
+        let group = atlas.group(node.id)
         VStack(alignment: .leading, spacing: 10) {
             EyebrowView(text: "\(node.module) · \(Wording.kind(of: node))")
             if let head = group.head {
@@ -230,9 +287,6 @@ struct TypeView: View {
                     .foregroundStyle(.secondary)
             }
         }
-        FlowView(atlas: atlas, incoming: incoming, outgoing: outgoing, nested: nested)
-        WhyView(atlas: atlas, node: node, incoming: incoming, outgoing: outgoing)
-        MembersView(members: group.members.filter { Contract.rank($0.access) >= workspace.minimumRank })
     }
 }
 
@@ -335,42 +389,6 @@ struct WhyRowView: View {
             .font(.callout)
             .padding(.vertical, 4)
         }
-    }
-}
-
-/// Why a previewed type is in the focus: each trail of drawn dependencies that leads from it back to the
-/// root, read top to bottom as the map draws it, every step open on its reasons so the chain reads whole.
-struct WhyHereView: View {
-    /// The arranged interface the reasons and names come from.
-    var atlas: Atlas
-    /// The trails, each a run of drawn dependencies from ``GlossMap/Reach/trails(to:limit:)``.
-    var trails: [[GraphLayout.Link]]
-    /// How many more trails the type has than are shown.
-    var more: Int
-    /// The id of the type the focus grows from, which the leftover count names.
-    var root: String?
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            EyebrowView(text: "Why it's here")
-            ForEach(Array(trails.enumerated()), id: \.offset) { index, trail in
-                if index > 0 { Divider() }
-                VStack(alignment: .leading, spacing: 6) {
-                    ForEach(Array(trail.enumerated()), id: \.offset) { _, hop in
-                        HopView(atlas: atlas, hop: hop)
-                    }
-                }
-            }
-            if more > 0 {
-                Text("\(more) more way\(more == 1 ? "" : "s") back to \(root.map { atlas.label(of: .type($0)) } ?? "the root")")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-        }
-        .padding(12)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: 8).fill(Palette.panel))
-        .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Palette.line))
     }
 }
 

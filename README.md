@@ -83,9 +83,10 @@ and shrunk to fit the pane, never past its natural size; a pinch or the magnifie
 zooms, clicking the percentage fits it again, and a new level or focus fits again. Hovering a box on
 the map or a row in the list previews it in the details pane over the selection, and lights it on
 the map; moving into the pane keeps the preview to read, and moving away returns to the selection.
-In a focus, the preview opens with why the box is there: each trail of drawn dependencies from it
-back to the focused type, read top to bottom as the map draws them, in the words of the declarations
-each runs through, every step open so the chain reads whole. A box reached from several types gets
+In a focus, the preview is a page of its own about the box's tie to the focused type: its
+declaration and doc, then each trail of drawn dependencies from it back to the focused type, read
+top to bottom as the map draws them, in the words of the declarations each runs through, every step
+open so the chain reads whole, and the map lights the same trails; Keep shows the type's whole page. A box reached from several types gets
 a trail through each, up to three, and each trail climbs on by one way only. A type's page lists the same under Why for every
 type beside it, one row per neighbor that unfolds to its reasons. Hovering a chip in the pane lights
 its box. Declarations are colored as Xcode's default themes color

@@ -473,7 +473,7 @@ struct ReasonView: View {
             .buttonStyle(.link)
             .help("Open \(reason.file):\(reason.line) in Xcode")
         }
-        VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: 6) {
             // A long declaration takes the whole line and its marks go under it, rather than breaking
             // the name beside them.
             ViewThatFits(in: .horizontal) {
@@ -486,8 +486,10 @@ struct ReasonView: View {
                     marks
                 }
             }
+            // Each label sits over its text, so every line of doc starts at the same edge however long
+            // the label.
             ForEach(Array(reason.entries.enumerated()), id: \.offset) { _, entry in
-                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                VStack(alignment: .leading, spacing: 1) {
                     Text(entry.parameter ?? (entry.role == .returns ? "Returns" : "Throws"))
                         .font(entry.parameter == nil ? .caption.weight(.semibold) : .system(.caption, design: .monospaced))
                         .foregroundStyle(.secondary)
@@ -502,10 +504,8 @@ struct ReasonView: View {
                 // Forwarded docs are the used type's words, not this declaration's, so they read quieter
                 // and each names where it comes from.
                 ForEach(Array(reason.forwarded.enumerated()), id: \.offset) { _, forward in
-                    HStack(alignment: .firstTextBaseline, spacing: 6) {
-                        Text("via").font(.caption).foregroundStyle(.tertiary)
-                        Text(forward.name).font(.system(.callout, design: .monospaced)).foregroundStyle(Self.code ?? .primary)
-                            .fixedSize()
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(Self.via(forward.name))
                         DocTextView(text: forward.summary, codeColor: Self.code).font(.callout).foregroundStyle(.secondary)
                     }
                 }
@@ -517,6 +517,20 @@ struct ReasonView: View {
 
     /// The color of code spans in the doc text, the color code gives the scanned sources' own types.
     private static let code = CodeView.color(.projectType)
+
+    /// The label over a forwarded doc: `via`, then where the doc comes from in code.
+    ///
+    /// - Parameter name: A member of the used type as a caller writes it, or the type's name.
+    /// - Returns: `via select(unit:)`, styled.
+    private static func via(_ name: String) -> AttributedString {
+        var via = AttributedString("via ")
+        via.font = .caption
+        via.foregroundColor = .secondary
+        var source = AttributedString(name)
+        source.font = .system(.caption, design: .monospaced)
+        source.foregroundColor = code
+        return via + source
+    }
 
     /// The declaration as code: its keyword, its name in the color of a declared name, and a callable's
     /// argument labels quieter.

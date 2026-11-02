@@ -1,4 +1,5 @@
 import AppKit
+import GlossCore
 import GlossMap
 import SwiftUI
 
@@ -27,8 +28,36 @@ enum Palette {
     static let added = adaptive(light: 0x1A7F37, dark: 0x3FB950)
     /// The mark of what changed since the base: a badge on a box holding a change, an edge's stroke.
     static let changed = adaptive(light: 0x9A6700, dark: 0xD29922)
-    /// The mark of what is gone since the base, in the count of changes.
+    /// The mark of what is gone since the base: the count of changes, and a dropped dependency's stroke.
     static let removed = adaptive(light: 0xCF222E, dark: 0xF85149)
+    /// The quieter mark of what changed only inside since the base: its bodies, not what it declares.
+    static let implementation = adaptive(light: 0x6E7781, dark: 0x8B949E)
+
+    /// The color a change is marked in.
+    ///
+    /// - Parameter change: A change.
+    /// - Returns: Green for new, amber for changed, red for gone, gray for changed only inside.
+    static func color(of change: InterfaceDiff.Change) -> Color {
+        switch change {
+        case .added: added
+        case .changed: changed
+        case .removed: removed
+        case .implementation: implementation
+        }
+    }
+
+    /// The glyph a change is marked with: `+`, `~`, or `−`, a change made only inside sharing `~` in its
+    /// quieter color.
+    ///
+    /// - Parameter change: A change.
+    /// - Returns: The glyph.
+    static func glyph(of change: InterfaceDiff.Change) -> String {
+        switch change {
+        case .added: "+"
+        case .changed, .implementation: "~"
+        case .removed: "−"
+        }
+    }
 
     /// The soft tint a module's containers and boxes are filled with.
     ///

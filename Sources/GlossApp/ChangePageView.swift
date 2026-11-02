@@ -17,6 +17,7 @@ struct ChangePageBarView: View {
             Image(systemName: "plusminus")
             Text(workspace.showsFullPage ? "All of \(name)"
                  : change == .added ? "\(name) is new \(phrase)"
+                 : change == .implementation ? "What changed inside \(name) \(phrase)"
                  : change != nil ? "What changed in \(name) \(phrase)" : "How the changes \(phrase) reach \(name)")
                 .lineLimit(1)
                 .truncationMode(.middle)
@@ -119,7 +120,7 @@ struct DeclarationChangesView: View {
                                 .strikethrough(color: Palette.removed)
                                 .padding(.vertical, 6)
                         }
-                        if declaration.change == .changed {
+                        if declaration.change == .changed || declaration.change == .implementation {
                             Text("Its \(Self.what(declaration)) changed.")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
@@ -137,12 +138,13 @@ struct DeclarationChangesView: View {
         }
     }
 
-    /// What changed in a declaration, as a noun phrase: its signature, its doc, or both.
+    /// What changed in a declaration, as a noun phrase: its signature, its doc, its body, or several.
     ///
     /// - Parameter declaration: A changed declaration.
-    /// - Returns: `signature`, `doc`, or `signature and doc`.
+    /// - Returns: Such as `signature`, `body`, or `signature, doc, and body`.
     static func what(_ declaration: InterfaceDiff.DeclarationChange) -> String {
-        [declaration.signatureChanged ? "signature" : nil, declaration.docChanged ? "doc" : nil].compactMap { $0 }.joined(separator: " and ")
+        Wording.list([declaration.signatureChanged ? "signature" : nil, declaration.docChanged ? "doc" : nil,
+                      declaration.bodyChanged ? "body" : nil].compactMap { $0 })
     }
 
     /// The names the scanned sources declare, so declarations written in the base color their types as

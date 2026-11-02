@@ -45,6 +45,9 @@ public final class DeclarationReader: SyntaxVisitor {
         public var throwsClause: String?
         /// `true` when a function or initializer is declared `async`.
         public var isAsync: Bool
+        /// A fingerprint of the body, as ``DeclarationReader/fingerprint(of:)`` takes it, or `nil` for a
+        /// declaration without one.
+        public var bodyFingerprint: String?
     }
 
     private let file: String
@@ -119,7 +122,8 @@ public final class DeclarationReader: SyntaxVisitor {
         let line = converter.location(for: first.positionAfterSkippingLeadingTrivia).line
         let declaration = Declaration(kind: .other, name: "top-level code", file: file, line: line, column: 1)
         let details = Details(keyword: "code", mentions: mentions, container: [], access: "internal",
-                              header: "top-level code", parameterTypes: [], returnType: nil, valueType: nil, throwsClause: nil, isAsync: false)
+                              header: "top-level code", parameterTypes: [], returnType: nil, valueType: nil, throwsClause: nil, isAsync: false,
+                              bodyFingerprint: Self.fingerprint(of: statements.map(Syntax.init)))
         entries.append(Entry(declaration: declaration, doc: nil, details: details))
         return .visitChildren
     }
@@ -322,9 +326,49 @@ public final class DeclarationReader: SyntaxVisitor {
             returnType: returnType?.trimmedDescription,
             valueType: node.as(VariableDeclSyntax.self)?.bindings.first?.typeAnnotation?.type.trimmedDescription,
             throwsClause: effects?.throwsClause?.trimmedDescription,
-            isAsync: effects?.asyncSpecifier != nil
+            isAsync: effects?.asyncSpecifier != nil,
+            bodyFingerprint: Self.fingerprint(of: Self.bodies(of: node))
         )
         entries.append(Entry(declaration: declaration, doc: DocComment.leading(node, converter: converter), details: details))
+    }
+
+    /// The parts of a declaration that do its work rather than declare it: a function's, initializer's,
+    /// or deinitializer's body, a subscript's or property's accessors, and a property's initial value.
+    ///
+    /// - Parameter node: The declaration.
+    /// - Returns: The parts in source order; empty for a declaration without any.
+    static func bodies(of node: some DeclSyntaxProtocol) -> [Syntax] {
+        let syntax = Syntax(node)
+        var parts: [Syntax?] = [
+            syntax.as(FunctionDeclSyntax.self)?.body.map(Syntax.init),
+            syntax.as(InitializerDeclSyntax.self)?.body.map(Syntax.init),
+            syntax.as(DeinitializerDeclSyntax.self)?.body.map(Syntax.init),
+            syntax.as(SubscriptDeclSyntax.self)?.accessorBlock.map(Syntax.init)
+        ]
+        for binding in syntax.as(VariableDeclSyntax.self)?.bindings ?? [] {
+            parts.append(binding.initializer.map(Syntax.init))
+            parts.append(binding.accessorBlock.map(Syntax.init))
+        }
+        return parts.compactMap { $0 }
+    }
+
+    /// A fingerprint of what some code does: a hash of its tokens, without the comments and spacing
+    /// between them, so an edit that only reformats or comments the code keeps it.
+    ///
+    /// - Parameter parts: The code, such as ``bodies(of:)`` gives.
+    /// - Returns: 16 hexadecimal digits, or `nil` when there is no code.
+    static func fingerprint(of parts: [Syntax]) -> String? {
+        guard !parts.isEmpty else { return nil }
+        // FNV-1a: stable across runs and platforms, unlike `hashValue`.
+        var hash: UInt64 = 0xcbf2_9ce4_8422_2325
+        for part in parts {
+            for token in part.tokens(viewMode: .sourceAccurate) {
+                for byte in token.text.utf8 { hash = (hash ^ UInt64(byte)) &* 0x100_0000_01b3 }
+                hash = (hash ^ 0) &* 0x100_0000_01b3
+            }
+        }
+        let digits = String(hash, radix: 16)
+        return String(repeating: "0", count: 16 - digits.count) + digits
     }
 
     /// Reads a `// gloss:exempt <reason>` line from the trivia directly above a declaration.

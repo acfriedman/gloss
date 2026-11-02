@@ -192,6 +192,8 @@ struct ChangesLineView: View {
                 } else {
                     Text("+\(count(.added)) new").foregroundStyle(Palette.added)
                     Text("~\(count(.changed)) changed").foregroundStyle(Palette.changed)
+                    Text("~\(count(.implementation)) inside").foregroundStyle(Palette.implementation)
+                        .help("Changed only inside their bodies: declared and documented as before")
                     Text("−\(count(.removed)) gone").foregroundStyle(Palette.removed)
                     Text(workspace.comparisonPhrase).foregroundStyle(.secondary)
                     if !removed.isEmpty {
@@ -262,7 +264,7 @@ struct MapCanvasView: View {
                 for curve in layout.curves {
                     let isLit = isLighting && lights(curve.link)
                     // A new or changed dependency keeps its mark's color, quieter while another box is lit.
-                    let mark = edgeMarks[curve.link.from + "\t" + curve.link.to].map { $0 == .added ? Palette.added : Palette.changed }
+                    let mark = edgeMarks[curve.link.from + "\t" + curve.link.to].map(Palette.color(of:))
                     let color: Color = isLit ? Palette.accent : mark.map { $0.opacity(isLighting ? 0.35 : 0.95) }
                         ?? Palette.edge.opacity(isLighting ? 0.2 : 0.75)
                     let style = StrokeStyle(lineWidth: (isLit ? 1.8 : 1.2) * weight, dash: curve.link.dashed ? [4 * weight, 3 * weight] : [])
@@ -387,13 +389,14 @@ struct MapBoxView: View {
         // The mark is a badge on the corner, not a border, so a box with findings keeps its red edge.
         .overlay(alignment: .topTrailing) {
             if let mark, mark != .removed {
-                Text(mark == .added ? "+" : "~")
+                Text(Palette.glyph(of: mark))
                     .font(.system(size: 10 * scale, weight: .heavy, design: .monospaced))
                     .foregroundStyle(Palette.surface)
                     .frame(width: 15 * scale, height: 15 * scale)
-                    .background(Circle().fill(mark == .added ? Palette.added : Palette.changed))
+                    .background(Circle().fill(Palette.color(of: mark)))
                     .offset(x: 6 * scale, y: -6 * scale)
-                    .help(mark == .added ? "New since the base" : "Holds a change since the base")
+                    .help(mark == .added ? "New since the base" : mark == .implementation ? "Changed only inside its bodies since the base"
+                          : "Holds a change since the base")
             }
         }
         .opacity(isDimmed ? 0.4 : flags.contains(.private) ? 0.7 : 1)

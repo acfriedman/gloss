@@ -69,6 +69,9 @@ public struct Contract: Sendable, Equatable, Codable {
     public var notes: [String]
     /// The type names the declaration mentions, by role; ``Graph/build(_:)`` resolves each to its node.
     public var mentions: [Mention]
+    /// A fingerprint of the declaration's body, its accessors, or its initial value, which changes when
+    /// what it does changes and not when it is only reformatted or commented; `nil` without one.
+    public var bodyFingerprint: String?
     /// The path the declaration was read from, as reported.
     public var file: String
     /// The 1-based source line of the declaration, as its diagnostics report it.
@@ -130,6 +133,7 @@ public struct Contract: Sendable, Equatable, Codable {
             callouts: callouts.filter { !markup.contains($0.normalizedKeyword) }.map { Callout(keyword: $0.keyword, text: $0.text) },
             notes: Self.paragraphs(structure?.notes ?? []),
             mentions: facts.mentions,
+            bodyFingerprint: facts.bodyFingerprint,
             file: declaration.file,
             line: declaration.line
         )

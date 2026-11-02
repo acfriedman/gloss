@@ -162,10 +162,13 @@ struct OverviewView: View {
     }
 }
 
-/// What changed since the comparison's base, module by module: each type new, gone, or changed, a
-/// changed one with the declarations that changed and how; then the dependencies of types that were
-/// already there that entered or left the interface, the changes a reviewer most needs to see. A new
-/// type's dependencies are new with it, so they are not listed again.
+/// What changed since the comparison's base, module by module: each type new, gone, changed, or
+/// changed only inside, with the declarations that changed and how; then the dependencies of types
+/// that were already there that entered or left the interface, and those dropped from bodies.
+///
+/// The dependencies that enter or leave the interface are the changes a reviewer most needs to see. A
+/// new type's dependencies are new with it, so they are not listed again, and a type changed only
+/// inside its bodies takes a quieter mark.
 struct ChangesView: View {
     @Environment(Workspace.self) private var workspace
     /// The arranged interface the rows read names and modules from.
@@ -177,7 +180,8 @@ struct ChangesView: View {
             let count = { (change: InterfaceDiff.Change) in diff.nodes.filter { $0.change == change }.count }
             HeadingView(title: "Changes",
                         lede: diff.isEmpty ? "Nothing changed \(phrase)."
-                            : "\(phrase.prefix(1).uppercased() + phrase.dropFirst()): \(count(.added)) new, \(count(.changed)) changed, \(count(.removed)) gone.")
+                            : "\(phrase.prefix(1).uppercased() + phrase.dropFirst()): \(count(.added)) new, \(count(.changed)) changed, "
+                            + "\(count(.removed)) gone, \(count(.implementation)) changed only inside.")
             let modules = atlas.modules + Set(diff.nodes.map(\.node.module)).subtracting(atlas.modules).sorted()
             ForEach(modules, id: \.self) { module in
                 let changes = diff.nodes.filter { $0.node.module == module }
@@ -204,6 +208,17 @@ struct ChangesView: View {
                     }
                 }
             }
+            // A dependency that lived only in bodies leaves the interface as it was, so it is listed on
+            // its own: between types still there, since a gone type's dependencies go with it.
+            let dropped = diff.edges.filter { $0.change == .removed && $0.before == [.body] && atlas.byID[$0.from] != nil && atlas.byID[$0.to] != nil }
+            if !dropped.isEmpty {
+                VStack(alignment: .leading, spacing: 8) {
+                    EyebrowView(text: "Dependencies dropped from bodies")
+                    ForEach(Array(dropped.enumerated()), id: \.offset) { _, edge in
+                        DependencyChangeView(edge: edge, atlas: atlas)
+                    }
+                }
+            }
         } else {
             HeadingView(title: "Changes", lede: workspace.comparison == .off ? "Pick a base under Changes in the toolbar."
                         : workspace.comparisonProblem ?? "Reading what changed \(phrase)…")
@@ -211,15 +226,16 @@ struct ChangesView: View {
     }
 }
 
-/// A mark for how something differs from the base: `+`, `~`, or `−` in the change's color.
+/// A mark for how something differs from the base: `+`, `~`, or `−` in the change's color, and a light
+/// gray `~` for a change made only inside.
 struct ChangeBadgeView: View {
     /// The change the mark stands for.
     var change: InterfaceDiff.Change
 
     var body: some View {
-        Text(change == .added ? "+" : change == .changed ? "~" : "−")
-            .font(.system(.callout, design: .monospaced).weight(.heavy))
-            .foregroundStyle(change == .added ? Palette.added : change == .changed ? Palette.changed : Palette.removed)
+        Text(Palette.glyph(of: change))
+            .font(.system(.callout, design: .monospaced).weight(change == .implementation ? .regular : .heavy))
+            .foregroundStyle(Palette.color(of: change))
             .frame(width: 14)
     }
 }
@@ -244,20 +260,19 @@ struct NodeChangeView: View {
                 } else {
                     ChipView(unit: .type(change.node.id), atlas: atlas)
                 }
-                if change.change != .changed {
+                if change.change == .added || change.change == .removed {
                     Text("\(change.declarations.count) declaration\(change.declarations.count == 1 ? "" : "s")")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
             }
-            if change.change == .changed {
+            if change.change == .changed || change.change == .implementation {
                 ForEach(Array(change.declarations.enumerated()), id: \.offset) { _, declaration in
                     HStack(alignment: .firstTextBaseline, spacing: 6) {
                         ChangeBadgeView(change: declaration.change)
                         Text("\(declaration.keyword) \(declaration.name)").font(.system(.callout, design: .monospaced))
-                        if declaration.change == .changed {
-                            Text([declaration.signatureChanged ? "signature" : nil, declaration.docChanged ? "doc" : nil]
-                                .compactMap { $0 }.joined(separator: " and "))
+                        if declaration.change == .changed || declaration.change == .implementation {
+                            Text(DeclarationChangesView.what(declaration))
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                         }

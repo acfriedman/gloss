@@ -3,7 +3,8 @@ import GlossCore
 extension Atlas {
     /// How a box on the map differs from a base, folding what lies inside it into the box: a type new
     /// since the base, or a module or folder whose every type is new, is added; one holding anything
-    /// added, removed, or changed, nested types included, is changed.
+    /// added, removed, or changed, nested types included, is changed; and one where only bodies changed
+    /// is an implementation change.
     ///
     /// - Parameters:
     ///   - unit: What a box stands for.
@@ -15,7 +16,9 @@ extension Atlas {
         switch unit {
         case .type(let id):
             if diff.change(ofNode: id)?.change == .added { return .added }
-            return diff.nodes.contains { $0.node.id == id || $0.node.id.hasPrefix(id + ".") } ? .changed : nil
+            let inside = diff.nodes.filter { $0.node.id == id || $0.node.id.hasPrefix(id + ".") }
+            guard !inside.isEmpty else { return nil }
+            return inside.allSatisfy { $0.change == .implementation } ? .implementation : .changed
         case .module(let module):
             inside = diff.nodes.filter { $0.node.module == module }
             all = nodes.filter { $0.module == module }.count
@@ -25,7 +28,8 @@ extension Atlas {
             all = nodes.filter(held).count
         }
         guard !inside.isEmpty else { return nil }
-        return inside.count == all && inside.allSatisfy { $0.change == .added } ? .added : .changed
+        if inside.count == all && inside.allSatisfy({ $0.change == .added }) { return .added }
+        return inside.allSatisfy { $0.change == .implementation } ? .implementation : .changed
     }
 }
 
@@ -79,18 +83,20 @@ extension Atlas {
     ///     it does.
     /// - Returns: The figure, every type its own box, nested ones included.
     ///
-    /// A neighbor is reached when its dependency with a changed type is itself new or changed, either
-    /// way, or when it uses a changed type and either the type's own declaration changed or the
-    /// neighbor reaches a member of it whose signature changed or that is gone. A member added breaks
+    /// A neighbor is reached when its dependency with a changed type is itself new, changed, or dropped,
+    /// either way, or when it uses a changed type and either the type's own declaration changed or the
+    /// neighbor reaches a member of it whose signature changed or that is gone. A type changed only
+    /// inside its bodies reaches no one by being changed; its new and dropped dependencies still do. A member added breaks
     /// no one, and a change to docs alone reaches no one. Members are matched by name as the bodies
     /// reach them, on a type named outright or through a property or parameter of known type, so a
     /// member reached through a local variable goes unseen; the untouched are listed for that reason.
     ///
-    /// The changed types come first: when they alone are over the budget, the most connected of them
-    /// are drawn and nothing around them. Otherwise the reached neighbors fill what is left, those
-    /// touching the most changes first. Only dependencies with a change at one end or both are drawn,
-    /// since those are the ones a change can break; removed types are gone from the interface, so they
-    /// are not drawn.
+    /// The changed types come first, those whose interface changed before those changed only inside:
+    /// when they alone are over the budget, the most connected of them are drawn and nothing around
+    /// them. Otherwise the reached neighbors fill what is left, those touching the most changes first.
+    /// Only dependencies with a change at one end or both are drawn, since those are the ones a change
+    /// can break, and dropped ones are drawn too, between types that are both still there; removed types
+    /// are gone from the interface, so they are not drawn.
     public func changesFigure(_ diff: InterfaceDiff, minimumRank: Int, budget: Int = mapBudget,
                               includeUntouched: Bool = false) -> ChangesFigure {
         let phase = Timing.begin("changes figure"); defer { Timing.end(phase, "\(diff.nodes.count) types changed") }
@@ -106,13 +112,17 @@ extension Atlas {
         }
 
         var changed = diff.nodes.filter { $0.change != .removed }.map(\.node.id).filter(shown)
+        let inside = Set(diff.nodes.filter { $0.change == .implementation }.map(\.node.id))
+        // An interface change outranks any change made only inside, however connected.
+        let weight = { (id: String) in (degree[id] ?? 0) - (inside.contains(id) ? 1_000_000 : 0) }
         var overflow: [String] = []
         if changed.count > budget {
-            let kept = Set(ranked(changed) { degree[$0] ?? 0 }.prefix(budget))
-            overflow = ranked(changed.filter { !kept.contains($0) }) { degree[$0] ?? 0 }
+            let kept = Set(ranked(changed, by: weight).prefix(budget))
+            overflow = ranked(changed.filter { !kept.contains($0) }, by: weight)
             changed = changed.filter(kept.contains)
         }
         let changedSet = Set(changed)
+        let dropped = diff.edges.filter { $0.change == .removed && byID[$0.from] != nil && byID[$0.to] != nil }
 
         let breakable = Breakable(diff)
         var touches: [String: Int] = [:]
@@ -123,10 +133,18 @@ extension Atlas {
             guard fromChanged != toChanged else { continue }
             let neighbor = fromChanged ? edge.to : edge.from
             guard shown(neighbor) else { continue }
+            let changedEnd = fromChanged ? edge.from : edge.to
+            let reaches = !reasons(across: edge, changed: changedEnd, in: diff, breakable: breakable).isEmpty
+            // A type changed only inside has no interface for a neighbor to be untouched by.
+            if !reaches, inside.contains(changedEnd) { continue }
             touches[neighbor, default: 0] += 1
-            if !reasons(across: edge, changed: fromChanged ? edge.from : edge.to, in: diff, breakable: breakable).isEmpty {
-                reached.insert(neighbor)
-            }
+            if reaches { reached.insert(neighbor) }
+        }
+        for edge in dropped where changedSet.contains(edge.from) != changedSet.contains(edge.to) {
+            let neighbor = changedSet.contains(edge.from) ? edge.to : edge.from
+            guard shown(neighbor) else { continue }
+            touches[neighbor, default: 0] += 1
+            reached.insert(neighbor)
         }
         let byTouch = ranked(Array(touches.keys)) { touches[$0] ?? 0 }
         let untouched = byTouch.filter { !reached.contains($0) }
@@ -149,6 +167,9 @@ extension Atlas {
         }.map { edge in
             GraphLayout.Link(from: edge.from, to: edge.to, dashed: edge.roles == [.body],
                              title: "\(label(of: .type(edge.from))) \(Wording.words(edge.roles)) \(label(of: .type(edge.to)))")
+        } + dropped.filter { drawnSet.contains($0.from) && drawnSet.contains($0.to) }.map { edge in
+            GraphLayout.Link(from: edge.from, to: edge.to, dashed: true,
+                             title: "\(label(of: .type(edge.from))) no longer \(Wording.words(edge.before)) \(label(of: .type(edge.to)))")
         }
         return ChangesFigure(layout: GraphLayout.layered(items, links), changed: changed.count, around: around.count, overflow: overflow,
                              untouched: includeUntouched ? [] : untouched)
@@ -156,25 +177,33 @@ extension Atlas {
 }
 
 extension Atlas {
-    /// How the changes since a base reach a type that did not change itself: each new or changed
-    /// dependency it has with a changed type, and each use it makes of a changed type that can break
-    /// on the change, as ``changesFigure(_:minimumRank:budget:includeUntouched:)`` decides it.
+    /// How the changes since a base reach a type that did not change itself: each new, changed, or
+    /// dropped dependency it has with a changed type, and each use it makes of a changed type that can
+    /// break on the change, as ``changesFigure(_:minimumRank:budget:includeUntouched:)`` decides it.
     ///
     /// - Parameters:
     ///   - id: A node id.
     ///   - diff: How the interface differs from the base.
     /// - Returns: The reasons, in the order the dependencies are listed and, for each, the order the
-    ///   changed type declares what changed; empty for a type that changed itself or that no change reaches.
+    ///   changed type declares what changed, then the dropped dependencies; empty for a type that changed
+    ///   itself or that no change reaches.
     public func changeReasons(of id: String, in diff: InterfaceDiff) -> [ChangeReason] {
         let phase = Timing.begin("change reasons"); defer { Timing.end(phase, id) }
         let changed = Set(diff.nodes.filter { $0.change != .removed }.map(\.node.id))
         guard !changed.contains(id) else { return [] }
         let breakable = Breakable(diff)
-        return edges.flatMap { edge -> [ChangeReason] in
+        let now = edges.flatMap { edge -> [ChangeReason] in
             if edge.from == id, changed.contains(edge.to) { return reasons(across: edge, changed: edge.to, in: diff, breakable: breakable) }
             if edge.to == id, changed.contains(edge.from) { return reasons(across: edge, changed: edge.from, in: diff, breakable: breakable) }
             return []
         }
+        // Dependencies that are gone are not in the graph, so the diff lists them.
+        let dropped = diff.edges.filter { $0.change == .removed && byID[$0.from] != nil && byID[$0.to] != nil }.compactMap { edge -> ChangeReason? in
+            if edge.from == id, changed.contains(edge.to) { return ChangeReason(changed: edge.to, kind: .dependency(edge), via: []) }
+            if edge.to == id, changed.contains(edge.from) { return ChangeReason(changed: edge.from, kind: .dependency(edge), via: []) }
+            return nil
+        }
+        return now + dropped
     }
 
     /// What a user can break on in each changed type: the type's own declaration, and the members

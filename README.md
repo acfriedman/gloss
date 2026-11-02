@@ -203,21 +203,27 @@ on disk, are off. The base picked is kept for the folder. The base is read once 
 compared again on every reload. A new
 type's box gets a green `+` badge and a box holding a change, its nested types', or for a module or
 folder any of its types', an amber `~`; in a focus, new and changed dependencies are drawn green and
-amber. A line under the map counts what is new, changed, and gone across the interface and names the
-gone types, which the map cannot draw yet.
+amber. A type whose declarations are written and documented as before but whose bodies differ is an
+implementation change, marked with a quieter gray `~`: each declaration's body, accessors, and
+initial value are fingerprinted from their tokens (`Contract.bodyFingerprint`), so reformatting and
+comments are no change. A line under the map counts what is new, changed, changed only inside, and
+gone across the interface and names the gone types, which the map cannot draw yet.
 
 With a comparison on, the list opens with Changes, a level of its own (`Atlas.changesFigure`): the
 changed types and the neighbors a change reaches, those touching the most changes first, with only
 the dependencies that have a change at an end, since those are the ones a change can break. A
 neighbor is reached when its dependency with a changed type is itself new or changed, or when it uses
 a changed type and either the type's declaration changed or it reaches a member whose signature
-changed or that is gone; an added member breaks no one, and a change to docs alone reaches no one.
+changed or that is gone; an added member breaks no one, and a change to docs alone reaches no one. A
+dependency dropped since the base reaches the type it was on too, and is drawn as a red dashed line
+between the two; a type changed only inside its bodies reaches no one by that alone, and comes after
+the interface changes when they are over the budget.
 Members are matched by name as bodies reach them, so the untouched neighbors are counted and listed
 under the map rather than dropped, and the Untouched checkbox draws them too. When the
 changes alone are over 30 boxes, the most connected are drawn and the rest are listed. Its page lists
 the changes module by module, each changed type with its declarations that changed and whether the
-signature or the doc did, the gone types struck through, and the dependencies of types that were
-already there that entered or left the interface. A click selects a type and keeps the level; a
+signature, the doc, or the body did, the gone types struck through, the dependencies of types that
+were already there that entered or left the interface, and the dependencies dropped from bodies. A click selects a type and keeps the level; a
 double click focuses on it, and zooming out of that focus returns to Changes.
 
 On this level a type's page, hovered or selected, shows only what the change means for it. A changed

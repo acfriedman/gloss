@@ -12,8 +12,11 @@ public struct InterfaceDiff: Sendable, Equatable {
         case added
         /// It is gone: only the base has it.
         case removed
-        /// Both have it, and they differ.
+        /// Both have it, and they differ in what they declare: a signature, a doc, or what they hold.
         case changed
+        /// Both have it, declared and documented the same, and only what it does inside differs: a body,
+        /// an accessor, or an initial value. It changes no one's view of the interface.
+        case implementation
     }
 
     /// One declaration that differs from the base.
@@ -31,13 +34,16 @@ public struct InterfaceDiff: Sendable, Equatable {
         public var signatureChanged: Bool
         /// For a changed declaration, whether its doc says something different.
         public var docChanged: Bool
+        /// For a changed declaration, whether what it does differs: its body, accessors, or initial value.
+        public var bodyChanged: Bool
         /// The declaration as the base writes it, for a changed or a gone one; `nil` for a new one.
         public var was: String?
         /// The declaration as written now, for a new or a changed one; `nil` for a gone one.
         public var now: String?
     }
 
-    /// One node that differs from the base: new, gone, or holding declarations that differ.
+    /// One node that differs from the base: new, gone, holding declarations that differ, or holding
+    /// declarations whose bodies alone differ.
     public struct NodeChange: Sendable, Equatable {
         /// The node as the interface that has it gives it: the head's, or the base's for a removed one.
         public var node: Graph.Node
@@ -113,7 +119,8 @@ public struct InterfaceDiff: Sendable, Equatable {
             if !baseNodes.contains(node.id) {
                 nodes.append(NodeChange(node: node, change: .added, declarations: declarations))
             } else if !declarations.isEmpty {
-                nodes.append(NodeChange(node: node, change: .changed, declarations: declarations))
+                let inside = declarations.allSatisfy { $0.change == .implementation }
+                nodes.append(NodeChange(node: node, change: inside ? .implementation : .changed, declarations: declarations))
             }
         }
         for node in base.graph.nodes where !headNodes.contains(node.id) {
@@ -194,20 +201,24 @@ public struct InterfaceDiff: Sendable, Equatable {
         for (index, contract) in head.enumerated() {
             guard let match = partner[index] else {
                 changes.append(DeclarationChange(node: node, name: contract.callName, keyword: contract.keyword, change: .added,
-                                                 signatureChanged: false, docChanged: false, was: nil, now: contract.declaration))
+                                                 signatureChanged: false, docChanged: false, bodyChanged: false,
+                                                 was: nil, now: contract.declaration))
                 continue
             }
             let signature = base[match].declaration != contract.declaration
             let doc = Self.doc(of: base[match]) != Self.doc(of: contract)
-            guard signature || doc else { continue }
-            changes.append(DeclarationChange(node: node, name: contract.callName, keyword: contract.keyword, change: .changed,
-                                             signatureChanged: signature, docChanged: doc, was: base[match].declaration,
-                                             now: contract.declaration))
+            let body = base[match].bodyFingerprint != contract.bodyFingerprint
+            guard signature || doc || body else { continue }
+            changes.append(DeclarationChange(node: node, name: contract.callName, keyword: contract.keyword,
+                                             change: signature || doc ? .changed : .implementation,
+                                             signatureChanged: signature, docChanged: doc, bodyChanged: body,
+                                             was: base[match].declaration, now: contract.declaration))
         }
         let removed = unmatched.values.flatMap { $0 }.sorted()
         for index in removed {
             changes.append(DeclarationChange(node: node, name: base[index].callName, keyword: base[index].keyword, change: .removed,
-                                             signatureChanged: false, docChanged: false, was: base[index].declaration, now: nil))
+                                             signatureChanged: false, docChanged: false, bodyChanged: false,
+                                             was: base[index].declaration, now: nil))
         }
         return changes
     }

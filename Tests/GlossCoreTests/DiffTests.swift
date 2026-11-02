@@ -171,6 +171,71 @@ final class DiffTests: XCTestCase {
         XCTAssertEqual(tighter.overflow.first, "Shop/Discount")
     }
 
+    func testABodyChangedAloneIsAChangeInside() throws {
+        let before = Interface.build(sources: [("Sources/Shop/Pad.swift", """
+        /// Pads.
+        struct Pad {
+            /// Pads a value.
+            func pad(_ value: Int) -> Int { value + 1 }
+            /// Trims a value.
+            func trim(_ value: Int) -> Int { value - 1 }
+        }
+        """)])
+        let after = Interface.build(sources: [("Sources/Shop/Pad.swift", """
+        /// Pads.
+        struct Pad {
+            /// Pads a value.
+            func pad(_ value: Int) -> Int { value + 2 }
+            /// Trims a value.
+            func trim(_ value: Int) -> Int {
+                // Only spacing and a comment differ.
+                value   -   1
+            }
+        }
+        """)])
+        let pad = try XCTUnwrap(InterfaceDiff(base: before, head: after).change(ofNode: "Shop/Pad"))
+        XCTAssertEqual(pad.change, .implementation, "Declared and documented the same; only a body differs.")
+        XCTAssertEqual(pad.declarations.map(\.name), ["pad(_:)"], "Reformatting and comments are no change.")
+        XCTAssertEqual(pad.declarations.first?.bodyChanged, true)
+        XCTAssertEqual(Atlas(after).change(of: .type("Shop/Pad"), in: InterfaceDiff(base: before, head: after)), .implementation)
+    }
+
+    func testADroppedDependencyReachesTheTypeItWasOn() throws {
+        let before = Interface.build(sources: [("Sources/Shop/Cart.swift", """
+        /// A cart.
+        struct Cart {
+            /// Totals it.
+            func total() -> Int { Ledger.sum() }
+        }
+        /// A ledger.
+        struct Ledger {
+            /// Sums.
+            static func sum() -> Int { 0 }
+        }
+        """)])
+        let after = Interface.build(sources: [("Sources/Shop/Cart.swift", """
+        /// A cart.
+        struct Cart {
+            /// Totals it.
+            func total() -> Int { 0 }
+        }
+        /// A ledger.
+        struct Ledger {
+            /// Sums.
+            static func sum() -> Int { 0 }
+        }
+        """)])
+        let diff = InterfaceDiff(base: before, head: after)
+        XCTAssertEqual(diff.change(from: "Shop/Cart", to: "Shop/Ledger")?.change, .removed)
+        let atlas = Atlas(after)
+        let figure = atlas.changesFigure(diff, minimumRank: 0)
+        XCTAssertEqual(Set(figure.layout.boxes.map(\.item.label)), ["Cart", "Ledger"], "The type it no longer uses is reached.")
+        XCTAssertEqual(figure.layout.curves.map(\.link.title), ["Cart no longer uses Ledger"])
+        let reasons = atlas.changeReasons(of: "Shop/Ledger", in: diff)
+        guard case .dependency(let edge)? = reasons.first?.kind else { return XCTFail("Ledger is reached by the dropped dependency.") }
+        XCTAssertEqual(edge.change, .removed)
+    }
+
     func testAnInterfaceComparedWithItselfHasNoChanges() {
         let interface = Interface.build(sources: [("Sources/Shop/Cart.swift", base)])
         XCTAssertTrue(InterfaceDiff(base: interface, head: interface).isEmpty)

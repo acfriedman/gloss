@@ -99,6 +99,7 @@ struct DetailPageView: View {
                 if let atlas = workspace.atlas {
                     switch target {
                     case .overview: OverviewView(atlas: atlas)
+                    case .changes: ChangesView(atlas: atlas)
                     case .modules: ModulesView(atlas: atlas)
                     case .module(let module): ModuleView(atlas: atlas, module: module)
                     case .folder(let module, let folder): FolderView(atlas: atlas, module: module, folder: folder)
@@ -143,6 +144,139 @@ struct OverviewView: View {
                     ForEach(entries, id: \.id) { node in
                         CardView(atlas: atlas, node: node)
                     }
+                }
+            }
+        }
+    }
+}
+
+/// What changed since the comparison's base, module by module: each type new, gone, or changed, a
+/// changed one with the declarations that changed and how; then the dependencies of types that were
+/// already there that entered or left the interface, the changes a reviewer most needs to see. A new
+/// type's dependencies are new with it, so they are not listed again.
+struct ChangesView: View {
+    @Environment(Workspace.self) private var workspace
+    /// The arranged interface the rows read names and modules from.
+    var atlas: Atlas
+
+    var body: some View {
+        let phrase = workspace.comparisonPhrase
+        if let diff = workspace.diff {
+            let count = { (change: InterfaceDiff.Change) in diff.nodes.filter { $0.change == change }.count }
+            HeadingView(title: "Changes",
+                        lede: diff.isEmpty ? "Nothing changed \(phrase)."
+                            : "\(phrase.prefix(1).uppercased() + phrase.dropFirst()): \(count(.added)) new, \(count(.changed)) changed, \(count(.removed)) gone.")
+            let modules = atlas.modules + Set(diff.nodes.map(\.node.module)).subtracting(atlas.modules).sorted()
+            ForEach(modules, id: \.self) { module in
+                let changes = diff.nodes.filter { $0.node.module == module }
+                if !changes.isEmpty {
+                    VStack(alignment: .leading, spacing: 10) {
+                        HStack(spacing: 6) {
+                            ModuleDotView(module: module)
+                            EyebrowView(text: module)
+                        }
+                        ForEach(Array(changes.enumerated()), id: \.offset) { _, change in
+                            NodeChangeView(change: change, atlas: atlas)
+                        }
+                    }
+                }
+            }
+            let added = Set(diff.nodes.filter { $0.change == .added }.map(\.node.id))
+            let entering = diff.edges.filter { $0.entersInterface && !added.contains($0.from) }
+            let leaving = diff.edges.filter(\.leavesInterface)
+            if !entering.isEmpty || !leaving.isEmpty {
+                VStack(alignment: .leading, spacing: 8) {
+                    EyebrowView(text: "Interface dependencies of existing types")
+                    ForEach(Array((entering + leaving).enumerated()), id: \.offset) { _, edge in
+                        EdgeChangeView(edge: edge, atlas: atlas)
+                    }
+                }
+            }
+        } else {
+            HeadingView(title: "Changes", lede: workspace.comparison == .off ? "Pick a base under Changes in the toolbar."
+                        : workspace.comparisonProblem ?? "Reading what changed \(phrase)…")
+        }
+    }
+}
+
+/// A mark for how something differs from the base: `+`, `~`, or `−` in the change's color.
+struct ChangeBadgeView: View {
+    /// The change the mark stands for.
+    var change: InterfaceDiff.Change
+
+    var body: some View {
+        Text(change == .added ? "+" : change == .changed ? "~" : "−")
+            .font(.system(.callout, design: .monospaced).weight(.heavy))
+            .foregroundStyle(change == .added ? Palette.added : change == .changed ? Palette.changed : Palette.removed)
+            .frame(width: 14)
+    }
+}
+
+/// One type that differs from the base: a link to it while it exists, then for a changed one each
+/// declaration that changed and how.
+struct NodeChangeView: View {
+    /// The type's change.
+    var change: InterfaceDiff.NodeChange
+    /// The arranged interface the type's link reads its name from.
+    var atlas: Atlas
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 6) {
+                ChangeBadgeView(change: change.change)
+                if change.change == .removed {
+                    Text(change.node.name)
+                        .font(.system(.callout, design: .monospaced))
+                        .strikethrough()
+                        .foregroundStyle(.secondary)
+                } else {
+                    ChipView(unit: .type(change.node.id), atlas: atlas)
+                }
+                if change.change != .changed {
+                    Text("\(change.declarations.count) declaration\(change.declarations.count == 1 ? "" : "s")")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            if change.change == .changed {
+                ForEach(Array(change.declarations.enumerated()), id: \.offset) { _, declaration in
+                    HStack(alignment: .firstTextBaseline, spacing: 6) {
+                        ChangeBadgeView(change: declaration.change)
+                        Text("\(declaration.keyword) \(declaration.name)").font(.system(.callout, design: .monospaced))
+                        if declaration.change == .changed {
+                            Text([declaration.signatureChanged ? "signature" : nil, declaration.docChanged ? "doc" : nil]
+                                .compactMap { $0 }.joined(separator: " and "))
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    .padding(.leading, 20)
+                }
+            }
+        }
+    }
+}
+
+/// One dependency that entered or left the interface: who depends on whom, and how before and now.
+struct EdgeChangeView: View {
+    /// The dependency's change.
+    var edge: InterfaceDiff.EdgeChange
+    /// The arranged interface the links read their names from.
+    var atlas: Atlas
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 6) {
+            ChangeBadgeView(change: edge.entersInterface ? .added : .removed)
+            Wrap(spacing: 6) {
+                ChipView(unit: .type(edge.from), atlas: atlas)
+                Text(edge.entersInterface ? "now \(Wording.words(edge.after))" : "no longer \(Wording.words(edge.before))")
+                    .font(.callout)
+                ChipView(unit: .type(edge.to), atlas: atlas)
+                // What it was is news only when it was something: a body use, or a role it gave up.
+                if !edge.before.isEmpty, !edge.after.isEmpty {
+                    Text("(was: \(Wording.words(edge.before)))")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
             }
         }

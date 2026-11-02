@@ -95,6 +95,23 @@ final class DiffTests: XCTestCase {
         XCTAssertEqual(atlas.change(of: .folder("Shop", ""), in: diff), .changed)
     }
 
+    func testTheChangesFigureDrawsChangesAndWhatTouchesThem() {
+        let atlas = Atlas(Interface.build(sources: [("Sources/Shop/Cart.swift", head)]))
+        let diff = diff()
+        let whole = atlas.changesFigure(diff, minimumRank: 0)
+        XCTAssertEqual(Set(whole.layout.boxes.map(\.item.label)), ["Cart", "Discount", "Line", "Helper"],
+                       "The changed types and one step around them; the removed one is not drawn.")
+        XCTAssertEqual([whole.changed, whole.around], [2, 2])
+        XCTAssertTrue(whole.layout.curves.allSatisfy { ["Shop/Cart", "Shop/Discount"].contains($0.link.from) || ["Shop/Cart", "Shop/Discount"].contains($0.link.to) },
+                      "Only dependencies with a change at an end.")
+        let tight = atlas.changesFigure(diff, minimumRank: 0, budget: 2)
+        XCTAssertEqual(tight.layout.boxes.count, 2)
+        XCTAssertEqual(Set(tight.overflow), ["Shop/Line", "Shop/Helper"], "Neighbors give way to changes.")
+        let tighter = atlas.changesFigure(diff, minimumRank: 0, budget: 1)
+        XCTAssertEqual(tighter.layout.boxes.map(\.item.label), ["Cart"], "The most connected change stays.")
+        XCTAssertEqual(tighter.overflow.first, "Shop/Discount")
+    }
+
     func testAnInterfaceComparedWithItselfHasNoChanges() {
         let interface = Interface.build(sources: [("Sources/Shop/Cart.swift", base)])
         XCTAssertTrue(InterfaceDiff(base: interface, head: interface).isEmpty)

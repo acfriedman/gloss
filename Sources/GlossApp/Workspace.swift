@@ -23,6 +23,8 @@ final class Workspace {
         case folder(String, String)
         /// One type by node id, nested or not, whose root's box the map lights, or its own box in the focus.
         case type(String)
+        /// What changed since the comparison's base, drawn as the changes level.
+        case changes
     }
 
     /// What the map pane draws for the current level.
@@ -81,6 +83,8 @@ final class Workspace {
 
     /// The level id of the selected type's focus, beside the atlas's own levels.
     static let focus = "focus"
+    /// The level id of what changed since the comparison's base and the types one step around it.
+    static let changes = "changes"
 
     /// One tab over the details and the map: a place in the interface with its own way back and forth, so
     /// a reader can keep several open beside the one list.
@@ -359,6 +363,7 @@ final class Workspace {
         guard comparison != .off, let root, let head = interface else {
             diff = nil
             comparisonProblem = nil
+            if scopeID == Self.changes { redraw() }
             return
         }
         let comparison = self.comparison
@@ -387,6 +392,7 @@ final class Workspace {
                 diff = nil
                 comparisonProblem = (error as? Revision.Failure)?.message ?? error.localizedDescription
             }
+            if scopeID == Self.changes { redraw() }
         }
     }
 
@@ -401,10 +407,11 @@ final class Workspace {
         return marks
     }
 
-    /// The marks on the focus's edges: how each drawn dependency differs from the base, keyed by its
-    /// ends joined with a tab; empty outside a focus, whose edges stand for many dependencies at once.
+    /// The marks on the edges of a focus and of the changes level: how each drawn dependency differs from
+    /// the base, keyed by its ends joined with a tab; empty at the other levels, whose edges stand for
+    /// many dependencies at once.
     var edgeMarks: [String: InterfaceDiff.Change] {
-        guard let diff, scopeID == Self.focus else { return [:] }
+        guard let diff, scopeID == Self.focus || scopeID == Self.changes else { return [:] }
         var marks: [String: InterfaceDiff.Change] = [:]
         for curve in drawing.layout.curves {
             if let change = diff.change(from: curve.link.from, to: curve.link.to)?.change {
@@ -437,13 +444,13 @@ final class Workspace {
     private func restore() {
         let stillThere: Bool
         switch selection {
-        case .overview, .modules: stillThere = true
+        case .overview, .modules, .changes: stillThere = true
         case .module(let module): stillThere = atlas?.modules.contains(module) == true
         case .folder(let module, let folder): stillThere = scopes.contains { $0.kind == .folder(module, folder) }
         case .type(let id): stillThere = atlas?.byID[id] != nil
         }
         if !stillThere { selection = .overview }
-        if scopeID != Self.focus || !stillThere, !scopes.contains(where: { $0.id == scopeID }) {
+        if ![Self.focus, Self.changes].contains(scopeID) || !stillThere, !scopes.contains(where: { $0.id == scopeID }) {
             scopeID = scope(for: selection)
         }
         redraw()
@@ -704,6 +711,7 @@ final class Workspace {
     func title(of tab: Tab) -> String {
         switch tab.selection {
         case .overview: "Overview"
+        case .changes: "Changes"
         case .modules: "Modules"
         case .module(let module): module
         case .folder(_, let folder): Wording.folderLabel(folder)
@@ -717,7 +725,7 @@ final class Workspace {
     /// - Returns: The module's name.
     func module(of tab: Tab) -> String? {
         switch tab.selection {
-        case .overview, .modules: nil
+        case .overview, .modules, .changes: nil
         case .module(let module), .folder(let module, _): module
         case .type(let id): atlas?.byID[id]?.module
         }
@@ -803,6 +811,8 @@ final class Workspace {
         switch target {
         case .overview:
             return first
+        case .changes:
+            return Self.changes
         case .modules:
             return scopes.first { $0.kind == .modules }?.id ?? first
         case .module(let module):
@@ -811,6 +821,8 @@ final class Workspace {
             return scopes.first { $0.kind == .folder(module, folder) }?.id ?? scope(for: .module(module))
         case .type(let id):
             if scopeID == Self.focus { return Self.focus }
+            // The changes level keeps a type it draws, so the reader can walk the changes one by one.
+            if scopeID == Self.changes, drawing.layout.boxes.contains(where: { $0.item.id == id }) { return Self.changes }
             guard let root = atlas?.byID[id]?.root, let drawing = levels[root], !drawing.isEmpty else { return scopeID.isEmpty ? first : scopeID }
             return drawing.contains(scopeID) ? scopeID : drawing[0]
         }
@@ -821,6 +833,7 @@ final class Workspace {
     // ladder zooming in climbs.
     private func parent(of scope: String) -> String? {
         guard scope == Self.focus else { return scopes.first { $0.id == scope }?.parent }
+        if focusFrom == Self.changes, diff != nil { return Self.changes }
         guard case .type(let id) = selection, let root = atlas?.byID[id]?.root,
               let drawing = levels[root], !drawing.isEmpty else { return focusFrom }
         if let from = focusFrom, drawing.contains(from) { return from }
@@ -872,10 +885,11 @@ final class Workspace {
     var litID: String? {
         if let hovered { return hovered }
         switch shown {
-        case .overview, .modules: return nil
+        case .overview, .modules, .changes: return nil
         case .module(let module): return MapScope.Unit.module(module).id
         case .folder(let module, let folder): return MapScope.Unit.folder(module, folder).id
         case .type(let id):
+            if scopeID == Self.changes { return id }
             guard scopeID == Self.focus else { return atlas?.byID[id]?.root }
             // A focus is about the whole reach, so its root is marked, not lit; a previewed or pinned box
             // still lights.
@@ -934,6 +948,21 @@ final class Workspace {
                               depth: (reach.depth, reach.totalDepth), reach: reach)
             // A pinned type the reach no longer draws, after a change of depth or mode, unpins.
             if let inspected, reach.parents[inspected] == nil { tabs[current].inspected = nil }
+            return
+        }
+        if scopeID == Self.changes {
+            let first = scopes.first.map { [($0.id, $0.label)] } ?? []
+            let crumbs = first + [(Self.changes, "Changes " + comparisonPhrase)]
+            guard let diff else {
+                let caption = comparison == .off ? "Pick a base under Changes in the toolbar to see what changed."
+                    : comparisonProblem ?? "Reading what changed \(comparisonPhrase)…"
+                drawing = Drawing(crumbs: crumbs, caption: caption)
+                return
+            }
+            let figure = atlas.changesFigure(diff, minimumRank: minimumRank)
+            let caption = diff.isEmpty ? "Nothing changed \(comparisonPhrase)."
+                : "\(figure.changed) changed type\(figure.changed == 1 ? "" : "s") and \(figure.around) around them."
+            drawing = Drawing(layout: figure.layout, crumbs: crumbs, caption: caption, overflow: figure.overflow.map { .type($0) })
             return
         }
         guard let scope = scopes.first(where: { $0.id == scopeID }) ?? scopes.first else {

@@ -154,6 +154,15 @@ folder any of its types', an amber `~`; in a focus, new and changed dependencies
 amber. A line under the map counts what is new, changed, and gone across the interface and names the
 gone types, which the map cannot draw yet.
 
+With a comparison on, the list opens with Changes, a level of its own (`Atlas.changesFigure`): the
+changed types and the types one step around them, those touching the most changes first, with only
+the dependencies that have a change at an end, since those are the ones a change can break. When the
+changes alone are over 30 boxes, the most connected are drawn and the rest are listed. Its page lists
+the changes module by module, each changed type with its declarations that changed and whether the
+signature or the doc did, the gone types struck through, and the dependencies of types that were
+already there that entered or left the interface. A click selects a type and keeps the level; a
+double click focuses on it, and zooming out of that focus returns to Changes.
+
 The page is three panes on one screen: every type listed on the left, the text of one type in the
 middle, and the dependency map on the right, where it takes whatever width the other two leave.
 Nothing navigates away, so the map stays in view. A toolbar across the top holds what applies to

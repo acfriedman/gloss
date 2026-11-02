@@ -24,6 +24,22 @@ struct ListPaneView: View {
                 Label("Overview", systemImage: "square.grid.2x2")
                     .modifier(RowHover(target: .overview))
                     .tag(Workspace.Selection.overview)
+                if workspace.comparison != .off {
+                    Label {
+                        HStack {
+                            Text("Changes")
+                            Spacer()
+                            if let diff = workspace.diff, !diff.isEmpty {
+                                Text("\(diff.nodes.count)").font(.caption.monospacedDigit()).foregroundStyle(.secondary)
+                            }
+                        }
+                    } icon: {
+                        Image(systemName: "plusminus")
+                    }
+                    .modifier(RowHover(target: .changes))
+                    .tag(Workspace.Selection.changes)
+                    .help("What changed \(workspace.comparisonPhrase), and the types one step around it")
+                }
                 if let atlas = workspace.atlas {
                     ForEach(atlas.modules, id: \.self) { module in
                         Section(isExpanded: workspace.expansion(ofModule: module)) {

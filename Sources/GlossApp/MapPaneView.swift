@@ -98,7 +98,8 @@ struct MapPaneView: View {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 12) {
                         ChipBlockView(title: "Not connected", units: drawing.loose, atlas: atlas)
-                        ChipBlockView(title: "Least connected, not drawn", units: drawing.overflow, atlas: atlas)
+                        ChipBlockView(title: workspace.scopeID == Workspace.changes ? "Also changed or touching a change, not drawn"
+                                          : "Least connected, not drawn", units: drawing.overflow, atlas: atlas)
                     }
                     .padding(16)
                     .frame(maxWidth: .infinity, alignment: .leading)

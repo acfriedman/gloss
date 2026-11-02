@@ -3,7 +3,7 @@ import AppKit
 /// Writes the window to a PNG and quits, so the app can be reviewed from a script without screen access.
 ///
 /// Set `GLOSS_SNAPSHOT` to the output path. `GLOSS_SELECT` names what to select first: a node id such
-/// as `GlossCore/Linter`, or `module:Name`. `GLOSS_ZOOM` is how many times to zoom in after that, and
+/// as `GlossCore/Linter`, `module:Name`, or `changes`. `GLOSS_ZOOM` is how many times to zoom in after that, and
 /// `GLOSS_PREVIEW` names a node to preview as if the pointer rested on it. A snapshot run leaves the
 /// folder the next launch reopens alone.
 extension Workspace {
@@ -17,7 +17,7 @@ extension Workspace {
         let environment = ProcessInfo.processInfo.environment
         guard let output = environment["GLOSS_SNAPSHOT"] else { return }
         if let target = environment["GLOSS_SELECT"] {
-            select(target.hasPrefix("module:") ? .module(String(target.dropFirst("module:".count))) : .type(target))
+            select(target == "changes" ? .changes : target.hasPrefix("module:") ? .module(String(target.dropFirst("module:".count))) : .type(target))
         }
         for _ in 0..<(Int(environment["GLOSS_ZOOM"] ?? "") ?? 0) { zoom(to: zoomInTarget) }
         if let target = environment["GLOSS_PREVIEW"] { hoverBegan(.type(target)) }

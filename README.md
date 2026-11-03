@@ -63,12 +63,16 @@ newest first and chosen, so Return or a double click opens it; each row's menu s
 takes it off the list. File › Open Recent lists the same folders, and ⌘⇧1 brings the welcome window
 back. Turn off "Show this window when gloss opens" and a launch reopens the last folder instead.
 
+A folder opens on a blank page, as Xcode opens with no editor: no tabs, and Open Quickly (⌘⇧O) to
+find a type, or a row in the list. ⌘W closes the current tab, the last one returning to the blank
+page, and on the blank page closes the window, which quits.
+
 The same three panes as the page, in a native window: the list, one type's text, and the map, with
 the access level and zoom in the toolbar (zoom is also ⌘= and ⌘-). The toolbar's arrows, or ⌘← and
 ⌘→, go back and forward through the places visited: each selection, level, and focus, with the
 depth chosen there. The details and the map sit under a bar of tabs, as Xcode's editor does, beside
 the one list: each tab keeps its own place, focus mode, depth, and Back and Forward. ⌘T opens a tab
-where you are, ⌘W closes it (the last one closes the window), ⌘⇧[ and ⌘⇧] move between tabs, and
+where you are, ⌘W closes it (the last one leaves the blank page), ⌘⇧[ and ⌘⇧] move between tabs, and
 ⌘-click on a list row, box, or chip, Open in New Tab from its menu, or ⌥⏎ in Open Quickly opens
 it in a new tab. Tabs are named for what they show, marked with its module's color, and dragged
 to reorder; the line between the details and the map drags too, and keeps its place. ⌘1 hides the list, or shows it again. ⌘⇧O is Open Quickly, as in Xcode: type a few letters of a type's name, in order but not
@@ -116,7 +120,7 @@ line open in Xcode. The folder takes a flag because AppKit reads a bare path arg
 to open and then opens no window.
 
 For reviews from a script, `GLOSS_SNAPSHOT=out.png` writes the window to a PNG once the sources are
-read and quits; `GLOSS_SELECT` selects a node id (or `module:Name`) first, `GLOSS_ZOOM` zooms in
+read and quits, on the blank page unless something is selected; `GLOSS_SELECT` selects a node id (or `module:Name`) first, `GLOSS_ZOOM` zooms in
 that many times, and `GLOSS_PREVIEW` previews a node id as if hovered. `GLOSS_SELECT` takes several,
 joined by commas, such as `changes,GlossMap/Atlas`, and `GLOSS_COMPARE` compares with a base first,
 `develop`, or a base and head, `develop..feature`. Without `--root`, the snapshot is of the welcome

@@ -190,8 +190,12 @@ final class Workspace {
         }
     }
 
-    /// The open tabs, left to right; never empty.
+    /// The open tabs, left to right; never empty. On the blank page the one tab is hidden and fresh.
     private(set) var tabs = [Tab()]
+    /// Whether the editor shows the blank page, as Xcode does with no editor open: no tab, only a hint to
+    /// find a type with Open Quickly. A folder opens on it, closing the last tab returns to it, and
+    /// going anywhere leaves it.
+    private(set) var isBlank = true
     /// The tab the details and the map show.
     private(set) var currentTabID: Tab.ID
     private var current: Int { tabs.firstIndex { $0.id == currentTabID } ?? 0 }
@@ -335,6 +339,8 @@ final class Workspace {
     private(set) var opens = 0
     /// Whether the main window is up, so the welcome window can close at once on handing over.
     var isMainWindowShown = false
+    /// The main window, so Command-W can tell it from the welcome window.
+    @ObservationIgnored weak var mainWindow: NSWindow?
 
     /// The defaults key of the folders opened most recently.
     private static let recentFoldersKey = "recentFolders"
@@ -454,6 +460,7 @@ final class Workspace {
         name = url.lastPathComponent
         tabs = [Tab()]
         currentTabID = tabs[0].id
+        isBlank = true
         expanded = []
         openModules = []
         bases = [:]
@@ -842,11 +849,15 @@ final class Workspace {
     ///
     /// - Parameter change: The navigation, which may itself be made of others.
     private func navigate(_ change: () -> Void) {
+        // Going anywhere leaves the blank page, and the place under it was never shown, so it is no
+        // place to go back to.
+        let wasBlank = isBlank
+        isBlank = false
         let before = here
         navigating += 1
         change()
         navigating -= 1
-        guard navigating == 0, here != before else { return }
+        guard navigating == 0, here != before, !wasBlank else { return }
         back.append(before)
         forward.removeAll()
     }
@@ -869,6 +880,12 @@ final class Workspace {
 
     /// Opens a tab at the current place, beside the current one, and shows it.
     func newTab() {
+        // From the blank page, the hidden tab is the new one.
+        guard !isBlank else {
+            isBlank = false
+            restore()
+            return
+        }
         insert(Tab(at: tabs[current]))
     }
 
@@ -904,13 +921,36 @@ final class Workspace {
         restore()
     }
 
-    /// Closes a tab, showing its neighbor if it was the current one; the last tab stays.
+    /// Closes a tab, showing its neighbor if it was the current one; closing the last tab leaves the
+    /// blank page.
     ///
     /// - Parameter id: A tab's id.
     func closeTab(_ id: Tab.ID) {
-        guard tabs.count > 1, let index = tabs.firstIndex(where: { $0.id == id }) else { return }
+        guard !isBlank, let index = tabs.firstIndex(where: { $0.id == id }) else { return }
+        guard tabs.count > 1 else {
+            showing?.cancel()
+            hiding?.cancel()
+            preview = nil
+            hovered = nil
+            let fresh = Tab()
+            tabs = [fresh]
+            currentTabID = fresh.id
+            isBlank = true
+            restore()
+            return
+        }
         if id == currentTabID { activate(tabs[index + 1 < tabs.count ? index + 1 : index - 1].id) }
         tabs.remove(at: index)
+    }
+
+    /// Closes what Command-W closes in the main window: the current tab, the last one leaving the blank
+    /// page.
+    ///
+    /// - Returns: `false` on the blank page, which has no tab to close, so the window closes instead.
+    func closeCurrentTab() -> Bool {
+        guard !isBlank else { return false }
+        closeTab(currentTabID)
+        return true
     }
 
     /// Shows the tab beside the current one, wrapping around at the ends.
@@ -1078,6 +1118,7 @@ final class Workspace {
 
     /// The next narrower level toward the selection: a module, a folder, and last the selected type's focus.
     var zoomInTarget: String? {
+        guard !isBlank else { return nil }
         guard case .type(let id) = selection else {
             let own = scope(for: selection)
             return own != scopeID && isAncestor(scopeID, of: own) ? own : nil
@@ -1091,7 +1132,7 @@ final class Workspace {
 
     /// The level the current one zooms out to.
     var zoomOutTarget: String? {
-        parent(of: scopeID)
+        isBlank ? nil : parent(of: scopeID)
     }
 
     /// Moves the map to a level without changing the selection.

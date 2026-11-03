@@ -15,9 +15,13 @@ struct ContentView: View {
                     ListPaneView()
                         .navigationSplitViewColumnWidth(min: 180, ideal: 240, max: 420)
                 } detail: {
-                    VStack(spacing: 0) {
-                        TabBarView()
-                        EditorSplitView()
+                    if workspace.isBlank {
+                        BlankPageView()
+                    } else {
+                        VStack(spacing: 0) {
+                            TabBarView()
+                            EditorSplitView()
+                        }
                     }
                 }
             } else {
@@ -51,6 +55,7 @@ struct ContentView: View {
             dismissWindow(id: "welcome")
         }
         .onDisappear { workspace.isMainWindowShown = false }
+        .background(WindowReader { workspace.mainWindow = $0 })
         .navigationTitle(workspace.name)
         .navigationSubtitle(workspace.subtitle)
         .toolbar {
@@ -121,6 +126,84 @@ struct EditorSplitView: View {
                 }
             MapPaneView()
                 .frame(minWidth: 320, maxWidth: .infinity)
+        }
+    }
+}
+
+/// The editor with nothing open, as Xcode shows it: no tabs, and how to open a type.
+struct BlankPageView: View {
+    @Environment(Workspace.self) private var workspace
+
+    var body: some View {
+        VStack(spacing: 14) {
+            Text("No Editor")
+                .font(.system(size: 26, weight: .medium))
+                .foregroundStyle(.tertiary)
+            Button { workspace.isQuickOpenShown = true } label: {
+                HStack(spacing: 8) {
+                    Text("Open Quickly")
+                    HStack(spacing: 2) {
+                        ForEach(["⇧", "⌘", "O"], id: \.self) { key in
+                            Text(key)
+                                .font(.system(.callout, design: .rounded).weight(.medium))
+                                .frame(minWidth: 20, minHeight: 20)
+                                .background(RoundedRectangle(cornerRadius: 4).strokeBorder(Palette.line))
+                        }
+                    }
+                }
+                .foregroundStyle(.secondary)
+            }
+            .buttonStyle(.plain)
+            .help("Find a type by name")
+            Text("or pick a type in the list")
+                .font(.callout)
+                .foregroundStyle(.tertiary)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color(nsColor: .textBackgroundColor))
+    }
+}
+
+/// Hands over the window a view is in, once it is in one.
+struct WindowReader: NSViewRepresentable {
+    /// What to do with the window.
+    var found: (NSWindow) -> Void
+
+    /// Makes the view that reads its window.
+    ///
+    /// - Parameter context: The representable's context, unused.
+    /// - Returns: A view that calls back once it is in a window.
+    func makeNSView(context: Context) -> NSView {
+        Reader(found: found)
+    }
+
+    /// Does nothing; the view calls back on its own when its window changes.
+    ///
+    /// - Parameters:
+    ///   - nsView: The view.
+    ///   - context: The representable's context, unused.
+    func updateNSView(_ nsView: NSView, context: Context) {}
+
+    /// Calls back with the window it lands in.
+    final class Reader: NSView {
+        private let found: (NSWindow) -> Void
+
+        /// Makes a view that calls back with its window.
+        ///
+        /// - Parameter found: What to do with the window.
+        init(found: @escaping (NSWindow) -> Void) {
+            self.found = found
+            super.init(frame: .zero)
+        }
+
+        @available(*, unavailable)
+        required init?(coder: NSCoder) {
+            fatalError("init(coder:) is not used")
+        }
+
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            if let window { found(window) }
         }
     }
 }

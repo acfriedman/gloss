@@ -10,7 +10,8 @@ struct ListPaneView: View {
     var body: some View {
         @Bindable var workspace = workspace
         let selection = Binding<Workspace.Selection?>(
-            get: { workspace.selection },
+            // The blank page has nothing selected.
+            get: { workspace.isBlank ? nil : workspace.selection },
             set: { target in
                 guard let target else { return }
                 // Command-click opens the row in a new tab and leaves this one where it is.

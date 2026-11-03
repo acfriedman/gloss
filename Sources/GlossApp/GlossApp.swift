@@ -54,10 +54,13 @@ struct GlossApp: App {
                 Button("New Tab") { workspace.newTab() }
                     .keyboardShortcut("t")
                     .disabled(workspace.atlas == nil)
-                // With one tab left, Close Tab steps aside and Command-W closes the window, as in Xcode.
-                Button("Close Tab") { workspace.closeTab(workspace.currentTabID) }
-                    .keyboardShortcut("w")
-                    .disabled(workspace.tabs.count < 2)
+                // As in Xcode: Command-W closes the current tab, the last one leaving the blank page, and
+                // from the blank page closes the window, which quits; any other window just closes.
+                Button(workspace.isBlank ? "Close Window" : "Close Tab") {
+                    if NSApp.keyWindow === workspace.mainWindow, workspace.closeCurrentTab() { return }
+                    NSApp.keyWindow?.performClose(nil)
+                }
+                .keyboardShortcut("w")
                 Divider()
                 Button("Reload") { workspace.reload() }
                     .keyboardShortcut("r")

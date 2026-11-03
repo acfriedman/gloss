@@ -55,7 +55,7 @@ struct TabBarItemView: View {
             .font(.callout.weight(isCurrent ? .medium : .regular))
             .foregroundStyle(isCurrent ? .primary : .secondary)
             .padding(.horizontal, 26)
-            if isHovered, workspace.tabs.count > 1 {
+            if isHovered {
                 Button { workspace.closeTab(tab.id) } label: {
                     Image(systemName: "xmark")
                         .font(.system(size: 9, weight: .bold))
@@ -64,7 +64,7 @@ struct TabBarItemView: View {
                         .background(RoundedRectangle(cornerRadius: 3).fill(Color.primary.opacity(0.08)))
                 }
                 .buttonStyle(.plain)
-                .help("Close Tab (⌘W)")
+                .help(workspace.tabs.count > 1 ? "Close Tab (⌘W)" : "Close Tab, leaving the blank page (⌘W)")
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.leading, 6)
             }

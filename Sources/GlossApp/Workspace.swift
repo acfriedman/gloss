@@ -454,6 +454,8 @@ final class Workspace {
         name = url.lastPathComponent
         tabs = [Tab()]
         currentTabID = tabs[0].id
+        expanded = []
+        openModules = []
         bases = [:]
         diff = nil
         comparisonProblem = nil
@@ -1298,8 +1300,8 @@ final class Workspace {
     /// The folders and types open in the list. Both start closed, so a large module opens as its
     /// top folders.
     private var expanded: Set<String> = []
-    /// The modules closed in the list. Modules start open.
-    private var closedModules: Set<String> = []
+    /// The modules open in the list. Modules start closed, so the list opens as one row per module.
+    private var openModules: Set<String> = []
 
     /// Whether the search or the findings filter is narrowing the list, which then opens every row
     /// that holds a match.
@@ -1315,7 +1317,7 @@ final class Workspace {
         Binding(
             get: { self.isFiltering || self.expanded.contains(id) },
             set: { open in
-                if open { self.expanded.insert(id) } else { self.expanded.remove(id) }
+                if open { self.expanded.insert(id) } else { self.close(id) }
             }
         )
     }
@@ -1323,14 +1325,58 @@ final class Workspace {
     /// Whether a module's section is open.
     ///
     /// - Parameter module: The module name.
-    /// - Returns: A binding over the closed modules.
+    /// - Returns: A binding over the open modules; closing one closes every row in it too.
     func expansion(ofModule module: String) -> Binding<Bool> {
         Binding(
-            get: { !self.closedModules.contains(module) },
+            get: { self.openModules.contains(module) },
             set: { open in
-                if open { self.closedModules.remove(module) } else { self.closedModules.insert(module) }
+                if open {
+                    self.openModules.insert(module)
+                } else {
+                    self.openModules.remove(module)
+                    self.expanded = self.expanded.filter { !self.isRow($0, inModule: module) }
+                }
             }
         )
+    }
+
+    /// Closes a folder or type row and every row under it, so opening it again shows only what it
+    /// holds directly.
+    ///
+    /// - Parameter id: A row id from an outline.
+    private func close(_ id: String) {
+        expanded.remove(id)
+        expanded = expanded.filter { !isRow($0, under: id) }
+    }
+
+    /// Whether a row is in a module: one of its folders or types.
+    ///
+    /// - Parameters:
+    ///   - row: A row id from an outline.
+    ///   - module: The module name.
+    /// - Returns: `true` for the module's folders and types.
+    private func isRow(_ row: String, inModule module: String) -> Bool {
+        row.hasPrefix(Atlas.folderID(module, [])) || atlas?.byID[row]?.module == module
+    }
+
+    /// Whether a row lies under another, at any depth: a folder's subfolders and the types it holds,
+    /// and a type's nested types.
+    ///
+    /// - Parameters:
+    ///   - row: A row id from an outline.
+    ///   - parent: The id of the row above it.
+    /// - Returns: `true` when `row` is somewhere under `parent`.
+    private func isRow(_ row: String, under parent: String) -> Bool {
+        guard let atlas else { return false }
+        let folderPrefix = "folder:"
+        if parent.hasPrefix(folderPrefix) {
+            if row.hasPrefix(parent + "/") { return true }
+            guard let node = atlas.byID[row] else { return false }
+            let folder = String(parent.dropFirst(folderPrefix.count))
+            return (node.module + "/" + atlas.directories(of: node).joined(separator: "/") + "/").hasPrefix(folder + "/")
+        }
+        guard let outer = atlas.byID[parent], let inner = atlas.byID[row] else { return false }
+        return atlas.isNested(inner, in: outer)
     }
 
     /// Opens the rows that hold a type, so selecting it from the map or a chip shows it in the list.
@@ -1338,7 +1384,7 @@ final class Workspace {
     /// - Parameter id: A node id.
     private func reveal(_ id: String) {
         guard let atlas, let node = atlas.byID[id] else { return }
-        closedModules.remove(node.module)
+        openModules.insert(node.module)
         expanded.formUnion(atlas.outlineAncestors(of: node))
     }
 

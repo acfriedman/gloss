@@ -137,7 +137,9 @@ public enum Timing {
         let time = isEvent ? "" : String(format: " %.2f ms", sample.duration.milliseconds)
         let line = sample.name + time + (sample.detail.isEmpty ? "" : " " + sample.detail)
         #if canImport(os)
-        logger.debug("\(line, privacy: .public)")
+        // Moments are few and say what the reader did, so they are kept in the log; phases are many,
+        // so they are only streamed.
+        if isEvent { logger.notice("\(line, privacy: .public)") } else { logger.debug("\(line, privacy: .public)") }
         #endif
         if writesToStandardError { FileHandle.standardError.write(Data(("gloss timing: " + line + "\n").utf8)) }
     }

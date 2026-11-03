@@ -56,11 +56,8 @@ struct GlossApp: App {
                     .disabled(workspace.atlas == nil)
                 // As in Xcode: Command-W closes the current tab, the last one leaving the blank page, and
                 // from the blank page closes the window, which quits; any other window just closes.
-                Button(workspace.isBlank ? "Close Window" : "Close Tab") {
-                    if NSApp.keyWindow === workspace.mainWindow, workspace.closeCurrentTab() { return }
-                    NSApp.keyWindow?.performClose(nil)
-                }
-                .keyboardShortcut("w")
+                Button(workspace.isBlank ? "Close Window" : "Close Tab") { closeTabOrWindow() }
+                    .keyboardShortcut("w")
                 Divider()
                 Button("Reload") { workspace.reload() }
                     .keyboardShortcut("r")
@@ -94,6 +91,16 @@ struct GlossApp: App {
                     .disabled(workspace.tabs.count < 2)
             }
         }
+    }
+
+    /// Closes what Close Tab closes when the menu answers Command-W or a click: in the main window the
+    /// current tab, the last one leaving the blank page, and from the blank page the window; in any
+    /// other window, that window. The main window catches Command-W before the menu does, with
+    /// ``Workspace/watchCloseKey()``, so this mostly answers clicks and the other windows.
+    private func closeTabOrWindow() {
+        // Only a key press can be a repeat; asking a mouse event, as when the menu is clicked, raises.
+        let event = NSApp.currentEvent
+        workspace.close(in: NSApp.keyWindow, isRepeat: event?.type == .keyDown && event?.isARepeat == true)
     }
 
     /// Goes back or forward, unless a text field is being edited, where the arrow keeps moving the

@@ -341,6 +341,8 @@ final class Workspace {
     var isMainWindowShown = false
     /// The main window, so Command-W can tell it from the welcome window.
     @ObservationIgnored weak var mainWindow: NSWindow?
+    /// The key watch that answers Command-W in the main window, once ``watchCloseKey()`` starts it.
+    @ObservationIgnored private var closeKeyWatch: Any?
 
     /// The defaults key of the folders opened most recently.
     private static let recentFoldersKey = "recentFolders"
@@ -943,14 +945,63 @@ final class Workspace {
         tabs.remove(at: index)
     }
 
-    /// Closes what Command-W closes in the main window: the current tab, the last one leaving the blank
-    /// page.
+    /// Closes the current tab, the last one leaving the blank page.
     ///
-    /// - Returns: `false` on the blank page, which has no tab to close, so the window closes instead.
+    /// - Returns: `false` on the blank page, which has no tab to close.
     func closeCurrentTab() -> Bool {
         guard !isBlank else { return false }
         closeTab(currentTabID)
         return true
+    }
+
+    /// Answers Command-W, or Close Tab from the File menu, as Xcode does: in the main window, Open
+    /// Quickly if it is up, else the current tab, the last one leaving the blank page, and from the
+    /// blank page the window, which quits; any other window just closes.
+    ///
+    /// - Parameters:
+    ///   - window: The window the command is for, the key window.
+    ///   - isRepeat: Whether the command is a key repeat.
+    ///
+    /// Holding Command-W repeats it, and a repeat never closes the main window, so a press that lasts a
+    /// little long empties the tabs onto the blank page and stops there. Each answer is logged.
+    func close(in window: NSWindow?, isRepeat: Bool) {
+        let inMain = window != nil && (window === mainWindow || window?.identifier?.rawValue == "main")
+        let action: String
+        if !inMain {
+            action = "close other window"
+        } else if isQuickOpenShown {
+            isQuickOpenShown = false
+            action = "close Open Quickly"
+        } else {
+            action = closeCurrentTab() ? "close tab" : isRepeat ? "ignore repeat" : "close window"
+        }
+        Timing.event("close", "\(action); repeat: \(isRepeat), window: \(window?.identifier?.rawValue ?? "none"), tabs: \(tabs.count)")
+        if action == "close other window" || action == "close window" { window?.performClose(nil) }
+    }
+
+    /// Catches Command-W in the main window before the menu bar does, and answers it with
+    /// ``close(in:isRepeat:)``; other windows keep the menu's answer.
+    ///
+    /// The menu's own Close item, which closes the window, can take Command-W back whenever SwiftUI
+    /// rebuilds the menu, so the shortcut cannot rely on which menu item holds it. Watching once is
+    /// enough; watching again does nothing.
+    func watchCloseKey() {
+        guard closeKeyWatch == nil else { return }
+        closeKeyWatch = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            // Only plain values cross into the main actor; the event itself stays here.
+            let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+            let key = event.charactersIgnoringModifiers?.lowercased()
+            let isRepeat = event.isARepeat
+            let number = event.windowNumber
+            guard flags == .command, key == "w" else { return event }
+            let answered = MainActor.assumeIsolated { () -> Bool in
+                guard let self, let window = NSApp.window(withWindowNumber: number),
+                      window === self.mainWindow || window.identifier?.rawValue == "main" else { return false }
+                self.close(in: window, isRepeat: isRepeat)
+                return true
+            }
+            return answered ? nil : event
+        }
     }
 
     /// Shows the tab beside the current one, wrapping around at the ends.

@@ -52,6 +52,7 @@ struct ContentView: View {
         // The welcome window hands over to this one, so it closes once this one is up.
         .onAppear {
             workspace.isMainWindowShown = true
+            workspace.watchCloseKey()
             dismissWindow(id: "welcome")
         }
         .onDisappear { workspace.isMainWindowShown = false }

@@ -236,7 +236,9 @@ dependency dropped since the base reaches the type it was on too, and is drawn a
 between the two; a type changed only inside its bodies reaches no one by that alone, and comes after
 the interface changes when they are over the budget.
 Members are matched by name as bodies reach them, so the untouched neighbors are counted and listed
-under the map rather than dropped, and the Untouched checkbox draws them too. When the
+under the map rather than dropped, and the Untouched checkbox draws them too. The lists under the map,
+on any level, fold to one line that counts what they hold, and stay folded for as long as the app
+runs. When the
 changes alone are over 30 boxes, the most connected are drawn and the rest are listed. Its page lists
 the changes module by module, each changed type with its declarations that changed and whether the
 signature, the doc, or the body did, the gone types struck through, the dependencies of types that

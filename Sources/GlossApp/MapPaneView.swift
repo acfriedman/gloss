@@ -106,18 +106,22 @@ struct MapPaneView: View {
             }
             if let atlas = workspace.atlas, !drawing.loose.isEmpty || !drawing.overflow.isEmpty || !drawing.untouched.isEmpty {
                 Divider()
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 12) {
-                        ChipBlockView(title: "Not connected", units: drawing.loose, atlas: atlas)
-                        ChipBlockView(title: workspace.scopeID == Workspace.changes ? "Also changed or reached by a change, not drawn"
-                                          : "Least connected, not drawn", units: drawing.overflow, atlas: atlas)
-                        ChipBlockView(title: "Around the changes, untouched by them", units: drawing.untouched, atlas: atlas)
+                UnderMapFoldView(drawing: drawing)
+                if !workspace.foldsUnderMap {
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: 12) {
+                            ChipBlockView(title: "Not connected", units: drawing.loose, atlas: atlas)
+                            ChipBlockView(title: workspace.scopeID == Workspace.changes ? "Also changed or reached by a change, not drawn"
+                                              : "Least connected, not drawn", units: drawing.overflow, atlas: atlas)
+                            ChipBlockView(title: "Around the changes, untouched by them", units: drawing.untouched, atlas: atlas)
+                        }
+                        .padding(.horizontal, 16)
+                        .padding(.bottom, 16)
+                        .frame(maxWidth: .infinity, alignment: .leading)
                     }
-                    .padding(16)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .frame(maxHeight: 150)
+                    .fixedSize(horizontal: false, vertical: true)
                 }
-                .frame(maxHeight: 150)
-                .fixedSize(horizontal: false, vertical: true)
             }
         }
         .background(Palette.background)
@@ -483,5 +487,36 @@ struct ExpandPillView: View {
         }
         .buttonStyle(.plain)
         .onHover { isHovered = $0 }
+    }
+}
+
+/// The line over the lists under the map: what the map leaves undrawn, counted, and a chevron that folds
+/// the lists to this line or opens them again, as the reader last left it.
+struct UnderMapFoldView: View {
+    @Environment(Workspace.self) private var workspace
+    /// The drawing whose undrawn types the lists hold.
+    var drawing: Workspace.Drawing
+
+    var body: some View {
+        let changes = workspace.scopeID == Workspace.changes
+        let counts = [(drawing.loose.count, "not connected"),
+                      (drawing.overflow.count, changes ? "also changed or reached" : "least connected"),
+                      (drawing.untouched.count, "untouched around the changes")]
+            .filter { $0.0 > 0 }.map { "\($0.0) \($0.1)" }
+        Button { workspace.foldsUnderMap.toggle() } label: {
+            HStack(spacing: 6) {
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 9, weight: .bold))
+                    .rotationEffect(.degrees(workspace.foldsUnderMap ? 0 : 90))
+                Text("Not drawn").font(.callout.weight(.semibold))
+                Text(counts.joined(separator: " · ")).font(.callout).foregroundStyle(.secondary).lineLimit(1)
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 8)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .help(workspace.foldsUnderMap ? "Show what the map leaves undrawn" : "Fold these lists away, for as long as gloss runs")
     }
 }

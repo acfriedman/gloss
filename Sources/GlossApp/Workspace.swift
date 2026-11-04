@@ -329,6 +329,9 @@ final class Workspace {
     private(set) var storyFile: URL?
     /// The boxes the map lights together while a theme or a commit on the changes page is hovered.
     var litGroup: Set<String> = []
+    /// Whether the lists under the map, of what it leaves undrawn, are folded to one line. The choice
+    /// holds for as long as the app runs, across tabs, levels, and folders, and a new launch starts open.
+    var foldsUnderMap = false
 
     /// What comparing reads off the main thread: the base, the diff, and what explains it.
     private struct Compared: Sendable {

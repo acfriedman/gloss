@@ -169,6 +169,7 @@ final class DiffTests: XCTestCase {
         let tighter = atlas.changesFigure(diff, minimumRank: 0, budget: 1)
         XCTAssertEqual(tighter.layout.boxes.map(\.item.label), ["Cart"], "The most connected change stays.")
         XCTAssertEqual(tighter.overflow.first, "Shop/Discount")
+        XCTAssertEqual(tighter.overflow.count, Set(tighter.overflow).count, "A change left out is not listed again as a neighbor.")
     }
 
     func testABodyChangedAloneIsAChangeInside() throws {

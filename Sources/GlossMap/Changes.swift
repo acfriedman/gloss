@@ -112,6 +112,8 @@ extension Atlas {
         }
 
         var changed = diff.nodes.filter { $0.change != .removed }.map(\.node.id).filter(shown)
+        // A changed type left out to fit the budget is still a change, never one of the neighbors too.
+        let everyChanged = Set(changed)
         let inside = Set(diff.nodes.filter { $0.change == .implementation }.map(\.node.id))
         // An interface change outranks any change made only inside, however connected.
         let weight = { (id: String) in (degree[id] ?? 0) - (inside.contains(id) ? 1_000_000 : 0) }
@@ -132,7 +134,7 @@ extension Atlas {
             let toChanged = changedSet.contains(edge.to)
             guard fromChanged != toChanged else { continue }
             let neighbor = fromChanged ? edge.to : edge.from
-            guard shown(neighbor) else { continue }
+            guard shown(neighbor), !everyChanged.contains(neighbor) else { continue }
             let changedEnd = fromChanged ? edge.from : edge.to
             let reaches = !reasons(across: edge, changed: changedEnd, in: diff, breakable: breakable).isEmpty
             // A type changed only inside has no interface for a neighbor to be untouched by.
@@ -142,7 +144,7 @@ extension Atlas {
         }
         for edge in dropped where changedSet.contains(edge.from) != changedSet.contains(edge.to) {
             let neighbor = changedSet.contains(edge.from) ? edge.to : edge.from
-            guard shown(neighbor) else { continue }
+            guard shown(neighbor), !everyChanged.contains(neighbor) else { continue }
             touches[neighbor, default: 0] += 1
             reached.insert(neighbor)
         }

@@ -11,6 +11,10 @@ public struct SymbolIndex: Sendable {
     private var bare: Set<String> = []
     /// The scanned modules, which a link may start with.
     private var modules: Set<String> = []
+    /// The modules the sources import, whose symbols a link may name though no scanned file declares them.
+    private var imports: Set<String> = []
+    /// Every name a declaration's path is made of, so a link's first name can be told from a module's.
+    private var names: Set<String> = []
 
     /// Modules and types the scanned sources never declare, so a link or a dotted path under them names
     /// another module's symbol, not one of the project's. Extend it when a new framework's symbols start
@@ -29,8 +33,11 @@ public struct SymbolIndex: Sendable {
 
     /// Indexes every declaration read from the scanned files.
     ///
-    /// - Parameter readings: Each file's path and the declarations read from it.
-    public init(_ readings: [(file: String, entries: [DeclarationReader.Entry])]) {
+    /// - Parameters:
+    ///   - readings: Each file's path and the declarations read from it.
+    ///   - imports: The modules the files import, by their first names.
+    public init(_ readings: [(file: String, entries: [DeclarationReader.Entry])], imports: [String] = []) {
+        self.imports = Set(imports)
         for (file, entries) in readings {
             modules.insert(SourceFiles.module(of: file))
             for entry in entries where entry.declaration.kind != .other {
@@ -39,6 +46,8 @@ public struct SymbolIndex: Sendable {
                     (entry.details.container + [last]).joined(separator: "/").replacingOccurrences(of: "`", with: "")
                 }
                 paths.insert(path(entry.declaration.name))
+                names.formUnion(entry.details.container.map { $0.replacingOccurrences(of: "`", with: "") })
+                names.insert(entry.declaration.name.replacingOccurrences(of: "`", with: ""))
                 if entry.declaration.parameters == nil {
                     bare.insert(path(entry.declaration.name))
                 } else {
@@ -55,13 +64,29 @@ public struct SymbolIndex: Sendable {
     ///   - link: The text between double backticks, such as `Cart/add(_:)`.
     ///   - scope: The types enclosing the comment, outermost first, including the documented type itself.
     /// - Returns: `false` only for a link into the scanned sources that matches nothing there.
+    ///
+    /// Another module's symbol is one under a module the sources import or a well-known one, whose
+    /// declarations gloss cannot see. A first name that nothing scanned declares or imports is taken for
+    /// the project's own module named another way, such as an Xcode target whose files gloss names by
+    /// their folder, and the rest of the link must still name something.
     public func resolves(_ link: String, from scope: [String]) -> Bool {
         var components = link.split(separator: "/").map { Self.dropDisambiguation(String($0)) }
         if let first = components.first, modules.contains(first), !paths.contains(first) {
             components.removeFirst()
             if components.isEmpty { return true }
         }
-        guard let first = components.first, !Self.externalPrefixes.contains(first) else { return true }
+        guard let first = components.first, !Self.externalPrefixes.contains(first), !imports.contains(first) else { return true }
+        if declares(components, from: scope) { return true }
+        return components.count > 1 && !names.contains(first) && declares(Array(components.dropFirst()), from: scope)
+    }
+
+    /// Whether a path names a scanned declaration, from the innermost scope outward.
+    ///
+    /// - Parameters:
+    ///   - components: The link's names, disambiguation dropped, without a module.
+    ///   - scope: The types enclosing the comment, outermost first.
+    /// - Returns: `true` when some scope holds the path, or the type a synthesized member belongs to.
+    private func declares(_ components: [String], from scope: [String]) -> Bool {
         for depth in stride(from: scope.count, through: 0, by: -1) {
             let candidate = (scope.prefix(depth) + components).joined(separator: "/")
             if paths.contains(candidate) { return true }

@@ -61,6 +61,8 @@ public final class DeclarationReader: SyntaxVisitor {
     private var scopes: [Scope] = []
     /// Whether the file has top-level statements, which makes its top-level variables the entry point's.
     private var isScript = false
+    /// The first name of each module the file imports, in source order.
+    private var imports: [String] = []
 
     /// One enclosing type or extension: its name and the access its members take when they name none.
     private struct Scope {
@@ -82,10 +84,21 @@ public final class DeclarationReader: SyntaxVisitor {
     /// - Returns: Every declaration in source order, private ones included, and the file's top-level
     ///   statements as one `top-level code` entry first when it has any.
     public static func read(source: String, file: String) -> [Entry] {
+        readFile(source: source, file: file).entries
+    }
+
+    /// Reads the source text of one file: its declarations, and the modules it imports, from one parse.
+    ///
+    /// - Parameters:
+    ///   - source: The file's contents.
+    ///   - file: The path every entry reports.
+    /// - Returns: The declarations as ``read(source:file:)`` gives them, and the first name of each
+    ///   import, those inside `#if` included, in source order.
+    public static func readFile(source: String, file: String) -> (entries: [Entry], imports: [String]) {
         let tree = Parser.parse(source: source)
         let reader = DeclarationReader(file: file, converter: SourceLocationConverter(fileName: file, tree: tree))
         reader.walk(tree)
-        return reader.entries
+        return (reader.entries, reader.imports)
     }
 
     private init(file: String, converter: SourceLocationConverter) {
@@ -140,6 +153,10 @@ public final class DeclarationReader: SyntaxVisitor {
 
     // Local declarations inside bodies are not API; skip them wholesale.
     override public func visit(_ node: CodeBlockSyntax) -> SyntaxVisitorContinueKind { .skipChildren }
+    override public func visit(_ node: ImportDeclSyntax) -> SyntaxVisitorContinueKind {
+        if let module = node.path.first?.name.text { imports.append(module) }
+        return .skipChildren
+    }
     override public func visit(_ node: AccessorBlockSyntax) -> SyntaxVisitorContinueKind { .skipChildren }
 
     override public func visit(_ node: FunctionDeclSyntax) -> SyntaxVisitorContinueKind {

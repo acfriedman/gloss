@@ -17,7 +17,8 @@ public enum SourceFiles {
     ///   Each path is `path` joined with the file's path under it.
     /// - Throws: ``Missing`` when nothing exists at `path`.
     ///
-    /// `.build` and `.swiftpm` directories are always skipped.
+    /// Hidden folders, such as `.build` and `.swiftpm`, and the folders dependency managers check code out
+    /// into, ``dependencyFolders``, are always skipped.
     public static func swiftFiles(under path: String, includeTests: Bool) throws -> [String] {
         let phase = Timing.begin("list files"); defer { Timing.end(phase, path) }
         var isDirectory: ObjCBool = false
@@ -26,14 +27,22 @@ public enum SourceFiles {
         guard let enumerator = FileManager.default.enumerator(atPath: path) else { return [] }
         var files: [String] = []
         for case let relative as String in enumerator {
-            if isSkipped(relative, includeTests: includeTests) { enumerator.skipDescendants(); continue }
+            if isSkipped(relative, includeTests: includeTests) {
+                // Only a folder has descendants to skip; skipping after a file, such as `.DS_Store`, ends the walk.
+                if enumerator.fileAttributes?[.type] as? FileAttributeType == .typeDirectory { enumerator.skipDescendants() }
+                continue
+            }
             if relative.hasSuffix(".swift") { files.append((path as NSString).appendingPathComponent(relative)) }
         }
         return files.sorted()
     }
 
-    /// Whether a path under a scanned directory is left out, it or a directory it is in being a build
-    /// directory, or a test directory when tests are not wanted.
+    /// The folders package managers and Xcode check other projects' code out into, which is never the
+    /// project's own: Xcode's `SourcePackages` and `DerivedData`, CocoaPods' `Pods`, and `Carthage`.
+    public static let dependencyFolders: Set<String> = ["SourcePackages", "DerivedData", "Pods", "Carthage"]
+
+    /// Whether a path under a scanned directory is left out, it or a directory it is in being hidden, a
+    /// dependency folder, or a test directory when tests are not wanted.
     ///
     /// - Parameters:
     ///   - relative: The path under the scanned directory, components joined by `/`.
@@ -41,7 +50,7 @@ public enum SourceFiles {
     /// - Returns: `true` when the path is not scanned.
     public static func isSkipped(_ relative: String, includeTests: Bool) -> Bool {
         let components = relative.split(separator: "/")
-        if components.contains(".build") || components.contains(".swiftpm") { return true }
+        if components.contains(where: { $0.hasPrefix(".") || dependencyFolders.contains(String($0)) }) { return true }
         return !includeTests && components.contains { $0.hasSuffix("Tests") }
     }
 

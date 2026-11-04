@@ -1,6 +1,7 @@
 import SwiftSyntax
 
-/// One line of a `///` comment with its `///` prefix removed, tagged with its source line.
+/// One line of a doc comment with its `///` prefix, or a `/** */` comment's delimiters and leading
+/// stars, removed, tagged with its source line.
 ///
 /// Keeping the line number per entry lets a rule point at the exact offending line, not the block.
 public struct DocLine: Sendable, Equatable {
@@ -24,9 +25,10 @@ public struct DocLine: Sendable, Equatable {
 ///
 /// Extraction is separate from analysis so the parser can be tested on plain strings.
 public struct DocComment: Sendable, Equatable {
-    /// The comment's `///` lines in source order; empty for a block comment.
+    /// The comment's lines in source order, a `/** */` comment's as Xcode reads them.
     public var lines: [DocLine]
-    /// `true` when the source used `/** */`, which the rules refuse before reading the lines.
+    /// `true` when the source used `/** */`, which Swift accepts and gloss's own house style flags as
+    /// `block-doc`; its lines are read all the same.
     public var isBlockComment: Bool
 
     /// The source lines of fenced code: each fence of three backticks or more, and everything
@@ -51,8 +53,8 @@ public struct DocComment: Sendable, Equatable {
     /// Creates a comment from lines already stripped of their `///` prefixes.
     ///
     /// - Parameters:
-    ///   - lines: The comment text in source order; empty for a block comment.
-    ///   - isBlockComment: `true` when the source used `/** */`, which the rules refuse before reading `lines`.
+    ///   - lines: The comment text in source order.
+    ///   - isBlockComment: `true` when the source used `/** */`.
     public init(lines: [DocLine], isBlockComment: Bool = false) {
         self.lines = lines
         self.isBlockComment = isBlockComment
@@ -93,10 +95,11 @@ public struct DocComment: Sendable, Equatable {
             let line = converter.location(for: position).line
             switch piece {
             case .docLineComment(let text):
+                if sawBlock { run.removeAll() }
                 sawBlock = false
                 run.append(DocLine(text: strip(text) ?? "", line: line))
-            case .docBlockComment:
-                run.removeAll()
+            case .docBlockComment(let text):
+                run = block(text, startLine: line)
                 sawBlock = true
             case .newlines(let count), .carriageReturnLineFeeds(let count), .carriageReturns(let count):
                 if count > 1 {
@@ -111,8 +114,41 @@ public struct DocComment: Sendable, Equatable {
             }
             position += piece.sourceLength
         }
-        if sawBlock { return DocComment(lines: [], isBlockComment: true) }
+        if sawBlock { return DocComment(lines: run, isBlockComment: true) }
         return run.isEmpty ? nil : DocComment(lines: run)
+    }
+
+    /// Reads a `/** */` comment's lines as Xcode does: the delimiters dropped, then a leading `*` on every
+    /// line when each one has it, else the indentation the lines share.
+    ///
+    /// - Parameters:
+    ///   - text: The comment exactly as written, delimiters included.
+    ///   - startLine: The source line the comment opens on.
+    /// - Returns: The lines that hold text or lie between lines that do, in source order.
+    static func block(_ text: String, startLine: Int) -> [DocLine] {
+        var raw = text.split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
+        guard !raw.isEmpty else { return [] }
+        raw[0] = String(raw[0].drop { $0 == " " || $0 == "\t" }.dropFirst(3))
+        if let close = raw[raw.count - 1].range(of: "*/", options: .backwards) { raw[raw.count - 1].removeSubrange(close.lowerBound...) }
+        func indent(_ line: String) -> Int { line.prefix { $0 == " " || $0 == "\t" }.count }
+        let rest = raw.dropFirst().filter { !$0.isBlank }
+        let starred = !rest.isEmpty && rest.allSatisfy { $0.drop { $0 == " " || $0 == "\t" }.hasPrefix("*") }
+        let shared = rest.map(indent).min() ?? 0
+        var lines = raw.enumerated().map { offset, line -> DocLine in
+            var body = Substring(line)
+            if offset == 0 {
+                if body.first == " " { body = body.dropFirst() }
+            } else if starred {
+                body = body.drop { $0 == " " || $0 == "\t" }.dropFirst()
+                if body.first == " " { body = body.dropFirst() }
+            } else {
+                body = body.dropFirst(min(shared, indent(line)))
+            }
+            return DocLine(text: String(body.reversed().drop { $0 == " " || $0 == "\t" }.reversed()), line: startLine + offset)
+        }
+        while lines.first?.text.isBlank == true { lines.removeFirst() }
+        while lines.last?.text.isBlank == true { lines.removeLast() }
+        return lines
     }
 
     /// Removes the `///` prefix and at most one following space, preserving deeper indentation. The

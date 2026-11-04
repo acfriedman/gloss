@@ -10,8 +10,9 @@ import Foundation
 /// `gloss bench [--include-tests] [--base <revision>] <path>...` times what the app does with the paths;
 /// `gloss story [--include-tests] [--base <revision>] <path>...` checks the branch's story covers its change.
 ///
-/// Paths may be files or directories; directories are walked for `.swift` files, skipping `.build`
-/// and, unless `--include-tests` is given, any directory whose name ends in `Tests`. The interface
+/// Paths may be files or directories; directories are walked for `.swift` files, skipping hidden folders,
+/// the folders dependency managers check code out into, and, unless `--include-tests` is given, any
+/// directory whose name ends in `Tests`. The interface
 /// command writes JSON to standard output when neither `--json` nor `--html` names a file. The lint, the
 /// export, and the bench follow the project's house style: the file `--style` names, else the nearest
 /// `.gloss/style.json` in the current directory or above it, else gloss's own.

@@ -37,12 +37,13 @@ public enum Rules {
             return [diagnostic(declaration, line: declaration.line, column: declaration.column, .missingDoc,
                                "`\(declaration.name)` has no doc comment. Write `///` lines: one sentence for what it does, one for why it exists, then `- Parameter`/`- Returns:`/`- Throws:` entries.")]
         }
+        // A block comment's form is one finding; what it says is read like any other doc's.
+        var findings: [Diagnostic] = []
         if doc.isBlockComment {
-            return [diagnostic(declaration, line: declaration.line, column: declaration.column, .blockDoc,
-                               "Use `///` line comments, not `/** */`.")]
+            findings.append(diagnostic(declaration, line: declaration.line, column: declaration.column, .blockDoc,
+                                       "Use `///` line comments, not `/** */`."))
         }
         let structure = DocStructure.parse(doc)
-        var findings: [Diagnostic] = []
         findings += summaryRules(declaration, doc, structure)
         findings += symbolLinkRules(declaration, doc)
         findings += markupRules(declaration, structure)

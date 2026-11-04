@@ -30,8 +30,9 @@ swift run -c release GlossApp --root path/to/YourPackage      # read it
 ```
 
 Each finding is one line in compiler format, so Xcode and GitHub Actions show it as is, and the exit status
-is 1 when any is an error, so the same command gates CI. Build for release: a debug build is several times
-slower on a large codebase.
+is 1 when any is an error, so the same command gates CI. A folder is walked for `.swift` files, skipping
+hidden folders and those dependency managers fill: `SourcePackages`, `DerivedData`, `Pods`, and `Carthage`.
+Build for release: a debug build is several times slower on a large codebase.
 
 ## Commands
 
@@ -82,13 +83,13 @@ no note, or a link names nothing.
 | Code | Fires when |
 | --- | --- |
 | `missing-doc` | a non-private declaration has no `///` comment; the house style can ask only from `public` |
-| `block-doc` | the comment is `/** */` |
+| `block-doc` | the comment is `/** */`; what it says is still checked |
 | `summary-empty`, `summary-sentences`, `summary-terminator`, `summary-capital`, `summary-opener` | the summary is missing, isn't one or two sentences, has no period, starts lowercase, or opens with "This method…" |
 | `markup-order`, `markup-spacing`, `markup-case`, `markup-unknown` | a callout follows prose, touches the summary, is lowercase, or is a near miss like `- Return:` |
 | `parameter-missing`, `parameter-unknown`, `parameter-empty`, `parameter-form`, `parameter-order`, `parameter-duplicate` | a parameter entry is missing, extra, empty, mixes forms, is out of order, or repeats |
 | `returns-*`, `throws-*` | `- Returns:` or `- Throws:` is missing, unexpected, or empty |
 | `symbol-link` | a single-backticked `Type.member` should be a ``` ``Type/member`` ``` link |
-| `dead-link` | a ``` ``Symbol`` ``` link names nothing the sources declare |
+| `dead-link` | a ``` ``Symbol`` ``` link names nothing the sources declare; a link into a module some file imports, as in ``` ``Alamofire/Session`` ```, is taken on trust |
 | `exempt-reason`, `exempt-documented` | a `// gloss:exempt` marker has no reason, or sits beside a doc |
 
 Types, properties, and enum cases get only the summary rules. Code fences in a comment are quoted, not

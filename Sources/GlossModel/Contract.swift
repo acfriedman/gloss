@@ -56,7 +56,7 @@ public struct Contract: Sendable, Equatable, Codable {
     public var isAsync: Bool
     /// `true` for an `override`, whose contract is the inherited one.
     public var isOverride: Bool
-    /// `true` when a doc comment is attached, including a `/** */` one whose text is never read.
+    /// `true` when a doc comment is attached, `///` or `/** */`.
     public var isDocumented: Bool
     /// The summary paragraph on one line, or `nil` when there is no comment or it opens with a blank line or
     /// a callout.

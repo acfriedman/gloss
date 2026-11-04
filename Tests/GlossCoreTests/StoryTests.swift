@@ -141,4 +141,68 @@ final class StoryTests: XCTestCase {
                       "A draft covers the change it was made from, a note to fill in for each type.")
         XCTAssertEqual(read.themes[0].notes.map(\.link), ["Cart", "Cart/Receipt", "Discount", "Coupon"])
     }
+
+    private let rounding = """
+    /// Rounds a price to whole cents.
+    ///
+    /// - Parameter x: The price.
+    /// - Returns: The price in whole cents.
+    func round(_ x: Double) -> Int { 0 }
+    """
+
+    /// The same cart and free function, read from a module named `module`.
+    private func moved(to module: String) -> Interface {
+        Interface.build(sources: [("Sources/\(module)/Cart.swift", "/// A cart.\nstruct Cart {}"), ("Sources/\(module)/Round.swift", rounding)])
+    }
+
+    func testABareNameCoversBothSidesOfATypeThatMovedModules() {
+        let before = moved(to: "Old")
+        let after = moved(to: "New")
+        let diff = InterfaceDiff(base: before, head: after)
+        let coverage = StoryCoverage(story: ChangeStory.parse("""
+        # Move the cart to New
+
+        ## Move
+
+        ``Cart`` and ``round(_:)`` move from Old to New, declared the same.
+
+        ### ``Cart``
+
+        Moved.
+
+        ### ``round(_:)``
+
+        Moved; a free function stands for its module's file scope.
+        """), diff: diff, head: after, base: before)
+        XCTAssertEqual(coverage.types[0], ["New/Cart", "Old/Cart", "New/", "Old/"],
+                       "One link names the type in every module, the new side first; a free function names its file scope.")
+        XCTAssertEqual(coverage.members[0], [StoryCoverage.MemberLink(node: "New/", name: "round(_:)"),
+                                             StoryCoverage.MemberLink(node: "Old/", name: "round(_:)")])
+        XCTAssertTrue(coverage.isComplete, "unexplained \(coverage.unexplained), without notes \(coverage.withoutNotes)")
+    }
+
+    func testAModuleFirstNarrowsALinkToThatModulesType() {
+        let sources = { (doc: String) in Interface.build(sources: [("Sources/Shop/Cart.swift", "/// \(doc)\nstruct Cart {}"),
+                                                                   ("Sources/Ledger/Cart.swift", "/// \(doc)\nstruct Cart {}")]) }
+        let before = sources("A cart.")
+        let after = sources("A cart of lines.")
+        let diff = InterfaceDiff(base: before, head: after)
+        let narrow = StoryCoverage(story: ChangeStory.parse("# Docs\n\n## Shop\n\n``Shop/Cart`` and ``Ledger/Basket``."),
+                                   diff: diff, head: after, base: before)
+        XCTAssertEqual(narrow.types[0], ["Shop/Cart"])
+        XCTAssertEqual(narrow.unexplained, ["Ledger/Cart"], "Shop's link leaves Ledger's cart out.")
+        XCTAssertEqual(narrow.deadLinks.map(\.link), ["Ledger/Basket"], "A module's link names only that module's types.")
+        let bare = StoryCoverage(story: ChangeStory.parse("# Docs\n\n## Both\n\n``Cart``."), diff: diff, head: after, base: before)
+        XCTAssertEqual(bare.types[0], ["Shop/Cart", "Ledger/Cart"])
+    }
+
+    func testADraftLinksAMovedTypeOnceAndAFreeFunctionByName() {
+        let before = moved(to: "Old")
+        let after = moved(to: "New")
+        let diff = InterfaceDiff(base: before, head: after)
+        let read = ChangeStory.parse(ChangeStory.draft(for: diff, commits: nil))
+        XCTAssertEqual(read.themes.map(\.title), ["New", "Old"])
+        XCTAssertEqual(read.themes.flatMap(\.notes).map(\.link), ["Cart", "round(_:)"], "One note per name, under the first theme.")
+        XCTAssertTrue(StoryCoverage(story: read, diff: diff, head: after, base: before).isComplete)
+    }
 }

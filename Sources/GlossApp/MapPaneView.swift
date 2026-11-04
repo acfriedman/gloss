@@ -83,6 +83,10 @@ struct MapPaneView: View {
                                   marks: workspace.boxMarks, edgeMarks: workspace.edgeMarks, group: workspace.litGroup)
                         .padding(Self.inset)
                         .frame(minWidth: proxy.size.width, minHeight: proxy.size.height)
+                        // A click on the ground between boxes clears the selection back to the level's page;
+                        // a box's own click comes first.
+                        .contentShape(Rectangle())
+                        .onTapGesture { workspace.clickedBackground() }
                 }
                 .defaultScrollAnchor(.center)
                 .gesture(

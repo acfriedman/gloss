@@ -1157,6 +1157,17 @@ final class Workspace {
         }
     }
 
+    /// Answers a click on the map's empty ground, as a canvas answers one: in a focus, unpins the pinned
+    /// type; elsewhere, leaves the selected type for the level's own page, which is the story at the
+    /// changes level, a module's or folder's page at its level, and the overview at the widest.
+    func clickedBackground() {
+        guard !isBlank else { return }
+        if scopeID == Self.focus { return closeInspection() }
+        guard case .type = selection else { return }
+        if scopeID == Self.changes { return select(.changes) }
+        step(to: scopeID)
+    }
+
     /// Returns to a level named in the map's breadcrumbs.
     ///
     /// - Parameter scope: A level id from ``Drawing/crumbs``.

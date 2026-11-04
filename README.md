@@ -109,7 +109,10 @@ open so the chain reads whole, and the map lights the same trails. Clicking a bo
 that page, under a bar that closes it, or Esc, back to the focused type's page, with the map keeping
 the trail lit; the pin is a place Back returns from, and Keep on a preview pins it too. Double-clicking
 a box focuses on it; outside a focus, a click selects a type and a double click focuses on it. A
-single click acts at once, never waiting to see whether a second follows. A box reached from several types gets
+single click acts at once, never waiting to see whether a second follows. A click on the map's empty
+ground clears the selection back to the level's own page, as a canvas does: the story at the Changes
+level, a module's or folder's page at its level, and the overview at the widest; in a focus it unpins
+the pinned type. A box reached from several types gets
 a trail through each, up to three, and each trail climbs on by one way only. A type's page lists the same under Why for every
 type beside it, one row per neighbor that unfolds to its reasons. Hovering a chip in the pane lights
 its box. Declarations are colored as Xcode's default themes color

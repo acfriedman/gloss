@@ -288,6 +288,8 @@ final class Workspace {
     private(set) var diff: InterfaceDiff?
     /// Why the base could not be read, such as a folder outside git, or `nil` when it could.
     private(set) var comparisonProblem: String?
+    /// The commits that made each change in ``diff``, or `nil` with no diff or when git cannot say.
+    private(set) var changeCommits: ChangeCommits?
     /// The branch a pull request from here would go into, `main` or else `master`, or `nil` outside git.
     private(set) var defaultBranch: String?
     /// The revision read in place of the files on disk, so the whole window shows it, or `nil` for the
@@ -564,7 +566,7 @@ final class Workspace {
         let headRevision = self.head
         let known = bases
         Task {
-            let result = await Task.detached(priority: .utility) { () -> Result<(commit: String, base: Interface, diff: InterfaceDiff), Error> in
+            let result = await Task.detached(priority: .utility) { () -> Result<(commit: String, base: Interface, diff: InterfaceDiff, commits: ChangeCommits?), Error> in
                 Result {
                     let scanned = Loaded.scanned(root).path
                     let commit = switch comparison {
@@ -574,7 +576,8 @@ final class Workspace {
                     }
                     let base = try known[commit]
                         ?? Interface.build(sources: Revision.sources(at: commit, under: scanned, relativeTo: root.path, includeTests: false))
-                    return (commit, base, InterfaceDiff(base: base, head: head))
+                    let diff = InterfaceDiff(base: base, head: head)
+                    return (commit, base, diff, try? ChangeCommits.read(diff, base: commit, head: headRevision, root: root.path))
                 }
             }.value
             guard root == self.root, comparison == self.comparison, head == self.interface else { return }
@@ -582,9 +585,11 @@ final class Workspace {
             case .success(let compared):
                 bases[compared.commit] = compared.base
                 diff = compared.diff
+                changeCommits = compared.commits
                 comparisonProblem = nil
             case .failure(let error):
                 diff = nil
+                changeCommits = nil
                 comparisonProblem = (error as? Revision.Failure)?.message ?? error.localizedDescription
             }
             // Every level's boxes carry marks, so every level draws again.

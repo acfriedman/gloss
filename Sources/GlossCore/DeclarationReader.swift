@@ -48,6 +48,9 @@ public final class DeclarationReader: SyntaxVisitor {
         /// A fingerprint of the body, as ``DeclarationReader/fingerprint(of:)`` takes it, or `nil` for a
         /// declaration without one.
         public var bodyFingerprint: String?
+        /// The lines the declaration takes, its doc comment's first through its last; a type's stop at
+        /// the brace that opens its members, which are declarations of their own.
+        public var lines: ClosedRange<Int>
     }
 
     private let file: String
@@ -123,7 +126,8 @@ public final class DeclarationReader: SyntaxVisitor {
         let declaration = Declaration(kind: .other, name: "top-level code", file: file, line: line, column: 1)
         let details = Details(keyword: "code", mentions: mentions, container: [], access: "internal",
                               header: "top-level code", parameterTypes: [], returnType: nil, valueType: nil, throwsClause: nil, isAsync: false,
-                              bodyFingerprint: Self.fingerprint(of: statements.map(Syntax.init)))
+                              bodyFingerprint: Self.fingerprint(of: statements.map(Syntax.init)),
+                              lines: line...max(line, converter.location(for: (statements.last ?? first).endPositionBeforeTrailingTrivia).line))
         entries.append(Entry(declaration: declaration, doc: nil, details: details))
         return .visitChildren
     }
@@ -287,6 +291,7 @@ public final class DeclarationReader: SyntaxVisitor {
         isMemberwise: Bool = false
     ) {
         let location = converter.location(for: anchor.positionAfterSkippingLeadingTrivia)
+        let doc = DocComment.leading(node, converter: converter)
         let names = modifiers.map(\.name.text)
         var declaration = Declaration(
             kind: kind,
@@ -327,9 +332,26 @@ public final class DeclarationReader: SyntaxVisitor {
             valueType: node.as(VariableDeclSyntax.self)?.bindings.first?.typeAnnotation?.type.trimmedDescription,
             throwsClause: effects?.throwsClause?.trimmedDescription,
             isAsync: effects?.asyncSpecifier != nil,
-            bodyFingerprint: Self.fingerprint(of: Self.bodies(of: node))
+            bodyFingerprint: Self.fingerprint(of: Self.bodies(of: node)),
+            lines: Self.lines(of: node, doc: doc, at: location.line, converter: converter)
         )
-        entries.append(Entry(declaration: declaration, doc: DocComment.leading(node, converter: converter), details: details))
+        entries.append(Entry(declaration: declaration, doc: doc, details: details))
+    }
+
+    /// The lines a declaration takes: from its doc comment, or its own first line without one, to its
+    /// last line, or for a type to the brace that opens its members.
+    ///
+    /// - Parameters:
+    ///   - node: The declaration.
+    ///   - doc: Its doc comment, if it has one.
+    ///   - line: The line the declaration itself starts on.
+    ///   - converter: The file's line converter.
+    /// - Returns: The lines, first through last.
+    static func lines(of node: some DeclSyntaxProtocol, doc: DocComment?, at line: Int, converter: SourceLocationConverter) -> ClosedRange<Int> {
+        let first = doc?.startLine ?? line
+        let end = Syntax(node).asProtocol(DeclGroupSyntax.self).map { $0.memberBlock.leftBrace.positionAfterSkippingLeadingTrivia }
+            ?? node.endPositionBeforeTrailingTrivia
+        return first...max(first, line, converter.location(for: end).line)
     }
 
     /// The parts of a declaration that do its work rather than declare it: a function's, initializer's,

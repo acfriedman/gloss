@@ -242,6 +242,16 @@ uses, or a member it uses whose signature changed or that is gone, naming its de
 it, with the signature before and now. An untouched neighbor's page says that no change reaches it.
 The bar over a selected type's page trades it for the whole page and back.
 
+Each changed type's page says why in its authors' words (`ChangeCommits`, in `GlossCore`): the
+messages of the commits that made its changes, oldest first, each subject over its body's first
+paragraph, unfolding to the rest. Every changed declaration lists its own commits by short hash and
+subject, and its doc's summary before and now when the doc changed. A declaration is matched to
+commits by its lines alone, its doc comment included: `git blame` over the range names the commit in
+it that last wrote each line, and for a declaration that is gone, `git blame --reverse` names the last
+commit that had it, after which the next one deleted it. Lines not committed yet say so instead. A
+commit's message speaks for everything it changed, so one large commit explains each declaration it
+touched in the same words.
+
 The page is three panes on one screen: every type listed on the left, the text of one type in the
 middle, and the dependency map on the right, where it takes whatever width the other two leave.
 Nothing navigates away, so the map stays in view. A toolbar across the top holds what applies to

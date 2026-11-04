@@ -51,6 +51,7 @@ struct ChangePageView: View {
     var body: some View {
         TypeHeaderView(atlas: atlas, node: node)
         if let change = diff.change(ofNode: node.id) {
+            WhyChangedView(change: change)
             DeclarationChangesView(atlas: atlas, change: change)
             let nested = diff.nodes.filter { $0.node.id.hasPrefix(node.id + ".") }
             if !nested.isEmpty {
@@ -125,11 +126,15 @@ struct DeclarationChangesView: View {
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                             if declaration.signatureChanged, let was = declaration.was { WasNowView(was: was, now: nil, atlas: atlas) }
+                            if declaration.docChanged, declaration.wasSummary != declaration.nowSummary {
+                                DocWasNowView(was: declaration.wasSummary, now: declaration.nowSummary)
+                            }
                         } else if declaration.change == .removed {
                             Text("Gone.")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                         }
+                        CommitTagsView(declaration: declaration)
                     }
                     .padding(.bottom, declaration.change == .added ? 0 : 6)
                 }
@@ -252,6 +257,7 @@ struct ReachedView: View {
                                 Text("whose declaration changed").font(.callout)
                             }
                             if let was = declaration.was { WasNowView(was: was, now: declaration.now, atlas: atlas) }
+                            CommitTagsView(declaration: declaration)
                         }
                     }
                 case .member(let member):
@@ -266,6 +272,7 @@ struct ReachedView: View {
                                 Text(member.change == .removed ? "which is gone" : "whose signature changed").font(.callout)
                             }
                             if let was = member.was { WasNowView(was: was, now: member.now, atlas: atlas) }
+                            CommitTagsView(declaration: member)
                         }
                     }
                 }
@@ -279,5 +286,114 @@ struct ReachedView: View {
     /// - Returns: The declarations' own names, as a list.
     static func callers(_ via: [String]) -> String {
         Wording.list(via.map { String($0.split(separator: ".").last ?? Substring($0)) })
+    }
+}
+
+/// Why a type changed, in its authors' words: the message of each commit that made one of its changes,
+/// oldest first, and a note when some of them are not committed yet.
+struct WhyChangedView: View {
+    @Environment(Workspace.self) private var workspace
+    /// The type's change.
+    var change: InterfaceDiff.NodeChange
+
+    var body: some View {
+        if let commits = workspace.changeCommits {
+            let made = commits.commits(for: change)
+            let uncommitted = commits.isUncommitted(change)
+            if !made.isEmpty || uncommitted {
+                VStack(alignment: .leading, spacing: 10) {
+                    EyebrowView(text: made.isEmpty ? "Why" : "Why · \(made.count) commit\(made.count == 1 ? "" : "s")")
+                    ForEach(made, id: \.hash) { commit in CommitMessageView(commit: commit) }
+                    if uncommitted {
+                        Label("Some of it is not committed yet, so it has no message.", systemImage: "pencil")
+                            .font(.callout)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// One commit's message: its subject, and its body's first paragraph, unfolding to the rest.
+struct CommitMessageView: View {
+    /// The commit.
+    var commit: ChangeCommits.Commit
+    @State private var showsAll = false
+
+    var body: some View {
+        let paragraphs = commit.body.components(separatedBy: "\n\n").map { $0.replacingOccurrences(of: "\n", with: " ") }
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Text(commit.subject).font(.body.weight(.semibold))
+                Text(commit.shortHash)
+                    .font(.system(.caption, design: .monospaced))
+                    .foregroundStyle(.tertiary)
+                    .help(commit.hash)
+            }
+            ForEach(Array(paragraphs.prefix(showsAll ? paragraphs.count : 1).enumerated()), id: \.offset) { _, paragraph in
+                if !paragraph.isEmpty {
+                    Text(paragraph).font(.callout).foregroundStyle(.secondary)
+                }
+            }
+            if paragraphs.count > 1 {
+                Button(showsAll ? "Less" : "More") { showsAll.toggle() }
+                    .buttonStyle(.link)
+                    .font(.caption)
+            }
+        }
+        .padding(10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: 6).fill(Color.primary.opacity(0.04)))
+    }
+}
+
+/// A declaration's doc summary as the base wrote it and as it reads now.
+struct DocWasNowView: View {
+    /// The summary in the base, or `nil` when it had none.
+    var was: String?
+    /// The summary now, or `nil` when it has none.
+    var now: String?
+
+    var body: some View {
+        Grid(alignment: .leadingFirstTextBaseline, horizontalSpacing: 8, verticalSpacing: 2) {
+            GridRow {
+                Text("doc was").font(.caption).foregroundStyle(Palette.removed)
+                Text(was ?? "No summary.").font(.caption).foregroundStyle(.secondary)
+            }
+            GridRow {
+                Text("now").font(.caption).foregroundStyle(Palette.added)
+                Text(now ?? "No summary.").font(.caption)
+            }
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 6)
+        .background(RoundedRectangle(cornerRadius: 6).fill(Color.primary.opacity(0.04)))
+    }
+}
+
+/// The commits that made one declaration change, each by its short hash and subject, or that it is not
+/// committed yet.
+struct CommitTagsView: View {
+    @Environment(Workspace.self) private var workspace
+    /// The declaration change.
+    var declaration: InterfaceDiff.DeclarationChange
+
+    var body: some View {
+        if let commits = workspace.changeCommits {
+            let made = commits.commits(for: declaration)
+            VStack(alignment: .leading, spacing: 2) {
+                ForEach(made, id: \.hash) { commit in
+                    HStack(alignment: .firstTextBaseline, spacing: 6) {
+                        Text(commit.shortHash).font(.system(.caption, design: .monospaced)).foregroundStyle(.tertiary)
+                        Text(commit.subject).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                    }
+                    .help(commit.body.isEmpty ? commit.subject : commit.subject + "\n\n" + commit.body)
+                }
+                if commits.isUncommitted(declaration) {
+                    Text("Not committed yet").font(.caption).foregroundStyle(.tertiary)
+                }
+            }
+        }
     }
 }

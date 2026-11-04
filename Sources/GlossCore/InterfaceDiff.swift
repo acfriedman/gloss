@@ -40,6 +40,22 @@ public struct InterfaceDiff: Sendable, Equatable {
         public var was: String?
         /// The declaration as written now, for a new or a changed one; `nil` for a gone one.
         public var now: String?
+        /// The doc's summary in the base, for a changed or a gone one.
+        public var wasSummary: String?
+        /// The doc's summary now, for a new or a changed one.
+        public var nowSummary: String?
+        /// Where the declaration is now, its file and lines, for a new or a changed one.
+        public var place: Place?
+        /// Where the declaration was in the base, for a changed or a gone one.
+        public var wasPlace: Place?
+    }
+
+    /// Where a declaration is written: its file, as the interface names it, and its lines.
+    public struct Place: Sendable, Equatable, Hashable {
+        /// The file, as the interface names it.
+        public var file: String
+        /// The lines, its doc comment's first through its last.
+        public var lines: ClosedRange<Int>
     }
 
     /// One node that differs from the base: new, gone, holding declarations that differ, or holding
@@ -202,7 +218,8 @@ public struct InterfaceDiff: Sendable, Equatable {
             guard let match = partner[index] else {
                 changes.append(DeclarationChange(node: node, name: contract.callName, keyword: contract.keyword, change: .added,
                                                  signatureChanged: false, docChanged: false, bodyChanged: false,
-                                                 was: nil, now: contract.declaration))
+                                                 was: nil, now: contract.declaration, wasSummary: nil, nowSummary: contract.summary,
+                                                 place: Place(contract), wasPlace: nil))
                 continue
             }
             let signature = base[match].declaration != contract.declaration
@@ -212,13 +229,16 @@ public struct InterfaceDiff: Sendable, Equatable {
             changes.append(DeclarationChange(node: node, name: contract.callName, keyword: contract.keyword,
                                              change: signature || doc ? .changed : .implementation,
                                              signatureChanged: signature, docChanged: doc, bodyChanged: body,
-                                             was: base[match].declaration, now: contract.declaration))
+                                             was: base[match].declaration, now: contract.declaration,
+                                             wasSummary: base[match].summary, nowSummary: contract.summary,
+                                             place: Place(contract), wasPlace: Place(base[match])))
         }
         let removed = unmatched.values.flatMap { $0 }.sorted()
         for index in removed {
             changes.append(DeclarationChange(node: node, name: base[index].callName, keyword: base[index].keyword, change: .removed,
                                              signatureChanged: false, docChanged: false, bodyChanged: false,
-                                             was: base[index].declaration, now: nil))
+                                             was: base[index].declaration, now: nil, wasSummary: base[index].summary, nowSummary: nil,
+                                             place: nil, wasPlace: Place(base[index])))
         }
         return changes
     }
@@ -233,5 +253,14 @@ public struct InterfaceDiff: Sendable, Equatable {
             + contract.parameters.map { $0.name + ": " + ($0.doc ?? "") }
             + contract.callouts.map { $0.keyword + ": " + $0.text }
             + contract.notes
+    }
+}
+
+extension InterfaceDiff.Place {
+    /// Where a contract is written.
+    ///
+    /// - Parameter contract: A contract.
+    init(_ contract: Contract) {
+        self.init(file: contract.file, lines: contract.lines)
     }
 }

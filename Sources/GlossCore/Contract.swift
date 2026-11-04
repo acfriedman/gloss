@@ -72,6 +72,9 @@ public struct Contract: Sendable, Equatable, Codable {
     /// A fingerprint of the declaration's body, its accessors, or its initial value, which changes when
     /// what it does changes and not when it is only reformatted or commented; `nil` without one.
     public var bodyFingerprint: String?
+    /// The lines the declaration takes in its file, its doc comment's first through its last; a type's
+    /// stop at the brace that opens its members.
+    public var lines: ClosedRange<Int>
     /// The path the declaration was read from, as reported.
     public var file: String
     /// The 1-based source line of the declaration, as its diagnostics report it.
@@ -134,6 +137,7 @@ public struct Contract: Sendable, Equatable, Codable {
             notes: Self.paragraphs(structure?.notes ?? []),
             mentions: facts.mentions,
             bodyFingerprint: facts.bodyFingerprint,
+            lines: facts.lines,
             file: declaration.file,
             line: declaration.line
         )

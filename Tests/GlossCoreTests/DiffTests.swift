@@ -289,6 +289,83 @@ final class DiffTests: XCTestCase {
         XCTAssertEqual(try Revision.refs(in: root.path), [Revision.Ref(name: "develop", kind: .branch), Revision.Ref(name: "v1", kind: .tag)])
     }
 
+    func testEachChangeKnowsTheCommitsThatMadeIt() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("gloss-why-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: root) }
+        let folder = root.appendingPathComponent("Sources/Shop")
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        let file = folder.appendingPathComponent("Cart.swift")
+        func write(_ text: String) throws { try text.write(to: file, atomically: true, encoding: .utf8) }
+        func commit(_ message: String) throws {
+            try git(["add", "."], in: root)
+            try git(["-c", "user.name=gloss", "-c", "user.email=gloss@example.com", "commit", "-q", "-m", message], in: root)
+        }
+        try git(["init", "-q"], in: root)
+        try write("""
+        /// A cart.
+        struct Cart {
+            /// The sum.
+            func total() -> Int { 0 }
+            /// The coupon applied.
+            var coupon: Int?
+            /// Adds a line.
+            func add(_ line: Int) {}
+        }
+        """)
+        try commit("Start the cart")
+        let base = try XCTUnwrap(try Revision.commit("HEAD", in: root.path))
+        try write("""
+        /// A cart.
+        struct Cart {
+            /// The sum.
+            func total() -> Double { 0 }
+            /// Adds a line.
+            func add(_ line: Int) {}
+        }
+        """)
+        try commit("Return a Double from total")
+        try write("""
+        /// A cart.
+        struct Cart {
+            /// The sum.
+            func total() -> Double { 0 }
+            /// Adds a line.
+            func add(_ line: Int) {}
+            /// Tidies the cart.
+            func tidy() {}
+        }
+        """)
+        try commit("Add tidy\n\nSo a cart can drop empty lines.")
+        let now = """
+        /// A cart.
+        struct Cart {
+            /// The sum.
+            func total() -> Double { 0 }
+            /// Adds one line to the cart.
+            func add(_ line: Int) {}
+            /// Tidies the cart.
+            func tidy() {}
+        }
+        """
+        try write(now)
+
+        let before = Interface.build(sources: try Revision.sources(at: base, under: root.appendingPathComponent("Sources").path,
+                                                                 relativeTo: root.path, includeTests: false))
+        let diff = InterfaceDiff(base: before, head: Interface.build(sources: [("Sources/Shop/Cart.swift", now)]))
+        let commits = try ChangeCommits.read(diff, base: base, head: nil, root: root.path)
+        let cart = try XCTUnwrap(diff.change(ofNode: "Shop/Cart"))
+        func change(_ name: String) throws -> InterfaceDiff.DeclarationChange { try XCTUnwrap(cart.declarations.first { $0.name == name }) }
+        XCTAssertEqual(commits.commits.map(\.subject), ["Return a Double from total", "Add tidy"], "The range's commits, oldest first.")
+        XCTAssertEqual(try commits.commits(for: change("total()")).map(\.subject), ["Return a Double from total"])
+        XCTAssertEqual(try commits.commits(for: change("coupon")).map(\.subject), ["Return a Double from total"], "The commit that deleted it.")
+        XCTAssertEqual(try commits.commits(for: change("tidy()")).map(\.body), ["So a cart can drop empty lines."])
+        XCTAssertTrue(try commits.commits(for: change("add(_:)")).isEmpty)
+        XCTAssertTrue(try commits.isUncommitted(change("add(_:)")), "Its doc is edited and not committed.")
+        XCTAssertFalse(try commits.isUncommitted(change("total()")))
+        XCTAssertEqual(try change("add(_:)").wasSummary, "Adds a line.")
+        XCTAssertEqual(commits.commits(for: cart).count, 2)
+    }
+
     private func git(_ arguments: [String], in directory: URL) throws {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/env")

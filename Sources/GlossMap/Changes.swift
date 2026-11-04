@@ -3,9 +3,10 @@ import GlossModel
 
 extension Atlas {
     /// How a box on the map differs from a base, folding what lies inside it into the box: a type new
-    /// since the base, or a module or folder whose every type is new, is added; one holding anything
-    /// added, removed, or changed, nested types included, is changed; and one where only bodies changed
-    /// is an implementation change.
+    /// since the base, or a module or folder whose every type is new, is added; a type that moved, or a
+    /// module or folder whose every type moved in, is moved; one holding anything added, removed, or
+    /// changed, nested types included, is changed; and one where only bodies changed is an
+    /// implementation change.
     ///
     /// - Parameters:
     ///   - unit: What a box stands for.
@@ -16,7 +17,7 @@ extension Atlas {
         let all: Int
         switch unit {
         case .type(let id):
-            if diff.change(ofNode: id)?.change == .added { return .added }
+            if let own = diff.change(ofNode: id)?.change, own == .added || own == .moved { return own }
             let inside = diff.nodes.filter { $0.node.id == id || $0.node.id.hasPrefix(id + ".") }
             guard !inside.isEmpty else { return nil }
             return inside.allSatisfy { $0.change == .implementation } ? .implementation : .changed
@@ -30,6 +31,7 @@ extension Atlas {
         }
         guard !inside.isEmpty else { return nil }
         if inside.count == all && inside.allSatisfy({ $0.change == .added }) { return .added }
+        if inside.count == all && inside.allSatisfy({ $0.change == .moved }) { return .moved }
         return inside.allSatisfy { $0.change == .implementation } ? .implementation : .changed
     }
 }
@@ -222,7 +224,7 @@ extension Atlas {
         ///
         /// - Parameter diff: How the interface differs from the base.
         init(_ diff: InterfaceDiff) {
-            for node in diff.nodes where node.change == .changed {
+            for node in diff.nodes where node.change == .changed || node.change == .moved {
                 for declaration in node.declarations where declaration.change == .removed || declaration.signatureChanged {
                     if ["struct", "class", "enum", "protocol", "actor"].contains(declaration.keyword) {
                         declarations[node.node.id] = declaration

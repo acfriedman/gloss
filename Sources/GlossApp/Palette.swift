@@ -33,22 +33,26 @@ enum Palette {
     static let removed = adaptive(light: 0xCF222E, dark: 0xF85149)
     /// The quieter mark of what changed only inside since the base: its bodies, not what it declares.
     static let implementation = adaptive(light: 0x6E7781, dark: 0x8B949E)
+    /// The mark of a type that moved to another module since the base: a badge on its box.
+    static let moved = adaptive(light: 0x0969DA, dark: 0x58A6FF)
 
     /// The color a change is marked in.
     ///
     /// - Parameter change: A change.
-    /// - Returns: Green for new, amber for changed, red for gone, gray for changed only inside.
+    /// - Returns: Green for new, amber for changed, red for gone, gray for changed only inside, and blue
+    ///   for moved.
     static func color(of change: InterfaceDiff.Change) -> Color {
         switch change {
         case .added: added
         case .changed: changed
         case .removed: removed
         case .implementation: implementation
+        case .moved: moved
         }
     }
 
-    /// The glyph a change is marked with: `+`, `~`, or `−`, a change made only inside sharing `~` in its
-    /// quieter color.
+    /// The glyph a change is marked with: `+`, `~`, `−`, or `→` for a move, a change made only inside
+    /// sharing `~` in its quieter color.
     ///
     /// - Parameter change: A change.
     /// - Returns: The glyph.
@@ -57,6 +61,7 @@ enum Palette {
         case .added: "+"
         case .changed, .implementation: "~"
         case .removed: "−"
+        case .moved: "→"
         }
     }
 

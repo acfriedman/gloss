@@ -13,11 +13,13 @@ struct ChangePageBarView: View {
     var body: some View {
         let name = workspace.atlas?.label(of: .type(id)) ?? id
         let phrase = workspace.comparisonPhrase
-        let change = workspace.diff?.change(ofNode: id)?.change
+        let nodeChange = workspace.diff?.change(ofNode: id)
+        let change = nodeChange?.change
         HStack(spacing: 8) {
             Image(systemName: "plusminus")
             Text(workspace.showsFullPage ? "All of \(name)"
                  : change == .added ? "\(name) is new \(phrase)"
+                 : change == .moved ? "\(name) moved from \(nodeChange?.movedFrom?.module ?? "another module") \(phrase)"
                  : change == .implementation ? "What changed inside \(name) \(phrase)"
                  : change != nil ? "What changed in \(name) \(phrase)" : "How the changes \(phrase) reach \(name)")
                 .lineLimit(1)
@@ -97,7 +99,15 @@ struct DeclarationChangesView: View {
         let own = change.declarations.first { ["struct", "class", "enum", "protocol", "actor"].contains($0.keyword) }
         let rows = change.declarations.filter { $0 != own }
         VStack(alignment: .leading, spacing: 2) {
-            if let own, change.change == .changed {
+            if let was = change.movedFrom {
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    ChangeBadgeView(change: .moved)
+                    Text("Moved from \(was.module) to \(change.node.module)\(change.declarations.isEmpty ? ", declared the same." : ".")")
+                        .font(.callout)
+                }
+                .padding(.bottom, 10)
+            }
+            if let own, change.change == .changed || change.change == .moved {
                 HStack(alignment: .firstTextBaseline, spacing: 6) {
                     ChangeBadgeView(change: .changed)
                     VStack(alignment: .leading, spacing: 4) {
@@ -107,8 +117,10 @@ struct DeclarationChangesView: View {
                 }
                 .padding(.bottom, 10)
             }
-            EyebrowView(text: change.change == .added ? "New \(workspace.comparisonPhrase) · \(rows.count)" : "Declarations that changed · \(rows.count)")
-                .padding(.bottom, 6)
+            if !(change.change == .moved && rows.isEmpty) {
+                EyebrowView(text: change.change == .added ? "New \(workspace.comparisonPhrase) · \(rows.count)" : "Declarations that changed · \(rows.count)")
+                    .padding(.bottom, 6)
+            }
             ForEach(Array(rows.enumerated()), id: \.offset) { _, declaration in
                 HStack(alignment: .firstTextBaseline, spacing: 6) {
                     ChangeBadgeView(change: declaration.change)

@@ -176,8 +176,11 @@ final class StoryTests: XCTestCase {
 
         Moved; a free function stands for its module's file scope.
         """), diff: diff, head: after, base: before)
-        XCTAssertEqual(coverage.types[0], ["New/Cart", "Old/Cart", "New/", "Old/"],
-                       "One link names the type in every module, the new side first; a free function names its file scope.")
+        XCTAssertEqual(coverage.types[0], ["New/Cart", "New/", "Old/"],
+                       "The cart is one move; a free function names its file scope, which has no name to move by.")
+        let byOldModule = StoryCoverage(story: ChangeStory.parse("# Move\n\n## Move\n\n``Old/Cart`` left Old."),
+                                        diff: diff, head: after, base: before)
+        XCTAssertEqual(byOldModule.types[0], ["New/Cart"], "A link to the module a type left explains its move.")
         XCTAssertEqual(coverage.members[0], [StoryCoverage.MemberLink(node: "New/", name: "round(_:)"),
                                              StoryCoverage.MemberLink(node: "Old/", name: "round(_:)")])
         XCTAssertTrue(coverage.isComplete, "unexplained \(coverage.unexplained), without notes \(coverage.withoutNotes)")

@@ -221,11 +221,16 @@ struct ChangesLineView: View {
                 Text("\(workspace.comparisonTitle): \(problem)").foregroundStyle(.secondary).lineLimit(1)
             } else if let diff = workspace.diff {
                 let count = { (change: InterfaceDiff.Change) in diff.nodes.filter { $0.change == change }.count }
-                let removed = diff.nodes.filter { $0.change == .removed }.map(\.node.name)
+                // File scope has no name, so it is called by its module's.
+                let removed = diff.nodes.filter { $0.change == .removed }.map { $0.node.name.isEmpty ? "\($0.node.module) top level" : $0.node.name }
                 if diff.isEmpty {
                     Text("No changes \(workspace.comparisonPhrase)").foregroundStyle(.secondary)
                 } else {
                     Text("+\(count(.added)) new").foregroundStyle(Palette.added)
+                    if count(.moved) > 0 {
+                        Text("→\(count(.moved)) moved").foregroundStyle(Palette.moved)
+                            .help("Moved to another module under the same name")
+                    }
                     Text("~\(count(.changed)) changed").foregroundStyle(Palette.changed)
                     Text("~\(count(.implementation)) inside").foregroundStyle(Palette.implementation)
                         .help("Changed only inside their bodies: declared and documented as before")
@@ -451,7 +456,7 @@ struct MapBoxView: View {
                     .background(Circle().fill(Palette.color(of: mark)))
                     .offset(x: 6 * scale, y: -6 * scale)
                     .help(mark == .added ? "New since the base" : mark == .implementation ? "Changed only inside its bodies since the base"
-                          : "Holds a change since the base")
+                          : mark == .moved ? "Moved from another module since the base" : "Holds a change since the base")
             }
         }
         .opacity(isDimmed ? 0.4 : flags.contains(.private) ? 0.7 : 1)

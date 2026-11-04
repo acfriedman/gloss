@@ -150,9 +150,10 @@ public struct ChangeStory: Sendable, Equatable {
 
     /// A first draft of a branch's story, to edit rather than write from nothing: a headline and summary
     /// to fill in, then one theme per commit, its subject as the title, its body as the prose, and links to
-    /// the types it changed; or, with no commits, one theme per module. Each changed type gets a note to
-    /// fill in under the first theme that names it, a type that moved modules only once, and file scope
-    /// one per declaration in it that changed, since it has no name of its own to link.
+    /// the types it changed; then one theme per module for what no commit made, which is everything when
+    /// there are no commits. Each changed type gets a note to fill in under the first theme that names it,
+    /// a type that moved modules only once, and file scope one per declaration in it that changed, since it
+    /// has no name of its own to link.
     ///
     /// - Parameters:
     ///   - diff: How the branch differs from its base.
@@ -180,21 +181,26 @@ public struct ChangeStory: Sendable, Equatable {
         }
         var text = "# What this change does, in a line\n\nWhy it was made, and what a reviewer should look at first.\n"
         let changed = diff.nodes.filter { $0.change != .implementation }
+        var named: Set<String> = []
         if let commits, !commits.commits.isEmpty {
             for commit in commits.commits {
                 let ids = changed.filter { commits.commits(for: $0).contains(commit) }.map(\.node.id)
                 guard !ids.isEmpty else { continue }
+                named.formUnion(ids)
                 text += "\n## \(commit.subject)\n\n"
                 if !commit.body.isEmpty { text += commit.body.components(separatedBy: "\n\n").first.map { $0.replacingOccurrences(of: "\n", with: " ") + "\n\n" } ?? "" }
                 text += sentence(ids) + "\n" + notes(ids)
             }
         }
-        if !text.contains("\n## ") {
-            var seen: Set<String> = []
-            for module in changed.map(\.node.module) where seen.insert(module).inserted {
-                let ids = changed.filter { $0.node.module == module }.map(\.node.id)
-                text += "\n## \(module)\n\nWhat changed here, and why.\n\n" + sentence(ids) + "\n" + notes(ids)
-            }
+        // What no commit in the range made, such as edits not committed yet or a move git follows back
+        // to the lines' first commits, gets a theme per module.
+        let rest = changed.filter { !named.contains($0.node.id) }
+        var seen: Set<String> = []
+        for module in rest.map(\.node.module) where seen.insert(module).inserted {
+            let ids = rest.filter { $0.node.module == module }.map(\.node.id)
+            let from = Set(rest.filter { $0.node.module == module }.compactMap { $0.movedFrom?.module }).sorted()
+            let prose = from.isEmpty ? "What changed here, and why." : "What moved here from \(from.joined(separator: " and ")), and why."
+            text += "\n## \(module)\n\n\(prose)\n\n" + sentence(ids) + "\n" + notes(ids)
         }
         return text
     }
@@ -205,12 +211,12 @@ public struct ChangeStory: Sendable, Equatable {
 ///
 /// A link names a type when its path, with `/` between names, is a type's name in the head or the base,
 /// and a member when the rest is one of the type's members as a caller writes it, with its argument
-/// labels. A bare name names the type of that name in every module, so one link covers both sides of a
-/// type that moved from one module to another; a module first narrows it to that module's type. A link
+/// labels. A bare name names the type of that name in every module, and a module first narrows it to
+/// that module's type; a type the diff sees as moved is explained by a link to either module. A link
 /// with no type in front names a declaration at file scope, such as a free function, and stands for its
 /// module's file scope, which has no name of its own. A theme explains the types it links and their
-/// nested types, and the members it links. Every type whose interface changed, new, gone, or changed,
-/// needs a theme and a note of its own, or one on a type it is nested in; a type changed only inside
+/// nested types, and the members it links. Every type whose interface changed, new, gone, moved, or
+/// changed, needs a theme and a note of its own, or one on a type it is nested in; a type changed only inside
 /// its bodies needs neither.
 public struct StoryCoverage: Sendable, Equatable {
     /// For each theme, in order, the ids of the changed types it explains, in the order it links them.
@@ -277,6 +283,14 @@ public struct StoryCoverage: Sendable, Equatable {
             if !(fileScope[contract.callName]?.contains(id) ?? false) { fileScope[contract.callName, default: []].append(id) }
         }
         let changed = Set(diff.nodes.map(\.node.id))
+        // A moved type's id in the base stands for its move, so a link that names the module it left
+        // explains it too.
+        let movedTo = Dictionary(diff.nodes.compactMap { change in change.movedFrom.map { ($0.id, change.node.id) } },
+                                 uniquingKeysWith: { first, _ in first })
+        func following(_ ids: [String]) -> [String] {
+            var seen: Set<String> = []
+            return ids.map { movedTo[$0] ?? $0 }.filter { seen.insert($0).inserted }
+        }
         // A link names the longest leading run of names that is a type, in every module or in the one it
         // starts with, and what follows is one of its members; a lone name that is no type may be a
         // declaration at file scope.
@@ -309,7 +323,7 @@ public struct StoryCoverage: Sendable, Equatable {
                     dead.append((theme.title, link))
                     continue
                 }
-                for id in ids {
+                for id in following(ids) {
                     linked.insert(id)
                     let explained = changed.filter { $0 == id || $0.hasPrefix(id + ".") }
                     for each in [id] + explained.sorted() where changed.contains(each) && !themeTypes.contains(each) { themeTypes.append(each) }
@@ -319,7 +333,7 @@ public struct StoryCoverage: Sendable, Equatable {
             for (noteIndex, note) in theme.notes.enumerated() {
                 guard let (ids, member, atFileScope) = resolve(note.link) else { continue }
                 let place = NotePlace(theme: themeIndex, note: noteIndex)
-                for id in ids {
+                for id in following(ids) {
                     if let member { memberNotes[MemberLink(node: id, name: member), default: []].append(place) }
                     // File scope has no name to head a note with, so a note on one of its declarations is its own too.
                     if member == nil || atFileScope { typeNotes[id, default: []].append(place) }

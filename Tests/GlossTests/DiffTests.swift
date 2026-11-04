@@ -379,4 +379,49 @@ final class DiffTests: XCTestCase {
         process.waitUntilExit()
         XCTAssertEqual(process.terminationStatus, 0, "git \(arguments.joined(separator: " "))")
     }
+
+    /// A cart with a nested line and a ledger that holds one, each file read from the module its key names.
+    private func shop(_ modules: [String: String], cartDoc: String = "A cart.") -> Interface {
+        Interface.build(sources: [
+            ("Sources/\(modules["cart"]!)/Cart.swift", "/// \(cartDoc)\nstruct Cart {\n    /// One line.\n    struct Line {}\n}"),
+            ("Sources/\(modules["ledger"]!)/Ledger.swift", "/// A ledger.\nstruct Ledger {\n    /// The cart it records.\n    var cart: Cart\n}")
+        ])
+    }
+
+    func testATypeThatMovesModulesIsOneMoveWithItsNestedTypesAndDependencies() throws {
+        let before = shop(["cart": "Old", "ledger": "Old"])
+        let after = shop(["cart": "New", "ledger": "Old"])
+        let diff = InterfaceDiff(base: before, head: after)
+        XCTAssertEqual(diff.nodes.map(\.node.id), ["New/Cart", "New/Cart.Line"], "No gone cart beside the new one.")
+        let cart = try XCTUnwrap(diff.change(ofNode: "New/Cart"))
+        XCTAssertEqual(cart.change, .moved)
+        XCTAssertEqual(cart.movedFrom?.id, "Old/Cart")
+        XCTAssertTrue(cart.declarations.isEmpty, "Declared the same where it went.")
+        XCTAssertEqual(diff.change(ofNode: "Old/Cart")?.node.id, "New/Cart", "The id it had finds the move.")
+        XCTAssertEqual(diff.change(ofNode: "New/Cart.Line")?.change, .moved)
+        XCTAssertTrue(diff.edges.isEmpty, "The ledger still holds a cart; it only lives elsewhere.")
+        XCTAssertEqual(Atlas(after).change(of: .type("New/Cart"), in: diff), .moved)
+        XCTAssertEqual(Atlas(after).change(of: .module("New"), in: diff), .moved, "Everything in New moved in.")
+    }
+
+    func testAMovedTypeStillSaysWhatChangedInIt() throws {
+        let diff = InterfaceDiff(base: shop(["cart": "Old", "ledger": "Old"]), head: shop(["cart": "New", "ledger": "Old"], cartDoc: "A cart of lines."))
+        let cart = try XCTUnwrap(diff.change(ofNode: "New/Cart"))
+        XCTAssertEqual(cart.change, .moved)
+        XCTAssertEqual(cart.declarations.map(\.name), ["Cart"])
+        XCTAssertEqual(cart.declarations.first?.docChanged, true)
+    }
+
+    func testAMoveIsMatchedOnlyWhenItsNameIsUnique() {
+        let twice = InterfaceDiff(base: Interface.build(sources: [("Sources/A/Cart.swift", "/// A cart.\nstruct Cart {}"),
+                                                                 ("Sources/B/Cart.swift", "/// A cart.\nstruct Cart {}")]),
+                                  head: Interface.build(sources: [("Sources/C/Cart.swift", "/// A cart.\nstruct Cart {}")]))
+        XCTAssertEqual(twice.nodes.map { "\($0.change) \($0.node.id)" }, ["added C/Cart", "removed A/Cart", "removed B/Cart"],
+                       "Two carts gone, so which one moved is not guessed.")
+        let extended = InterfaceDiff(base: Interface.build(sources: [("Sources/Core/Cart.swift", "/// A cart.\nstruct Cart {}")]),
+                                     head: Interface.build(sources: [("Sources/Read/Cart.swift", "/// A cart.\nstruct Cart {}"),
+                                                                     ("Sources/Lint/Cart.swift", "extension Cart {\n    /// Checks it.\n    func check() {}\n}")]))
+        XCTAssertEqual(extended.nodes.map { "\($0.change) \($0.node.id)" }, ["moved Read/Cart", "added Lint/Cart"],
+                       "An extension beside a moved type is new, not a second candidate.")
+    }
 }

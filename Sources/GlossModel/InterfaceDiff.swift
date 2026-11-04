@@ -6,7 +6,10 @@ import GlossRead
 /// Things are matched by name, never by place, so code that only moves within or between files is no
 /// change. A node is matched by its id; a declaration by its node, keyword, and name as a caller writes
 /// it, an overload by its declaration as written first and then in order; a dependency by the nodes at
-/// its ends. A renamed type reads as one removed and one added.
+/// its ends. A type that keeps its name and moves to another module reads as moved, when it is the only
+/// type of that name gone from the base and the only one new in the head, a declared type and an
+/// extension told apart; a dependency that moved with its ends is then no change. A renamed type reads
+/// as one removed and one added.
 public struct InterfaceDiff: Sendable, Equatable {
     /// How something differs from the base.
     public enum Change: String, Sendable, Equatable, Codable {
@@ -19,6 +22,9 @@ public struct InterfaceDiff: Sendable, Equatable {
         /// Both have it, declared and documented the same, and only what it does inside differs: a body,
         /// an accessor, or an initial value. It changes no one's view of the interface.
         case implementation
+        /// It moved to another module under the same name, so callers import it from elsewhere; what it
+        /// declares may differ too.
+        case moved
     }
 
     /// One declaration that differs from the base.
@@ -68,15 +74,17 @@ public struct InterfaceDiff: Sendable, Equatable {
         /// Whether the node is new, gone, or changed.
         public var change: Change
         /// The declarations filed under the node that differ, in source order; every one of them for a
-        /// new or a gone node.
+        /// new or a gone node, and only those that differ from where it was for a moved one.
         public var declarations: [DeclarationChange]
+        /// For a moved node, the node as the base gives it, in the module it moved from; `nil` otherwise.
+        public var movedFrom: Graph.Node? = nil
     }
 
     /// One dependency that differs from the base.
     public struct EdgeChange: Sendable, Equatable {
-        /// The id of the dependent node.
+        /// The id of the dependent node, as the head names it when the node moved.
         public var from: String
-        /// The id of the node it depends on.
+        /// The id of the node it depends on, as the head names it when the node moved.
         public var to: String
         /// Whether the dependency is new, gone, or changed.
         public var change: Change
@@ -130,9 +138,25 @@ public struct InterfaceDiff: Sendable, Equatable {
         let headContracts = grouped(head)
         let baseNodes = Set(base.graph.nodes.map(\.id))
         let headNodes = Set(head.graph.nodes.map(\.id))
+        // A gone type and a new one are one move when each is the only one of its name on its side, a
+        // declared type and an extension of one told apart, so an extension added beside a moved type is
+        // still new. File scope has no name to match by.
+        func moveKey(_ node: Graph.Node) -> String { node.name + (node.keyword == "extension" ? " extension" : "") }
+        let gone = Dictionary(grouping: base.graph.nodes.filter { !headNodes.contains($0.id) && !$0.name.isEmpty }, by: moveKey)
+        let new = Dictionary(grouping: head.graph.nodes.filter { !baseNodes.contains($0.id) && !$0.name.isEmpty }, by: moveKey)
+        var movedFrom: [String: Graph.Node] = [:]
+        for (key, was) in gone where was.count == 1 {
+            if let now = new[key], now.count == 1 { movedFrom[now[0].id] = was[0] }
+        }
+        let movedTo = Dictionary(uniqueKeysWithValues: movedFrom.map { ($0.value.id, $0.key) })
 
         var nodes: [NodeChange] = []
         for node in head.graph.nodes {
+            if let was = movedFrom[node.id] {
+                let declarations = Self.declarations(of: node.id, base: baseContracts[was.id] ?? [], head: headContracts[node.id] ?? [])
+                nodes.append(NodeChange(node: node, change: .moved, declarations: declarations, movedFrom: was))
+                continue
+            }
             let declarations = Self.declarations(of: node.id, base: baseContracts[node.id] ?? [], head: headContracts[node.id] ?? [])
             if !baseNodes.contains(node.id) {
                 nodes.append(NodeChange(node: node, change: .added, declarations: declarations))
@@ -141,13 +165,21 @@ public struct InterfaceDiff: Sendable, Equatable {
                 nodes.append(NodeChange(node: node, change: inside ? .implementation : .changed, declarations: declarations))
             }
         }
-        for node in base.graph.nodes where !headNodes.contains(node.id) {
+        for node in base.graph.nodes where !headNodes.contains(node.id) && movedTo[node.id] == nil {
             nodes.append(NodeChange(node: node, change: .removed,
                                     declarations: Self.declarations(of: node.id, base: baseContracts[node.id] ?? [], head: [])))
         }
 
         func key(_ edge: Graph.Edge) -> String { edge.from + "\u{0}" + edge.to }
-        let baseEdges = Dictionary(base.graph.edges.map { (key($0), $0) }, uniquingKeysWith: { first, _ in first })
+        // The base's dependencies with each end that moved named as the head names it, so a dependency
+        // that moved with its types is no change.
+        let baseGraphEdges = base.graph.edges.map { edge -> Graph.Edge in
+            var edge = edge
+            edge.from = movedTo[edge.from] ?? edge.from
+            edge.to = movedTo[edge.to] ?? edge.to
+            return edge
+        }
+        let baseEdges = Dictionary(baseGraphEdges.map { (key($0), $0) }, uniquingKeysWith: { first, _ in first })
         let headKeys = Set(head.graph.edges.map(key))
         var edges: [EdgeChange] = []
         for edge in head.graph.edges {
@@ -162,14 +194,18 @@ public struct InterfaceDiff: Sendable, Equatable {
             edges.append(EdgeChange(from: edge.from, to: edge.to, change: .changed, before: before.roles, after: edge.roles,
                                     viaAdded: added, viaRemoved: removed))
         }
-        for edge in base.graph.edges where !headKeys.contains(key(edge)) {
+        for edge in baseGraphEdges where !headKeys.contains(key(edge)) {
             edges.append(EdgeChange(from: edge.from, to: edge.to, change: .removed, before: edge.roles, after: [],
                                     viaAdded: [], viaRemoved: edge.via))
         }
         Timing.end(phase, "\(nodes.count) types and \(edges.count) dependencies differ")
         self.nodes = nodes
         self.edges = edges
-        for (index, change) in nodes.enumerated() where nodeIndex[change.node.id] == nil { nodeIndex[change.node.id] = index }
+        for (index, change) in nodes.enumerated() {
+            if nodeIndex[change.node.id] == nil { nodeIndex[change.node.id] = index }
+            // A moved node is found by the id it had in the base too.
+            if let was = change.movedFrom, nodeIndex[was.id] == nil { nodeIndex[was.id] = index }
+        }
         for (index, change) in edges.enumerated() where edgeIndex[change.from + "\u{0}" + change.to] == nil {
             edgeIndex[change.from + "\u{0}" + change.to] = index
         }
@@ -177,7 +213,7 @@ public struct InterfaceDiff: Sendable, Equatable {
 
     /// How a node differs from the base.
     ///
-    /// - Parameter id: A node id from either interface.
+    /// - Parameter id: A node id from either interface; a moved node's id in the base finds its move.
     /// - Returns: The change, or `nil` when the node is the same in both.
     public func change(ofNode id: String) -> NodeChange? {
         nodeIndex[id].map { nodes[$0] }

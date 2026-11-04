@@ -182,7 +182,8 @@ struct ChangesView: View {
             let count = { (change: InterfaceDiff.Change) in diff.nodes.filter { $0.change == change }.count }
             HeadingView(title: "Changes",
                         lede: diff.isEmpty ? "Nothing changed \(phrase)."
-                            : "\(phrase.prefix(1).uppercased() + phrase.dropFirst()): \(count(.added)) new, \(count(.changed)) changed, "
+                            : "\(phrase.prefix(1).uppercased() + phrase.dropFirst()): \(count(.added)) new, "
+                            + (count(.moved) > 0 ? "\(count(.moved)) moved, " : "") + "\(count(.changed)) changed, "
                             + "\(count(.removed)) gone, \(count(.implementation)) changed only inside.")
             // The story leads when there is one; without, the commits stand in for its themes.
             if !diff.isEmpty {
@@ -214,8 +215,8 @@ struct ChangeBadgeView: View {
     }
 }
 
-/// One type that differs from the base: a link to it while it exists, then for a changed one each
-/// declaration that changed and how.
+/// One type that differs from the base: a link to it while it exists, where it moved from if it moved,
+/// then for a changed or moved one each declaration that changed and how.
 struct NodeChangeView: View {
     /// The type's change.
     var change: InterfaceDiff.NodeChange
@@ -239,8 +240,13 @@ struct NodeChangeView: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
+                if let was = change.movedFrom {
+                    Text("from \(was.module)")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
             }
-            if change.change == .changed || change.change == .implementation {
+            if change.change == .changed || change.change == .implementation || change.change == .moved {
                 ForEach(Array(change.declarations.enumerated()), id: \.offset) { _, declaration in
                     HStack(alignment: .firstTextBaseline, spacing: 6) {
                         ChangeBadgeView(change: declaration.change)

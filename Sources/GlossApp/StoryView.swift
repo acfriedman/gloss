@@ -224,6 +224,8 @@ struct EveryChangeView: View {
                 }
             }
             .padding(.top, 10)
+            // A disclosure group centers content narrower than itself, so the rows are pinned to its leading edge.
+            .frame(maxWidth: .infinity, alignment: .leading)
         } label: {
             EyebrowView(text: "Every change · \(diff.nodes.count) type\(diff.nodes.count == 1 ? "" : "s")")
         }

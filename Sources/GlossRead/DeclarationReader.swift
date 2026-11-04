@@ -5,7 +5,7 @@ import SwiftSyntax
 /// Reads every declaration in one Swift file, with its doc comment and what its syntax says about it.
 ///
 /// Reading is the one pass over the syntax tree. What it produces feeds two consumers that never meet
-/// here: ``Linter`` checks the doc comments against ``Rules``, and ``Interface`` builds the contract
+/// here: GlossLint checks the doc comments against its rules, and GlossModel builds the contract
 /// model and its dependency graph.
 public final class DeclarationReader: SyntaxVisitor {
     /// One declaration as read: what the rules need, its doc comment, and what the model needs.
@@ -24,7 +24,7 @@ public final class DeclarationReader: SyntaxVisitor {
         /// The introducing keyword as ``Header/keyword(of:)`` reads it, or `code` for top-level code.
         public var keyword: String
         /// The type names the declaration mentions, each tagged with where it appears; unresolved until
-        /// ``Graph/build(_:)``.
+        /// the contract model builds its graph.
         public var mentions: [Mention]
         /// The enclosing types and extended types, outermost first; empty at file scope.
         public var container: [String]

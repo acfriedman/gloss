@@ -1,4 +1,5 @@
-import GlossCore
+import GlossRead
+import GlossModel
 import SwiftUI
 
 /// The three panes, List | Detail | Map, the details and the map under a bar of tabs as Xcode's editor

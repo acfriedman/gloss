@@ -1,4 +1,5 @@
-import GlossCore
+import GlossRead
+import GlossModel
 import GlossMap
 import SwiftUI
 

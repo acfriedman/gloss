@@ -1,3 +1,5 @@
+import GlossRead
+
 /// How the scanned types depend on one another, drawn from the type names each declaration mentions.
 ///
 /// A node is a type with its members, an extension of a type no scanned source declares, or a module's

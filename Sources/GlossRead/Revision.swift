@@ -152,7 +152,7 @@ public enum Revision {
     ///   - input: What to write to git's standard input, or `nil` for none.
     /// - Returns: The standard output.
     /// - Throws: ``Failure`` when git cannot run or exits with an error.
-    static func git(_ arguments: [String], in directory: String, input: Data? = nil) throws -> Data {
+    package static func git(_ arguments: [String], in directory: String, input: Data? = nil) throws -> Data {
         try Timing.measure("git", arguments.prefix(2).joined(separator: " ")) { try run(arguments, in: directory, input: input) }
     }
 

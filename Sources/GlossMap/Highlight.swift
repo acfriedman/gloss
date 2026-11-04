@@ -1,5 +1,6 @@
 import Foundation
-import GlossCore
+import GlossRead
+import GlossModel
 import SwiftIDEUtils
 import SwiftParser
 import SwiftSyntax
@@ -126,7 +127,7 @@ public enum Highlight {
     /// Splits one contract's declaration into runs, with the types it resolves to scanned sources marked.
     ///
     /// - Parameter contract: A contract whose mentions are resolved, as every contract in an
-    ///   ``GlossCore/Interface`` is.
+    ///   ``GlossModel/Interface`` is.
     /// - Returns: Runs that together spell the declaration exactly.
     public static func runs(of contract: Contract) -> [Run] {
         let names = contract.mentions.filter { $0.resolved != nil }.flatMap { $0.name.split(separator: ".").map(String.init) }

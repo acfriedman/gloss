@@ -12,12 +12,27 @@ public struct SymbolIndex: Sendable {
     /// The scanned modules, which a link may start with.
     private var modules: Set<String> = []
 
+    /// Modules and types the scanned sources never declare, so a link or a dotted path under them names
+    /// another module's symbol, not one of the project's. Extend it when a new framework's symbols start
+    /// appearing in docs.
+    public static let externalPrefixes: Set<String> = [
+        "Swift", "Foundation", "Dispatch", "Combine", "XCTest", "Testing", "CoreData", "SwiftUI", "UIKit",
+        "AppKit", "NotificationCenter", "DispatchQueue", "DispatchGroup", "DispatchTime", "Thread",
+        "ProcessInfo", "FileManager", "URLSession", "URLProtocol", "URLRequest", "URL", "JSONEncoder",
+        "JSONDecoder", "Date", "Data", "Task", "MainActor", "NSObject", "Bundle", "RunLoop", "Timer",
+        "OperationQueue", "UserDefaults", "NSLock", "NSManagedObjectContext", "NSPersistentContainer",
+        "String", "Array", "Dictionary", "Set", "Optional", "Result", "Int", "Double", "Bool", "Character",
+        "StaticString", "Substring", "Float", "UInt", "UInt8", "Int8", "Int32", "UInt32", "Int64", "UInt64", "Never",
+        "Error", "Sequence", "Collection", "Equatable", "Hashable", "Comparable", "Codable", "Sendable", "Range",
+        "ClosedRange", "CustomStringConvertible"
+    ]
+
     /// Indexes every declaration read from the scanned files.
     ///
     /// - Parameter readings: Each file's path and the declarations read from it.
     public init(_ readings: [(file: String, entries: [DeclarationReader.Entry])]) {
         for (file, entries) in readings {
-            modules.insert(Interface.module(of: file))
+            modules.insert(SourceFiles.module(of: file))
             for entry in entries where entry.declaration.kind != .other {
                 // A link names a keyword-named declaration, such as ``Role/throws``, without its backticks.
                 func path(_ last: String) -> String {
@@ -46,7 +61,7 @@ public struct SymbolIndex: Sendable {
             components.removeFirst()
             if components.isEmpty { return true }
         }
-        guard let first = components.first, !SymbolReference.externalPrefixes.contains(first) else { return true }
+        guard let first = components.first, !Self.externalPrefixes.contains(first) else { return true }
         for depth in stride(from: scope.count, through: 0, by: -1) {
             let candidate = (scope.prefix(depth) + components).joined(separator: "/")
             if paths.contains(candidate) { return true }
@@ -65,7 +80,7 @@ public struct SymbolIndex: Sendable {
     ///
     /// - Parameter component: One component of a link.
     /// - Returns: The component without its suffix.
-    static func dropDisambiguation(_ component: String) -> String {
+    package static func dropDisambiguation(_ component: String) -> String {
         if let range = component.range(of: "-swift.") { return String(component[..<range.lowerBound]) }
         guard let dash = component.lastIndex(of: "-"), dash > component.startIndex else { return component }
         let hash = component[component.index(after: dash)...]

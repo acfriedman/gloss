@@ -1,4 +1,6 @@
-@testable import GlossCore
+@testable import GlossRead
+@testable import GlossLint
+@testable import GlossModel
 @testable import GlossMap
 @testable import GlossPage
 import XCTest
@@ -80,10 +82,12 @@ final class InterfaceTests: XCTestCase {
     }
 
     func testAssessmentsSitBesideTheirContracts() throws {
-        let interface = Interface.build(sources: [("Sources/Shop/Cart.swift", "func total() -> Int { 0 }\n/// Adds.\nfunc add() {}")])
+        let reading = Reading(sources: [("Sources/Shop/Cart.swift", "func total() -> Int { 0 }\n/// Adds.\nfunc add() {}")])
+        let interface = Interface.build(reading)
+        let assessments = Linter.assess(reading)
         XCTAssertEqual(interface.contracts.map(\.name), ["total", "add"])
-        XCTAssertEqual(interface.assessments.map { $0.findings.map(\.rule) }, [["missing-doc"], []])
-        XCTAssertEqual(interface.assessments.map(\.requiresDoc), [true, true])
+        XCTAssertEqual(assessments.map { $0.findings.map(\.rule) }, [["missing-doc"], []])
+        XCTAssertEqual(assessments.map(\.requiresDoc), [true, true])
         XCTAssertFalse(interface.contracts[0].isDocumented)
     }
 
@@ -96,10 +100,10 @@ final class InterfaceTests: XCTestCase {
     }
 
     func testModuleComesFromTheSwiftPMLayout() {
-        XCTAssertEqual(Interface.module(of: "Sources/GlossCore/Rules.swift"), "GlossCore")
-        XCTAssertEqual(Interface.module(of: "/repo/Packages/Shop/Sources/Cart/Views/Line.swift"), "Cart")
-        XCTAssertEqual(Interface.module(of: "App/Features/Checkout.swift"), "Features")
-        XCTAssertEqual(Interface.module(of: "main.swift"), "Module")
+        XCTAssertEqual(SourceFiles.module(of: "Sources/GlossLint/Rules.swift"), "GlossLint")
+        XCTAssertEqual(SourceFiles.module(of: "/repo/Packages/Shop/Sources/Cart/Views/Line.swift"), "Cart")
+        XCTAssertEqual(SourceFiles.module(of: "App/Features/Checkout.swift"), "Features")
+        XCTAssertEqual(SourceFiles.module(of: "main.swift"), "Module")
     }
 
     func testPageGroupsExtensionsWithTheirTypeAndEscapes() {
@@ -143,13 +147,14 @@ final class InterfaceTests: XCTestCase {
     }
 
     func testTopLevelCodeCarriesItsMentions() throws {
-        let interface = Interface.build(sources: [
+        let reading = Reading(sources: [
             ("Sources/Shop/Cart.swift", "/// A cart.\npublic struct Cart {}"),
             ("Sources/shop/main.swift", "let cart = 1\nif cart > 0 { print(Cart()) }")
         ])
+        let interface = Interface.build(reading)
         let index = try XCTUnwrap(interface.contracts.firstIndex { $0.keyword == "code" })
         XCTAssertEqual(interface.contracts[index].name, "top-level code")
-        XCTAssertFalse(interface.assessments[index].requiresDoc)
+        XCTAssertFalse(Linter.assess(reading)[index].requiresDoc)
         XCTAssertTrue(interface.graph.edges.contains { $0.from == "shop/" && $0.to == "Shop/Cart" && $0.roles == [.body] })
     }
 
@@ -397,11 +402,11 @@ final class InterfaceTests: XCTestCase {
     }
 
     func testModuleColorsAreStableAndDistinct() {
-        let modules = ["GlossCore", "GlossMap", "GlossPage", "GlossApp", "gloss"]
+        let modules = ["GlossRead", "GlossLint", "GlossModel", "GlossMap", "GlossPage", "GlossApp", "gloss"]
         let slots = Atlas.colorSlots(for: modules)
         XCTAssertEqual(Set(slots.values).count, modules.count, "No two modules share a color while slots last.")
         XCTAssertEqual(slots, Atlas.colorSlots(for: modules.reversed()), "Order of appearance does not matter.")
-        XCTAssertEqual(Atlas.colorSlots(for: ["GlossCore"])["GlossCore"], Atlas.colorSlots(for: ["GlossCore", "Zebra"])["GlossCore"],
+        XCTAssertEqual(Atlas.colorSlots(for: ["GlossRead"])["GlossRead"], Atlas.colorSlots(for: ["GlossRead", "Zebra"])["GlossRead"],
                        "Adding a module that does not collide leaves the others' colors alone.")
         XCTAssertTrue(slots.values.allSatisfy { (0..<Atlas.moduleColorCount).contains($0) })
     }
@@ -589,8 +594,8 @@ final class InterfaceTests: XCTestCase {
     }
 
     func testDeadLinksReachTheAssessments() {
-        let interface = Interface.build(sources: [("Sources/Shop/Cart.swift", "/// A cart, unlike ``Basket``.\nstruct Cart {}")])
-        XCTAssertEqual(interface.assessments.flatMap(\.findings).map(\.rule), ["dead-link"])
+        let reading = Reading(sources: [("Sources/Shop/Cart.swift", "/// A cart, unlike ``Basket``.\nstruct Cart {}")])
+        XCTAssertEqual(Linter.assess(reading).flatMap(\.findings).map(\.rule), ["dead-link"])
     }
 
     func testQuickOpenFindsTypesByWordStartsAndRanksExactNamesFirst() {
@@ -621,7 +626,7 @@ final class InterfaceTests: XCTestCase {
         }
         """)])
         let edges = interface.graph.edges.map { "\($0.from) -> \($0.to) \($0.roles)" }
-        XCTAssertEqual(edges, ["App/Screen -> App/Store [GlossCore.Mention.Role.property]"],
+        XCTAssertEqual(edges, ["App/Screen -> App/Store [GlossRead.Mention.Role.property]"],
                        "A wrapper's argument is a dependency even with no type annotation; a wrapper no scanned source declares is not.")
     }
 

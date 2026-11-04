@@ -1,5 +1,7 @@
 import Foundation
-import GlossCore
+import GlossRead
+import GlossLint
+import GlossModel
 import GlossMap
 
 /// Renders an ``Interface`` as one self-contained HTML page that discloses the system a level at a time.
@@ -16,14 +18,16 @@ public enum InterfacePage {
     ///
     /// - Parameters:
     ///   - interface: The contracts and graph to show.
+    ///   - assessments: The lint's assessment of each contract, at the same index, or `nil` to show the
+    ///     interface without findings.
     ///   - title: The project name for the heading and the browser tab.
     /// - Returns: A complete HTML document.
-    public static func render(_ interface: Interface, title: String) -> String {
-        let atlas = Atlas(interface)
+    public static func render(_ interface: Interface, assessments: [Assessment]? = nil, title: String) -> String {
+        let atlas = Atlas(interface, assessments: assessments)
         let scopes = atlas.mapScopes()
         let scopesOf = atlas.levelsDrawing(scopes)
-        let owed = zip(interface.contracts, interface.assessments).filter { $0.1.requiresDoc }.map(\.0)
-        let findings = interface.assessments.reduce(0) { $0 + $1.findings.count }
+        let owed = zip(interface.contracts, assessments ?? []).filter { $0.1.requiresDoc }.map(\.0)
+        let findings = (assessments ?? []).reduce(0) { $0 + $1.findings.count }
         func pressed(_ min: Int) -> String { String(min == Atlas.defaultMinimumRank) }
         var html = """
         <!doctype html>

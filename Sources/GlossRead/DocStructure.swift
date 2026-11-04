@@ -156,7 +156,7 @@ public struct DocStructure: Sendable, Equatable {
 
 extension StringProtocol {
     /// The text with leading and trailing whitespace removed.
-    var trimmed: String { String(self.drop(while: \.isWhitespace).reversed().drop(while: \.isWhitespace).reversed()) }
+    package var trimmed: String { String(self.drop(while: \.isWhitespace).reversed().drop(while: \.isWhitespace).reversed()) }
     /// `true` when the text is empty or only whitespace.
-    var isBlank: Bool { allSatisfy(\.isWhitespace) }
+    package var isBlank: Bool { allSatisfy(\.isWhitespace) }
 }

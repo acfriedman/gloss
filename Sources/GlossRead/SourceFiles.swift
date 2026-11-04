@@ -44,4 +44,18 @@ public enum SourceFiles {
         if components.contains(".build") || components.contains(".swiftpm") { return true }
         return !includeTests && components.contains { $0.hasSuffix("Tests") }
     }
+
+    /// Names the module a file belongs to by the SwiftPM layout: the directory right under `Sources`
+    /// or `Tests`. Outside that layout the file's own directory stands in, which is right for most
+    /// Xcode projects and harmless for the rest.
+    ///
+    /// - Parameter file: The path as given.
+    /// - Returns: The module name, or `Module` for a bare file name.
+    public static func module(of file: String) -> String {
+        let parts = file.split(separator: "/").map(String.init)
+        if let root = parts.lastIndex(where: { $0 == "Sources" || $0 == "Tests" }), root + 2 < parts.count {
+            return parts[root + 1]
+        }
+        return parts.count >= 2 ? parts[parts.count - 2] : "Module"
+    }
 }

@@ -1,4 +1,5 @@
-import GlossCore
+import GlossRead
+import GlossModel
 import SwiftUI
 
 /// The toolbar's Changes menu: the branches to compare with, where the head left each one, the last
@@ -119,7 +120,7 @@ struct RevisionFieldView: View {
     @Binding var text: String
     /// What an empty field means, or which revisions it takes.
     var placeholder: String
-    /// The repository's refs, as ``GlossCore/Revision/refs(in:)`` lists them.
+    /// The repository's refs, as ``GlossRead/Revision/refs(in:)`` lists them.
     var refs: [Revision.Ref]
     /// Whether the menu starts with the working tree, which empties the field.
     var offersWorkingTree = false

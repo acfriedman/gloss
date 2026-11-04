@@ -116,13 +116,16 @@ A protocol requirement inherits the protocol's doc, so gloss skips:
 
 | Target | Holds |
 | --- | --- |
-| `GlossCore` | reading, the contract model and its graph, the lint, diffs, and stories |
-| `GlossMap` | the model arranged for reading (`Atlas`): levels, focus, reaches, and their layout |
+| `GlossRead` | one pass over the sources: declarations, doc comments, links, and git revisions |
+| `GlossLint` | the house style: the rules, their findings, and which declarations owe a doc |
+| `GlossModel` | what the docs say: contracts, their graph, diffs, and stories |
+| `GlossMap` | the model arranged for reading (`Atlas`), with the lint's findings beside it |
 | `GlossPage` | the HTML page |
 | `GlossApp` | the macOS app |
 
-Each depends only on the ones above it, and the page and the app draw from the same `Atlas`, so they can't
-disagree.
+Each depends only on the ones above it. `GlossLint` and `GlossModel` both read from `GlossRead` and never
+from each other, so the model holds what the docs say whether or not the lint runs. The page and the app
+draw from the same `Atlas`, so they can't disagree.
 
 ## License
 

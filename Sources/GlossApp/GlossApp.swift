@@ -1,5 +1,6 @@
 import AppKit
-import GlossCore
+import GlossRead
+import GlossModel
 import SwiftUI
 
 /// The gloss window: every type listed on the left, the text of one type in the middle, and the

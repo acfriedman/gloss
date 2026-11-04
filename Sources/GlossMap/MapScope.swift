@@ -1,4 +1,5 @@
-import GlossCore
+import GlossRead
+import GlossModel
 
 /// One level the dependency map can be read at: every type, every module, one module, or one folder.
 ///

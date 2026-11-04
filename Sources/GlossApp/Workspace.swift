@@ -1,5 +1,7 @@
 import AppKit
-import GlossCore
+import GlossRead
+import GlossLint
+import GlossModel
 import GlossMap
 import Observation
 import SwiftUI
@@ -370,7 +372,7 @@ final class Workspace {
     /// How many drawings were asked for, so only the latest one asked for is shown.
     private var drawingsAsked = 0
 
-    /// The narrowest access shown, as ``GlossCore/Contract/rank(_:)``: 3 for public, 1 for internal, 0 for all.
+    /// The narrowest access shown, as ``GlossModel/Contract/rank(_:)``: 3 for public, 1 for internal, 0 for all.
     var minimumRank = Atlas.defaultMinimumRank { didSet { redraw() } }
     /// The list's search text, which keeps types whose name or a member's name contains it, ignoring case.
     var search = ""
@@ -477,8 +479,8 @@ final class Workspace {
         ///   - root: The folder.
         ///   - head: The revision to read, or `nil` for the files on disk.
         /// - Returns: The interface and its arrangement, with files named relative to `root`.
-        /// - Throws: ``GlossCore/SourceFiles/Missing`` when the folder is gone, or
-        ///   ``GlossCore/Revision/Failure`` when git cannot read the revision.
+        /// - Throws: ``GlossRead/SourceFiles/Missing`` when the folder is gone, or
+        ///   ``GlossRead/Revision/Failure`` when git cannot read the revision.
         static func read(_ root: URL, head: String?) throws -> Loaded {
             let scanned = scanned(root)
             let pairs: [(file: String, source: String)] = try Timing.measure("read files", head ?? "working tree") {
@@ -491,8 +493,9 @@ final class Workspace {
                     return (file.hasPrefix(prefix) ? String(file.dropFirst(prefix.count)) : file, source)
                 }
             }
-            let interface = Interface.build(sources: pairs)
-            let atlas = Atlas(interface)
+            let reading = Reading(sources: pairs)
+            let interface = Interface.build(reading)
+            let atlas = Atlas(interface, assessments: Linter.assess(reading))
             let scopes = atlas.mapScopes()
             let levels = atlas.levelsDrawing(scopes)
             let (branch, refs, current) = Timing.measure("read branches") {
@@ -1448,7 +1451,7 @@ final class Workspace {
     /// interface and how many findings it has.
     var subtitle: String {
         guard let interface else { return isLoading ? "Reading…" : "" }
-        let findings = interface.assessments.reduce(0) { $0 + $1.findings.count }
+        let findings = atlas?.totalFindings ?? 0
         let counts = "\(interface.contracts.count) declarations · \(findings) finding\(findings == 1 ? "" : "s")"
         return head.map { "At \($0) · " + counts } ?? counts
     }

@@ -1,3 +1,5 @@
+import GlossRead
+
 /// What one declaration says about a type it mentions: the source's own answer to why one type uses
 /// another.
 ///

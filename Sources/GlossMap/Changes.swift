@@ -1,4 +1,5 @@
-import GlossCore
+import GlossRead
+import GlossModel
 
 extension Atlas {
     /// How a box on the map differs from a base, folding what lies inside it into the box: a type new
@@ -77,7 +78,7 @@ extension Atlas {
     ///
     /// - Parameters:
     ///   - diff: How the interface differs from the base.
-    ///   - minimumRank: The narrowest access, as ``GlossCore/Contract/rank(_:)``, a type needs to be drawn.
+    ///   - minimumRank: The narrowest access, as ``GlossModel/Contract/rank(_:)``, a type needs to be drawn.
     ///   - budget: The most boxes to draw.
     ///   - includeUntouched: `true` to draw the neighbors the change does not reach as well, after those
     ///     it does.

@@ -1,5 +1,6 @@
 import Foundation
-import GlossCore
+import GlossRead
+import GlossModel
 import GlossMap
 
 /// The data the page renders each type's view from, embedded once as compact JSON.

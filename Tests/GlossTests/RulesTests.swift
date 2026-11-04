@@ -1,4 +1,6 @@
-@testable import GlossCore
+@testable import GlossRead
+@testable import GlossLint
+@testable import GlossModel
 import XCTest
 
 /// Pins each rule against a literal doc comment, so a message or threshold change is a visible diff.

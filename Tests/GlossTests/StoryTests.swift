@@ -1,4 +1,6 @@
-@testable import GlossCore
+@testable import GlossRead
+@testable import GlossLint
+@testable import GlossModel
 import XCTest
 
 /// Pins how a change's story is read, and how its links are matched to the changes they explain.

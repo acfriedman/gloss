@@ -1,4 +1,5 @@
-import GlossCore
+import GlossRead
+import GlossModel
 import Foundation
 
 /// What `gloss story` checks: that the branch's story, at `.gloss/changes/<branch>.md`, explains every

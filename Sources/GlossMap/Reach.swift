@@ -1,4 +1,5 @@
-import GlossCore
+import GlossRead
+import GlossModel
 
 /// Which way a reach follows dependencies from its root.
 public enum ReachDirection: Sendable, Equatable {
@@ -88,7 +89,7 @@ extension Atlas {
     ///   - direction: Toward what the type depends on, toward what uses it, or both.
     ///   - depth: The steps to draw on each side, at least 1; `nil` draws the most whole steps that fit
     ///     `budget`.
-    ///   - minimumRank: The narrowest access, as ``GlossCore/Contract/rank(_:)``, a type needs to be
+    ///   - minimumRank: The narrowest access, as ``GlossModel/Contract/rank(_:)``, a type needs to be
     ///     followed and drawn.
     ///   - budget: The most boxes an automatic depth draws, the root included, and the most the first
     ///     step draws at any depth.

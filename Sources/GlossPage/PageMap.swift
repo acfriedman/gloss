@@ -1,5 +1,6 @@
 import Foundation
-import GlossCore
+import GlossRead
+import GlossModel
 import GlossMap
 
 /// The map on the page: one figure per level and variant, the level views in the details pane, and the

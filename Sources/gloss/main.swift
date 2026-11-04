@@ -1,4 +1,6 @@
-import GlossCore
+import GlossRead
+import GlossLint
+import GlossModel
 import GlossMap
 import GlossPage
 import Foundation
@@ -79,15 +81,20 @@ if benchMode {
 }
 
 if interfaceMode {
-    let interface = Interface.build(sources: sources)
+    let reading = Reading(sources: sources)
+    let interface = Interface.build(reading)
+    let assessments = Linter.assess(reading)
+    let export = Export(interface, assessments: assessments)
     let encoder = JSONEncoder()
     encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
     let title = options["--title"] ?? (FileManager.default.currentDirectoryPath as NSString).lastPathComponent
     var outputs: [(path: String, data: Data)] = []
-    if let path = options["--json"] { outputs.append((path, try encoder.encode(interface))) }
-    if let path = options["--html"] { outputs.append((path, Data(InterfacePage.render(interface, title: title).utf8))) }
+    if let path = options["--json"] { outputs.append((path, try encoder.encode(export))) }
+    if let path = options["--html"] {
+        outputs.append((path, Data(InterfacePage.render(interface, assessments: assessments, title: title).utf8)))
+    }
     if outputs.isEmpty {
-        FileHandle.standardOutput.write(try encoder.encode(interface))
+        FileHandle.standardOutput.write(try encoder.encode(export))
         FileHandle.standardOutput.write(Data("\n".utf8))
     }
     for output in outputs {
@@ -98,7 +105,7 @@ if interfaceMode {
             exit(73)
         }
     }
-    let findings = interface.assessments.reduce(0) { $0 + $1.findings.count }
+    let findings = assessments.reduce(0) { $0 + $1.findings.count }
     FileHandle.standardError.write(Data("\(interface.contracts.count) declarations, \(findings) findings in \(sources.count) files\n".utf8))
     exit(0)
 }

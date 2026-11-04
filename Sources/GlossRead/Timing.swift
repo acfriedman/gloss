@@ -160,7 +160,7 @@ extension Duration {
 ///   - transform: What to make of each one; it runs on several threads at once, so it must touch no
 ///     shared state it changes.
 /// - Returns: The results, in the elements' order.
-func concurrentMap<Element: Sendable, Result: Sendable>(_ elements: [Element], _ transform: @Sendable (Element) -> Result) -> [Result] {
+package func concurrentMap<Element: Sendable, Result: Sendable>(_ elements: [Element], _ transform: @Sendable (Element) -> Result) -> [Result] {
     let slots = Slots<Result>(count: elements.count)
     defer { slots.buffer.deallocate() }
     DispatchQueue.concurrentPerform(iterations: elements.count) { slots.buffer[$0] = transform(elements[$0]) }

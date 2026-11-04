@@ -1,4 +1,5 @@
-import GlossCore
+import GlossRead
+import GlossModel
 
 /// The interface's size and health at a glance: how much it declares and how much of that is public, how
 /// much of what must be documented is, and what the linter found, across the interface and module by

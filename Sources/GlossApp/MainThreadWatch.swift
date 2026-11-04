@@ -1,5 +1,6 @@
 import Foundation
-import GlossCore
+import GlossRead
+import GlossModel
 
 /// Notices when the main thread cannot respond, whatever kept it busy, a view's body included, and
 /// logs for how long as `main thread blocked`, so a choppy moment shows in the timing log beside the

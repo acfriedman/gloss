@@ -1,4 +1,5 @@
-import GlossCore
+import GlossRead
+import GlossModel
 
 /// One row of a module's outline: a source folder, or a type with the types nested in it.
 public struct OutlineItem: Sendable, Identifiable {

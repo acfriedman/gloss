@@ -1,3 +1,5 @@
+import GlossRead
+
 /// How an interface differs from a base it is compared against: the types, declarations, and
 /// dependencies added, removed, or changed.
 ///

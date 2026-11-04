@@ -1,3 +1,5 @@
+import GlossRead
+
 /// What one declaration promises: its signature as written, and the doc comment read as a contract.
 ///
 /// This is the record the interface view renders and the JSON export carries. It says nothing about
@@ -26,7 +28,7 @@ public struct Contract: Sendable, Equatable, Codable {
         public var text: String
     }
 
-    /// The module the declaration belongs to, named from its path by ``Interface/module(of:)``.
+    /// The module the declaration belongs to, named from its path by ``GlossRead/SourceFiles/module(of:)``.
     public var module: String
     /// The syntactic category, which decides which rules apply to the declaration.
     public var kind: Declaration.Kind

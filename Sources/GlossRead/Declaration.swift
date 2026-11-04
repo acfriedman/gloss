@@ -139,21 +139,6 @@ public struct Declaration: Sendable, Equatable {
         self.column = column
     }
 
-    /// Whether the harness demands a doc comment on this declaration at all.
-    ///
-    /// Private members, overrides, and exempt declarations are excused: the first are
-    /// implementation detail, the rest inherit the documented contract of what they implement or,
-    /// for a memberwise initializer, of the properties they set.
-    public var requiresDoc: Bool {
-        guard exemption == nil else { return false }
-        switch kind {
-        case .function, .initializer, .subscript, .type, .property, .enumCase:
-            return !isPrivate && !isOverride
-        case .other:
-            return false
-        }
-    }
-
     /// The signature as the harness names it: the base name followed by the argument labels, each
     /// with its colon, in parentheses. Labels are what tell two initializers of one type apart, so this
     /// is the key the known-requirement list is matched on.

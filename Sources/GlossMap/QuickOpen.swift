@@ -1,4 +1,5 @@
-import GlossCore
+import GlossRead
+import GlossModel
 
 /// One type found by a few typed letters, with where the letters landed in its name.
 public struct QuickOpenMatch: Sendable, Equatable {

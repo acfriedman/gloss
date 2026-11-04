@@ -1,31 +1,36 @@
-import GlossCore
+import GlossRead
+import GlossLint
+import GlossModel
 
 /// The interface arranged for reading: nodes, the contracts each one shows, and lookups between them.
 ///
 /// Every front end reads the same arrangement, so the page and the app never decide differently which
 /// types are a module's entry points, how nested types fold into their roots, or what a map level draws.
 public struct Atlas: Sendable {
-    /// A contract with the linter's assessment of it. The model and the lint meet here, in the view,
-    /// and nowhere earlier; a contract's own fields read through as the reviewed value's.
+    /// A contract with the linter's assessment of it, when there is one. The model and the lint meet here,
+    /// in the view, and nowhere earlier; a contract's own fields read through as the reviewed value's.
     @dynamicMemberLookup
     public struct Reviewed: Sendable {
         /// The declaration as read: its signature and its doc comment, before any rule judges it.
         public var contract: Contract
         /// The linter's verdict on the same declaration: whether it owes a doc, why it is excused, and
-        /// what the rules found.
-        public var assessment: Assessment
+        /// what the rules found; `nil` when the interface was arranged without the lint.
+        public var assessment: Assessment?
 
         /// Reads a contract field through the reviewed value, so view code reads both halves alike.
         ///
         /// - Parameter path: A field of the contract.
         /// - Returns: The contract's value for it.
         public subscript<Value>(dynamicMember path: KeyPath<Contract, Value>) -> Value { contract[keyPath: path] }
-        /// The rule findings on the declaration, in source order; empty when its doc passes.
-        public var findings: [Assessment.Finding] { assessment.findings }
-        /// `true` when the harness demands a doc comment here, so a missing one shows as a gap.
-        public var requiresDoc: Bool { assessment.requiresDoc }
-        /// Why the harness excuses the declaration, in words a reader can act on, or `nil` when it does not.
-        public var exemption: String? { assessment.exemption }
+        /// The rule findings on the declaration, in source order; empty when its doc passes or nothing
+        /// linted it.
+        public var findings: [Assessment.Finding] { assessment?.findings ?? [] }
+        /// `true` when the harness demands a doc comment here, so a missing one shows as a gap; `false`
+        /// when nothing linted it, since only the house style owes docs.
+        public var requiresDoc: Bool { assessment?.requiresDoc ?? false }
+        /// Why the harness excuses the declaration, in words a reader can act on, or `nil` when it does not
+        /// or nothing linted it.
+        public var exemption: String? { assessment?.exemption }
     }
 
     /// The contracts one node shows: the type's own declaration, if scanned, and its members.
@@ -47,7 +52,7 @@ public struct Atlas: Sendable {
         public var from: String
         /// The id of the root node it depends on, never the same as ``from``.
         public var to: String
-        /// The roles of every edge folded into it, each once, in ``GlossCore/Mention/Role`` order; never
+        /// The roles of every edge folded into it, each once, in ``GlossRead/Mention/Role`` order; never
         /// empty, and only `body` means implementation.
         public var roles: [Mention.Role]
     }
@@ -64,6 +69,9 @@ public struct Atlas: Sendable {
     public private(set) var modules: [String] = []
     /// The ids of the nodes that are no type's nested type, which the map draws as boxes.
     public private(set) var rootIDs: [String] = []
+    /// The findings on every contract, file scope included; zero when the interface was arranged without
+    /// the lint.
+    public private(set) var totalFindings = 0
     /// Each module's color, as a slot below ``moduleColorCount`` that every front end maps to its own
     /// palette; see ``colorSlots(for:)``.
     public private(set) var moduleColors: [String: Int] = [:]
@@ -80,10 +88,17 @@ public struct Atlas: Sendable {
     private var rolledWithBody: [Rolled] = []
     private var rolledSignature: [Rolled] = []
 
-    /// Indexes the interface by node.
+    /// Indexes the interface by node, with the lint's findings beside its contracts when they are given.
     ///
-    /// - Parameter interface: The interface to arrange.
-    public init(_ interface: Interface) {
+    /// - Parameters:
+    ///   - interface: The interface to arrange.
+    ///   - assessments: One assessment per contract, at the same index, as ``GlossLint/Linter/assess(_:)``
+    ///     makes them from the reading the interface was built from; `nil` arranges the interface alone.
+    ///
+    /// The contracts come from what the docs say, so an interface arranged without the lint reads the same;
+    /// it only shows no findings and owes no docs.
+    public init(_ interface: Interface, assessments: [Assessment]? = nil) {
+        precondition(assessments.map { $0.count == interface.contracts.count } ?? true, "one assessment per contract")
         let phase = Timing.begin("arrange")
         nodes = interface.graph.nodes
         edges = interface.graph.edges
@@ -93,9 +108,10 @@ public struct Atlas: Sendable {
             if seenModules.insert(node.module).inserted { modules.append(node.module) }
             if node.root == node.id { rootIDs.append(node.id) }
         }
-        for (contract, assessment) in zip(interface.contracts, interface.assessments) {
+        for (index, contract) in interface.contracts.enumerated() {
             let id = Graph.id(contract.module, Graph.key(of: contract))
-            let reviewed = Reviewed(contract: contract, assessment: assessment)
+            let reviewed = Reviewed(contract: contract, assessment: assessments?[index])
+            totalFindings += reviewed.findings.count
             if contract.opensScope {
                 groups[id, default: Group()].head = reviewed
             } else {
@@ -154,7 +170,7 @@ public struct Atlas: Sendable {
         return slots
     }
 
-    /// The access level a view opens on, as ``GlossCore/Contract/rank(_:)``: internal, so every
+    /// The access level a view opens on, as ``GlossModel/Contract/rank(_:)``: internal, so every
     /// module's own types show, an app's included, whose types are never public.
     public static let defaultMinimumRank = 1
 
@@ -220,7 +236,7 @@ public struct Atlas: Sendable {
     /// The widest access among a node and its members, which decides whether an access filter shows it.
     ///
     /// - Parameter node: A node.
-    /// - Returns: A rank from ``GlossCore/Contract/rank(_:)``; file scope counts as public, since it is
+    /// - Returns: A rank from ``GlossModel/Contract/rank(_:)``; file scope counts as public, since it is
     ///   an entry point.
     public func rank(of node: Graph.Node) -> Int {
         ranks[node.id] ?? rankUncached(of: node)

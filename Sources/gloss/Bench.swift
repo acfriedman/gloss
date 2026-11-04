@@ -1,9 +1,11 @@
-import GlossCore
+import GlossRead
+import GlossLint
+import GlossModel
 import GlossMap
 import Foundation
 
 /// What `gloss bench` times: the work the app does for a package, from reading it to drawing every map
-/// level and the pages of its busiest types, each phase measured with ``GlossCore/Timing``, so a slow
+/// level and the pages of its busiest types, each phase measured with ``GlossRead/Timing``, so a slow
 /// phase shows at a glance and a change that slows one shows against an earlier run.
 enum Bench {
     /// How many of the most connected types have their focus and page work timed.
@@ -21,8 +23,9 @@ enum Bench {
         Timing.record {
             // The calls that can be slow time themselves; only the steps made of several calls are
             // measured here.
-            let interface = Interface.build(sources: sources)
-            let atlas = Atlas(interface)
+            let reading = Reading(sources: sources)
+            let interface = Interface.build(reading)
+            let atlas = Atlas(interface, assessments: Linter.assess(reading))
             let scopes = atlas.mapScopes()
             _ = atlas.levelsDrawing(scopes)
             for scope in scopes {

@@ -1,6 +1,9 @@
-/// Checks doc comments against ``Rules``, over the declarations ``DeclarationReader`` reads.
+import GlossRead
+
+/// Checks doc comments against ``Rules``, over the declarations ``GlossRead/DeclarationReader`` reads.
 ///
-/// Linting is one consumer of a reading, and the contract model is another; neither knows the other.
+/// Linting is one consumer of a ``GlossRead/Reading``, and the contract model is another; neither knows
+/// the other.
 public enum Linter {
     /// Lints the source text of one file on its own, without the rules that need every file, such as
     /// ``Rule/deadLink``.
@@ -20,11 +23,21 @@ public enum Linter {
     /// - Parameter sources: Each file's path, as it should be reported, and its contents.
     /// - Returns: Violations, file by file in the order given, each file's in source order.
     public static func check(sources: [(file: String, source: String)]) -> [Diagnostic] {
-        let readings = sources.map { (file: $0.file, entries: DeclarationReader.read(source: $0.source, file: $0.file)) }
-        let index = SymbolIndex(readings)
-        return readings.flatMap { reading in
-            reading.entries.flatMap { Rules.check($0.declaration, doc: $0.doc) + deadLinks($0, index: index) }
+        let reading = Reading(sources: sources)
+        return reading.files.flatMap { file in
+            file.entries.flatMap { Rules.check($0.declaration, doc: $0.doc) + deadLinks($0, index: reading.index) }
                 .sorted(by: inSourceOrder)
+        }
+    }
+
+    /// Assesses every declaration of sources already read, links into every file included.
+    ///
+    /// - Parameter reading: The sources, read once.
+    /// - Returns: One assessment per declaration, in file order and then source order, the order the
+    ///   contract model keeps its contracts in.
+    public static func assess(_ reading: Reading) -> [Assessment] {
+        Timing.measure("lint", "\(reading.files.count) files") {
+            concurrentMap(reading.files) { file in file.entries.map { assess($0, index: reading.index) } }.flatMap { $0 }
         }
     }
 

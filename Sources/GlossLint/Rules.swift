@@ -1,3 +1,5 @@
+import GlossRead
+
 /// The rule set, applied to one declaration and its doc comment.
 ///
 /// Every check is a pure function of (`Declaration`, `DocComment`) so the harness can be pinned by
@@ -300,6 +302,21 @@ public enum Rules {
 }
 
 extension Declaration {
+    /// Whether the harness demands a doc comment on this declaration at all.
+    ///
+    /// Private members, overrides, and exempt declarations are excused: the first are
+    /// implementation detail, the rest inherit the documented contract of what they implement or,
+    /// for a memberwise initializer, of the properties they set.
+    public var requiresDoc: Bool {
+        guard exemption == nil else { return false }
+        switch kind {
+        case .function, .initializer, .subscript, .type, .property, .enumCase:
+            return !isPrivate && !isOverride
+        case .other:
+            return false
+        }
+    }
+
     /// The line a missing markup entry should be reported on: after the last callout, else the summary.
     ///
     /// - Parameter structure: The parsed comment.
@@ -315,20 +332,6 @@ extension Declaration {
 /// capitalized type path ending in a lowercase member. A bare type name is left alone, since the
 /// same spelling names Foundation's types as often as the module's own.
 public enum SymbolReference {
-    /// Types whose members no module-local DocC link can resolve, so a dotted path under them is
-    /// plain code. Extend it when a new framework's symbols start appearing in docs.
-    public static let externalPrefixes: Set<String> = [
-        "Swift", "Foundation", "Dispatch", "Combine", "XCTest", "Testing", "CoreData", "SwiftUI", "UIKit",
-        "AppKit", "NotificationCenter", "DispatchQueue", "DispatchGroup", "DispatchTime", "Thread",
-        "ProcessInfo", "FileManager", "URLSession", "URLProtocol", "URLRequest", "URL", "JSONEncoder",
-        "JSONDecoder", "Date", "Data", "Task", "MainActor", "NSObject", "Bundle", "RunLoop", "Timer",
-        "OperationQueue", "UserDefaults", "NSLock", "NSManagedObjectContext", "NSPersistentContainer",
-        "String", "Array", "Dictionary", "Set", "Optional", "Result", "Int", "Double", "Bool", "Character",
-        "StaticString", "Substring", "Float", "UInt", "UInt8", "Int8", "Int32", "UInt32", "Int64", "UInt64", "Never",
-        "Error", "Sequence", "Collection", "Equatable", "Hashable", "Comparable", "Codable", "Sendable", "Range",
-        "ClosedRange", "CustomStringConvertible"
-    ]
-
     /// Extensions that make a dotted span a file name rather than a type path.
     public static let fileExtensions: Set<String> = ["swift", "json", "md", "yml", "yaml", "gz", "txt", "plist", "html", "xcodeproj", "h", "m"]
 
@@ -349,7 +352,7 @@ public enum SymbolReference {
         let segments = span.split(separator: ".").map(String.init)
         if let last = segments.last, fileExtensions.contains(last) { return false }
         if let base = span.split(separator: "(").first, keywordForms.contains(String(base)) { return false }
-        return !externalPrefixes.contains(segments[0])
+        return !SymbolIndex.externalPrefixes.contains(segments[0])
     }
 
     /// Whether a span is a call with argument labels: capitalized type segments and dots, if any, then

@@ -26,8 +26,8 @@ public struct Mention: Sendable, Equatable, Codable {
     public var name: String
     /// Where the name appears, which says how the declaration depends on it.
     public var role: Role
-    /// The id of the graph node the name refers to, set by ``Graph/build(_:)``, or `nil` when no scanned
-    /// source declares it.
+    /// The id of the graph node the name refers to, set when the contract model builds its graph, or `nil`
+    /// when no scanned source declares it.
     public var resolved: String?
     /// The internal names of the parameters whose types mention the name, in signature order; empty for
     /// every role but `parameter`.
@@ -36,7 +36,7 @@ public struct Mention: Sendable, Equatable, Codable {
     /// `workspace.select(…)` or `colorSlots` in `Atlas.colorSlots(…)`; empty when it reaches none.
     public var members: [String] = []
     /// The variable a body reaches the type through, as `workspace` in `workspace.select(…)`, or `nil` for
-    /// a type named outright. ``name`` stays empty until ``Graph/build(_:)`` finds the variable's type
+    /// a type named outright. ``name`` stays empty until the contract model's graph finds the variable's type
     /// among the declaration's parameters and its type's properties.
     public var variable: String?
 }
@@ -44,7 +44,7 @@ public struct Mention: Sendable, Equatable, Codable {
 /// Collects the type names a declaration mentions, tagged with where each appears.
 ///
 /// Only capitalized names are collected, which is how Swift spells types. Whether a name is one of the
-/// scanned types is decided later, against every declaration, by ``Graph/build(_:)``.
+/// scanned types is decided later, against every declaration, when the contract model builds its graph.
 enum Mentions {
     /// Reads every type mention of one declaration: its signature by role, then its body.
     ///

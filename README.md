@@ -108,7 +108,10 @@ row it has nothing on. The focused type anchors one vertical axis through every 
 in the middle of its band, and the other lanes go around it in organ-pipe order, the ones with the
 most edges to it nearest, each on the side that keeps the figure narrowest. Each map opens centered
 and shrunk to fit the pane, never past its natural size; a pinch or the magnifier in its corner
-zooms, clicking the percentage fits it again, and a new level or focus fits again. Hovering a box on
+zooms, clicking the percentage fits it again, and a new level or focus fits again. With a mouse, the
+wheel zooms toward the pointer, keeping the point under it in place, and a drag anywhere on the map
+pans it, a click without moving still selecting; a trackpad keeps two fingers to pan, since its
+scrolling is smooth where a wheel's comes in steps. Hovering a box on
 the map or a row in the list previews it in the details pane over the selection, and lights it on
 the map; moving into the pane keeps the preview to read, and moving away returns to the selection.
 In a focus, the preview is a page of its own about the box's tie to the focused type: its

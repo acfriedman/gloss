@@ -12,6 +12,8 @@ struct MapPaneView: View {
     @State private var zoom: CGFloat?
     /// The magnification the pinch in progress started from.
     @State private var pinchStart: CGFloat?
+    @State private var scroller = MapScroller()
+    @State private var dragged: CGSize?
 
     /// The margin kept around a fitted figure.
     static let inset: CGFloat = 24
@@ -88,8 +90,31 @@ struct MapPaneView: View {
                         // a box's own click comes first.
                         .contentShape(Rectangle())
                         .onTapGesture { workspace.clickedBackground() }
+                        .background(MapScrollReader(scroller: scroller))
+                        // A drag, on the ground or a box, pans the map under the pointer; a click without
+                        // moving still selects.
+                        .simultaneousGesture(
+                            DragGesture(minimumDistance: 4)
+                                .onChanged { drag in
+                                    if dragged == nil { NSCursor.closedHand.push() }
+                                    let last = dragged ?? .zero
+                                    scroller.pan(by: CGSize(width: drag.translation.width - last.width,
+                                                            height: drag.translation.height - last.height))
+                                    dragged = drag.translation
+                                }
+                                .onEnded { _ in
+                                    if dragged != nil { NSCursor.pop() }
+                                    dragged = nil
+                                }
+                        )
                 }
                 .defaultScrollAnchor(.center)
+                .onAppear {
+                    scroller.zoom = { zoom = $0 }
+                    scroller.start()
+                }
+                .onChange(of: scale, initial: true) { scroller.scale = scale }
+                .onDisappear { scroller.stop() }
                 .gesture(
                     MagnifyGesture()
                         .onChanged { value in

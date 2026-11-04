@@ -290,6 +290,25 @@ final class Workspace {
     private(set) var comparisonProblem: String?
     /// The commits that made each change in ``diff``, or `nil` with no diff or when git cannot say.
     private(set) var changeCommits: ChangeCommits?
+    /// The story of the compared branch, as its `.gloss/changes/<branch>.md` tells it, or `nil` with none.
+    private(set) var story: ChangeStory?
+    /// Which changes each of the story's themes explains, and which none does; `nil` with no story.
+    private(set) var storyCoverage: StoryCoverage?
+    /// Where the compared branch's story is or would be written; `nil` outside git or with no branch.
+    private(set) var storyFile: URL?
+    /// The boxes the map lights together while a theme or a commit on the changes page is hovered.
+    var litGroup: Set<String> = []
+
+    /// What comparing reads off the main thread: the base, the diff, and what explains it.
+    private struct Compared: Sendable {
+        var commit: String
+        var base: Interface
+        var diff: InterfaceDiff
+        var commits: ChangeCommits?
+        var story: ChangeStory?
+        var coverage: StoryCoverage?
+        var storyFile: URL?
+    }
     /// The branch a pull request from here would go into, `main` or else `master`, or `nil` outside git.
     private(set) var defaultBranch: String?
     /// The revision read in place of the files on disk, so the whole window shows it, or `nil` for the
@@ -564,9 +583,10 @@ final class Workspace {
         }
         let comparison = self.comparison
         let headRevision = self.head
+        let branch = self.head ?? currentBranch
         let known = bases
         Task {
-            let result = await Task.detached(priority: .utility) { () -> Result<(commit: String, base: Interface, diff: InterfaceDiff, commits: ChangeCommits?), Error> in
+            let result = await Task.detached(priority: .utility) { () -> Result<Compared, Error> in
                 Result {
                     let scanned = Loaded.scanned(root).path
                     let commit = switch comparison {
@@ -577,7 +597,17 @@ final class Workspace {
                     let base = try known[commit]
                         ?? Interface.build(sources: Revision.sources(at: commit, under: scanned, relativeTo: root.path, includeTests: false))
                     let diff = InterfaceDiff(base: base, head: head)
-                    return (commit, base, diff, try? ChangeCommits.read(diff, base: commit, head: headRevision, root: root.path))
+                    // The story is the working tree's for the branch checked out, or the head revision's own.
+                    let top = try? Revision.top(of: scanned)
+                    let path = branch.map(ChangeStory.path(forBranch:))
+                    let file = top.flatMap { top in path.map { URL(fileURLWithPath: top).appendingPathComponent($0) } }
+                    let text: String? = if let headRevision, let path { try? Revision.file(path, at: headRevision, in: scanned) }
+                        else { file.flatMap { try? String(contentsOf: $0, encoding: .utf8) } }
+                    let story = text.map(ChangeStory.parse)
+                    return Compared(commit: commit, base: base, diff: diff,
+                                    commits: try? ChangeCommits.read(diff, base: commit, head: headRevision, root: root.path),
+                                    story: story, coverage: story.map { StoryCoverage(story: $0, diff: diff, head: head, base: base) },
+                                    storyFile: file)
                 }
             }.value
             guard root == self.root, comparison == self.comparison, head == self.interface else { return }
@@ -586,15 +616,32 @@ final class Workspace {
                 bases[compared.commit] = compared.base
                 diff = compared.diff
                 changeCommits = compared.commits
+                story = compared.story
+                storyCoverage = compared.coverage
+                storyFile = compared.storyFile
                 comparisonProblem = nil
             case .failure(let error):
                 diff = nil
                 changeCommits = nil
+                story = nil
+                storyCoverage = nil
                 comparisonProblem = (error as? Revision.Failure)?.message ?? error.localizedDescription
             }
             // Every level's boxes carry marks, so every level draws again.
             redraw()
         }
+    }
+
+    /// Writes a first draft of the compared branch's story, seeded from its commits, unless it has one,
+    /// and opens it to edit; reading the folder again, with Command-R, shows what it says.
+    func writeStory() {
+        guard let storyFile, let diff else { return }
+        if !FileManager.default.fileExists(atPath: storyFile.path) {
+            try? FileManager.default.createDirectory(at: storyFile.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try? ChangeStory.draft(for: diff, commits: changeCommits).write(to: storyFile, atomically: true, encoding: .utf8)
+        }
+        NSWorkspace.shared.open(storyFile)
+        reload()
     }
 
     /// The marks on the map's boxes: how each box differs from the base, by box id; empty with no

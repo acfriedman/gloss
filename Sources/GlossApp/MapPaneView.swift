@@ -80,7 +80,7 @@ struct MapPaneView: View {
                 ScrollView([.horizontal, .vertical]) {
                     MapCanvasView(layout: drawing.layout, lit: workspace.litID, trail: workspace.litTrail, anchor: workspace.anchorID,
                                   scale: scale, colors: workspace.atlas?.moduleColors ?? [:],
-                                  marks: workspace.boxMarks, edgeMarks: workspace.edgeMarks)
+                                  marks: workspace.boxMarks, edgeMarks: workspace.edgeMarks, group: workspace.litGroup)
                         .padding(Self.inset)
                         .frame(minWidth: proxy.size.width, minHeight: proxy.size.height)
                 }
@@ -233,13 +233,21 @@ struct MapCanvasView: View {
     var marks: [String: InterfaceDiff.Change] = [:]
     /// How each drawn dependency differs from the base, keyed by its ends joined with a tab.
     var edgeMarks: [String: InterfaceDiff.Change] = [:]
+    /// Boxes lit together, such as the types a story's theme is about, in place of the lit box; empty
+    /// lights them by ``lit`` alone.
+    var group: Set<String> = []
 
     var body: some View {
         let trailed = Set(trail.map { [$0.from, $0.to] })
-        let lights = { (link: GraphLayout.Link) in link.from == lit || link.to == lit || trailed.contains([link.from, link.to]) }
+        let isGrouping = layout.boxes.contains { group.contains($0.item.id) }
+        // Lit as a group, the boxes are the current ones and only the edges between them light.
+        let lights = { (link: GraphLayout.Link) in
+            isGrouping ? group.contains(link.from) && group.contains(link.to)
+                : link.from == lit || link.to == lit || trailed.contains([link.from, link.to])
+        }
         let litEdges = layout.curves.filter { lights($0.link) }
-        let near = Set(litEdges.flatMap { [$0.link.from, $0.link.to] })
-        let isLighting = lit != nil && layout.boxes.contains { $0.item.id == lit }
+        let near = isGrouping ? group : Set(litEdges.flatMap { [$0.link.from, $0.link.to] })
+        let isLighting = isGrouping || (lit != nil && layout.boxes.contains { $0.item.id == lit })
         let weight = min(1.5, max(0.6, scale))
         ZStack(alignment: .topLeading) {
             Canvas { context, _ in
@@ -274,8 +282,9 @@ struct MapCanvasView: View {
             }
             .frame(width: layout.width * scale, height: layout.height * scale)
             ForEach(Array(layout.boxes.enumerated()), id: \.offset) { _, box in
-                MapBoxView(box: box, scale: scale, isCurrent: (isLighting && box.item.id == lit) || box.item.id == anchor,
-                       isDimmed: isLighting && !near.contains(box.item.id) && box.item.id != lit,
+                MapBoxView(box: box, scale: scale,
+                       isCurrent: isGrouping ? group.contains(box.item.id) : (isLighting && box.item.id == lit) || box.item.id == anchor,
+                       isDimmed: isLighting && !near.contains(box.item.id) && (isGrouping || box.item.id != lit),
                        tint: Self.module(of: box.item.unit).flatMap { colors[$0] }.map(Palette.moduleTint),
                        mark: marks[box.item.id])
                     .offset(x: box.x * scale, y: box.y * scale)

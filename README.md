@@ -242,6 +242,21 @@ uses, or a member it uses whose signature changed or that is gone, naming its de
 it, with the signature before and now. An untouched neighbor's page says that no change reaches it.
 The bar over a selected type's page trades it for the whole page and back.
 
+The Changes page leads with why. A branch's story, `.gloss/changes/<branch>.md` at the repository's
+top (`ChangeStory`), is a `#` headline, a summary, and `##` themes, each prose that links the types
+and members it is about as DocC links between double backticks, such as ``` ``Cart/total()`` ```. The
+page opens on the headline and summary, then each theme with the changed types it explains, which
+light together on the map while the pointer is on the theme; each type's page opens on the themes
+that explain it. `StoryCoverage` resolves the links against both sides of the diff: a link to a type
+explains it and its nested types, a member link names the member, and a link may start with its
+module. Types whose interface changed that no theme links are listed as not in the story, and links
+that name nothing are listed too; a type changed only inside its bodies needs no theme. Without a
+story, the page lists the commits as its outline, each with the types it changed, and Draft the Story
+from the Commits writes a first draft, a theme per commit, and opens it. The story is committed with
+the branch, so it is reviewed with the change and stays as its record; `pr:` in its front matter names
+the pull request once there is one. `gloss story --base main Sources` prints what the branch's story
+covers and fails while a type it should explain has no theme, for CI.
+
 Each changed type's page says why in its authors' words (`ChangeCommits`, in `GlossCore`): the
 messages of the commits that made its changes, oldest first, each subject over its body's first
 paragraph, unfolding to the rest. Every changed declaration lists its own commits by short hash and

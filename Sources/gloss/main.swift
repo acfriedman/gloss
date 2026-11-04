@@ -5,7 +5,8 @@ import Foundation
 
 /// Command-line entry: `gloss [--include-tests] [--summary] <path>...` lints;
 /// `gloss interface [--include-tests] [--json <file>] [--html <file>] [--title <name>] <path>...` exports;
-/// `gloss bench [--include-tests] [--base <revision>] <path>...` times what the app does with the paths.
+/// `gloss bench [--include-tests] [--base <revision>] <path>...` times what the app does with the paths;
+/// `gloss story [--include-tests] [--base <revision>] <path>...` checks the branch's story covers its change.
 ///
 /// Paths may be files or directories; directories are walked for `.swift` files, skipping `.build`
 /// and, unless `--include-tests` is given, any directory whose name ends in `Tests`. The interface
@@ -13,7 +14,8 @@ import Foundation
 var arguments = Array(CommandLine.arguments.dropFirst())
 let interfaceMode = arguments.first == "interface"
 let benchMode = arguments.first == "bench"
-if interfaceMode || benchMode { arguments.removeFirst() }
+let storyMode = arguments.first == "story"
+if interfaceMode || benchMode || storyMode { arguments.removeFirst() }
 let includeTests = arguments.contains("--include-tests")
 let summaryOnly = arguments.contains("--summary")
 var options: [String: String] = [:]
@@ -23,7 +25,7 @@ while index < arguments.count {
     let argument = arguments[index]
     index += 1
     guard argument.hasPrefix("--") else { paths.append(argument); continue }
-    if (interfaceMode && ["--json", "--html", "--title"].contains(argument)) || (benchMode && argument == "--base") {
+    if (interfaceMode && ["--json", "--html", "--title"].contains(argument)) || ((benchMode || storyMode) && argument == "--base") {
         guard index < arguments.count else {
             FileHandle.standardError.write(Data("gloss: \(argument) needs a value\n".utf8))
             exit(64)
@@ -38,6 +40,7 @@ guard !paths.isEmpty else {
     usage: gloss [--include-tests] [--summary] <path>...
            gloss interface [--include-tests] [--json <file>] [--html <file>] [--title <name>] <path>...
            gloss bench [--include-tests] [--base <revision>] <path>...
+           gloss story [--include-tests] [--base <revision>] <path>...
 
     """.utf8))
     exit(64)
@@ -63,6 +66,10 @@ let (sources, readSamples) = Timing.record {
             (try? String(contentsOfFile: file, encoding: .utf8)).map { (file, $0) }
         }
     }
+}
+
+if storyMode {
+    exit(StoryCheck.run(sources: sources, base: options["--base"] ?? "main", in: paths[0], includeTests: includeTests))
 }
 
 if benchMode {

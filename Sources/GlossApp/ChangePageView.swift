@@ -51,6 +51,7 @@ struct ChangePageView: View {
     var body: some View {
         TypeHeaderView(atlas: atlas, node: node)
         if let change = diff.change(ofNode: node.id) {
+            StoryThemesView(id: node.id)
             WhyChangedView(change: change)
             DeclarationChangesView(atlas: atlas, change: change)
             let nested = diff.nodes.filter { $0.node.id.hasPrefix(node.id + ".") }

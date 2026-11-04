@@ -95,6 +95,28 @@ public enum Revision {
         try text(git(["rev-parse", "--verify", "--quiet", revision + "^{commit}"], in: directory))
     }
 
+    /// The top of the repository a directory is in, where the repository's own files, such as
+    /// `.gloss/`, live.
+    ///
+    /// - Parameter directory: A directory inside the repository.
+    /// - Returns: The top directory's path.
+    /// - Throws: ``Failure`` when git cannot run or the directory is not in a repository.
+    public static func top(of directory: String) throws -> String {
+        try text(git(["rev-parse", "--show-toplevel"], in: directory))
+    }
+
+    /// A file's text as a revision holds it.
+    ///
+    /// - Parameters:
+    ///   - path: The file's path from the repository's top.
+    ///   - revision: A branch, a tag, `HEAD`, or a hash.
+    ///   - directory: A directory inside the repository.
+    /// - Returns: The text.
+    /// - Throws: ``Failure`` when git cannot run, or the revision has no such file.
+    public static func file(_ path: String, at revision: String, in directory: String) throws -> String {
+        String(decoding: try git(["show", "\(revision):\(path)"], in: directory), as: UTF8.self)
+    }
+
     /// The branches, the remotes' branches, and the tags of a repository, those committed to most
     /// recently first, without each remote's pointer to its default branch.
     ///

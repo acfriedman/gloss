@@ -162,13 +162,12 @@ struct OverviewView: View {
     }
 }
 
-/// What changed since the comparison's base, module by module: each type new, gone, changed, or
-/// changed only inside, with the declarations that changed and how; then the dependencies of types
-/// that were already there that entered or left the interface, and those dropped from bodies.
+/// What changed since the comparison's base, leading with why: the branch's story, its headline and
+/// themes, or without one the commits, each with the types it changed; then every change.
 ///
-/// The dependencies that enter or leave the interface are the changes a reviewer most needs to see. A
-/// new type's dependencies are new with it, so they are not listed again, and a type changed only
-/// inside its bodies takes a quieter mark.
+/// Every change is listed module by module, each type new, gone, changed, or changed only inside, then
+/// the dependencies of types already there that entered or left the interface, the changes a reviewer
+/// most needs to see, and those dropped from bodies.
 struct ChangesView: View {
     @Environment(Workspace.self) private var workspace
     /// The arranged interface the rows read names and modules from.
@@ -182,42 +181,14 @@ struct ChangesView: View {
                         lede: diff.isEmpty ? "Nothing changed \(phrase)."
                             : "\(phrase.prefix(1).uppercased() + phrase.dropFirst()): \(count(.added)) new, \(count(.changed)) changed, "
                             + "\(count(.removed)) gone, \(count(.implementation)) changed only inside.")
-            let modules = atlas.modules + Set(diff.nodes.map(\.node.module)).subtracting(atlas.modules).sorted()
-            ForEach(modules, id: \.self) { module in
-                let changes = diff.nodes.filter { $0.node.module == module }
-                if !changes.isEmpty {
-                    VStack(alignment: .leading, spacing: 10) {
-                        HStack(spacing: 6) {
-                            ModuleDotView(module: module)
-                            EyebrowView(text: module)
-                        }
-                        ForEach(Array(changes.enumerated()), id: \.offset) { _, change in
-                            NodeChangeView(change: change, atlas: atlas)
-                        }
-                    }
+            // The story leads when there is one; without, the commits stand in for its themes.
+            if !diff.isEmpty {
+                if let story = workspace.story, let coverage = workspace.storyCoverage {
+                    StoryOverviewView(story: story, coverage: coverage, diff: diff, atlas: atlas)
+                } else {
+                    StoryPromptView(diff: diff, atlas: atlas)
                 }
-            }
-            let added = Set(diff.nodes.filter { $0.change == .added }.map(\.node.id))
-            let entering = diff.edges.filter { $0.entersInterface && !added.contains($0.from) }
-            let leaving = diff.edges.filter(\.leavesInterface)
-            if !entering.isEmpty || !leaving.isEmpty {
-                VStack(alignment: .leading, spacing: 8) {
-                    EyebrowView(text: "Interface dependencies of existing types")
-                    ForEach(Array((entering + leaving).enumerated()), id: \.offset) { _, edge in
-                        EdgeChangeView(edge: edge, atlas: atlas)
-                    }
-                }
-            }
-            // A dependency that lived only in bodies leaves the interface as it was, so it is listed on
-            // its own: between types still there, since a gone type's dependencies go with it.
-            let dropped = diff.edges.filter { $0.change == .removed && $0.before == [.body] && atlas.byID[$0.from] != nil && atlas.byID[$0.to] != nil }
-            if !dropped.isEmpty {
-                VStack(alignment: .leading, spacing: 8) {
-                    EyebrowView(text: "Dependencies dropped from bodies")
-                    ForEach(Array(dropped.enumerated()), id: \.offset) { _, edge in
-                        DependencyChangeView(edge: edge, atlas: atlas)
-                    }
-                }
+                EveryChangeView(diff: diff, atlas: atlas, startsOpen: workspace.story == nil)
             }
         } else {
             HeadingView(title: "Changes", lede: workspace.comparison == .off ? "Pick a base under Changes in the toolbar."

@@ -9,61 +9,57 @@ struct ListPaneView: View {
 
     var body: some View {
         @Bindable var workspace = workspace
+        // The list keeps its own selection: clicking a row opens it, and nothing the map or the details
+        // select moves the list. The blank page has nothing open, so nothing selected.
         let selection = Binding<Workspace.Selection?>(
-            // The blank page has nothing selected.
-            get: { workspace.isBlank ? nil : workspace.selection },
+            get: { workspace.isBlank ? nil : workspace.listSelection },
             set: { target in
                 guard let target else { return }
+                workspace.listSelection = target
                 // Command-click opens the row in a new tab and leaves this one where it is.
                 if NSEvent.modifierFlags.contains(.command) { workspace.openInNewTab(target) } else { workspace.select(target) }
             }
         )
         // Tags are the plain selection type: a List selects only rows whose tag type matches its
         // selection's value type exactly, so an optional tag would hover but never select.
-        ScrollViewReader { proxy in
-            List(selection: selection) {
-                Label("Overview", systemImage: "square.grid.2x2")
-                    .modifier(RowHover(target: .overview))
-                    .tag(Workspace.Selection.overview)
-                if workspace.comparison != .off {
-                    Label {
-                        HStack {
-                            Text("Changes")
-                            Spacer()
-                            if let diff = workspace.diff, !diff.isEmpty {
-                                Text("\(diff.nodes.count)").font(.caption.monospacedDigit()).foregroundStyle(.secondary)
-                            }
-                        }
-                    } icon: {
-                        Image(systemName: "plusminus")
-                    }
-                    .modifier(RowHover(target: .changes))
-                    .tag(Workspace.Selection.changes)
-                    .help("What changed \(workspace.comparisonPhrase), and the types one step around it")
-                }
-                if let atlas = workspace.atlas {
-                    ForEach(atlas.modules, id: \.self) { module in
-                        Section(isExpanded: workspace.expansion(ofModule: module)) {
-                            ForEach(workspace.outline(of: module)) { item in
-                                OutlineRowView(item: item, atlas: atlas)
-                            }
-                        } header: {
-                            Button { workspace.select(.module(module)) } label: {
-                                HStack(spacing: 6) {
-                                    ModuleDotView(module: module)
-                                    Text(module)
-                                }
-                            }
-                            .buttonStyle(.plain)
-                            .help("Show \(module) and draw its types")
-                            .onHover { $0 ? workspace.hoverBegan(.module(module)) : workspace.hoverEnded() }
+        List(selection: selection) {
+            Label("Overview", systemImage: "square.grid.2x2")
+                .modifier(RowHover(target: .overview))
+                .tag(Workspace.Selection.overview)
+            if workspace.comparison != .off {
+                Label {
+                    HStack {
+                        Text("Changes")
+                        Spacer()
+                        if let diff = workspace.diff, !diff.isEmpty {
+                            Text("\(diff.nodes.count)").font(.caption.monospacedDigit()).foregroundStyle(.secondary)
                         }
                     }
+                } icon: {
+                    Image(systemName: "plusminus")
                 }
+                .modifier(RowHover(target: .changes))
+                .tag(Workspace.Selection.changes)
+                .help("What changed \(workspace.comparisonPhrase), and the types one step around it")
             }
-            // Selecting from the map or a chip opens the rows around the type; this brings it into view.
-            .onChange(of: workspace.selection) { _, target in
-                proxy.scrollTo(target)
+            if let atlas = workspace.atlas {
+                ForEach(atlas.modules, id: \.self) { module in
+                    Section(isExpanded: workspace.expansion(ofModule: module)) {
+                        ForEach(workspace.outline(of: module)) { item in
+                            OutlineRowView(item: item, atlas: atlas)
+                        }
+                    } header: {
+                        Button { workspace.select(.module(module)) } label: {
+                            HStack(spacing: 6) {
+                                ModuleDotView(module: module)
+                                Text(module)
+                            }
+                        }
+                        .buttonStyle(.plain)
+                        .help("Show \(module) and draw its types")
+                        .onHover { $0 ? workspace.hoverBegan(.module(module)) : workspace.hoverEnded() }
+                    }
+                }
             }
         }
         .searchable(text: $workspace.search, placement: .sidebar, prompt: "Find a type or member")
@@ -111,7 +107,6 @@ struct OutlineRowView: View {
             TypeRowView(node: node, atlas: atlas)
                 .modifier(RowHover(target: .type(node.id)))
                 .tag(Workspace.Selection.type(node.id))
-                .id(Workspace.Selection.type(node.id))
         }
     }
 }
@@ -141,18 +136,18 @@ struct TypeRowView: View {
     }
 }
 
-/// A list row's hover: a subtle highlight while the pointer is on the row or while what it names is
-/// previewed from the map, and the preview itself.
+/// A list row's hover: a subtle highlight while the pointer is on the row, and the preview itself. The
+/// map's previews do not light the list, which follows only what is done in it.
 struct RowHover {
     @Environment(Workspace.self) private var workspace
     @State private var isHovered = false
-    /// What the row stands for, which hovering previews; the row also stays lit while the map previews it.
+    /// What the row stands for, which hovering previews.
     var target: Workspace.Selection
 }
 
 extension RowHover: ViewModifier {
     func body(content: Content) -> some View {
-        let lit = isHovered || workspace.preview == target
+        let lit = isHovered
         content
             .padding(.horizontal, 6)
             .padding(.vertical, 2)

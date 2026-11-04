@@ -486,6 +486,7 @@ final class Workspace {
         isBlank = true
         expanded = []
         openModules = []
+        listSelection = nil
         bases = [:]
         diff = nil
         comparisonProblem = nil
@@ -759,7 +760,6 @@ final class Workspace {
             selection = target
             inspected = nil
             showsFullPage = false
-            if case .type(let id) = target { reveal(id) }
             scopeID = scope(for: target)
             // A new type starts at the default depth; switching modes keeps the chosen one.
             if rerooted, reachDepth != nil { reachDepth = nil } else { redraw() }
@@ -921,7 +921,6 @@ final class Workspace {
         hiding?.cancel()
         preview = nil
         selection = place.selection
-        if case .type(let id) = place.selection { reveal(id) }
         scopeID = place.scopeID
         focusFrom = place.focusFrom
         tabs[current].reachDepth = place.reachDepth
@@ -971,7 +970,6 @@ final class Workspace {
         preview = nil
         hovered = nil
         currentTabID = id
-        if case .type(let node) = selection { reveal(node) }
         restore()
     }
 
@@ -1457,6 +1455,10 @@ final class Workspace {
     private var expanded: Set<String> = []
     /// The modules open in the list. Modules start closed, so the list opens as one row per module.
     private var openModules: Set<String> = []
+    /// The row the list shows selected: the last one clicked in it. The list opens what is clicked in
+    /// it, and nothing else moves it, so it stays where the reader left it while the map and the
+    /// details go elsewhere.
+    var listSelection: Selection?
 
     /// Whether the search or the findings filter is narrowing the list, which then opens every row
     /// that holds a match.
@@ -1532,15 +1534,6 @@ final class Workspace {
         }
         guard let outer = atlas.byID[parent], let inner = atlas.byID[row] else { return false }
         return atlas.isNested(inner, in: outer)
-    }
-
-    /// Opens the rows that hold a type, so selecting it from the map or a chip shows it in the list.
-    ///
-    /// - Parameter id: A node id.
-    private func reveal(_ id: String) {
-        guard let atlas, let node = atlas.byID[id] else { return }
-        openModules.insert(node.module)
-        expanded.formUnion(atlas.outlineAncestors(of: node))
     }
 
     /// Opens a declaration's file at its line in Xcode, or in the default editor without Xcode.

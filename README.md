@@ -81,8 +81,9 @@ open it in the map's focus, with only what uses it and what it uses. The list is
 module as its source folders hold it, at full depth, with nested types under the type that declares
 them. Modules, folders, and nested types all start closed, so the list opens as one row per module,
 and closing a row closes everything under it, so opening it again shows only what it holds directly;
-searching or filtering opens whatever holds a match, and selecting a type from the map or a chip opens
-the rows around it. In focus, a menu in the map header picks what to draw around the
+searching or filtering opens whatever holds a match. The list keeps its own selection, the row last
+clicked in it: clicking a row opens it, and nothing selected on the map, in the details, or with Open
+Quickly moves the list, opens its rows, or lights them. In focus, a menu in the map header picks what to draw around the
 type: Neighbors, what uses it above and what it depends on below; All below, everything it depends
 on; or All above, everything that uses it. All three are one reach (`Atlas.reach`) with a depth
 stepper. By default Neighbors draws depth 1 and the other two draw whole steps while they fit 30

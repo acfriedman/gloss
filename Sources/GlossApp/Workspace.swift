@@ -73,6 +73,8 @@ final class Workspace {
         var focusMode: FocusMode
         /// The steps a reach draws, or `nil` for the default.
         var reachDepth: Int?
+        /// The drawn types whose own next step a focus draws past its depth.
+        var expanded: Set<String>
         /// The narrowest access a type needs to be drawn.
         var minimumRank: Int
         /// The level a focus was entered from.
@@ -166,6 +168,8 @@ final class Workspace {
         var focusMode = FocusMode.neighbors
         /// The steps a reach draws, or `nil` for the default.
         var reachDepth: Int?
+        /// The drawn types whose own next step the focus draws past its depth, as the reader expanded them.
+        var expanded: Set<String> = []
         /// The drawn type whose tie to the focused type the details pin, or `nil` for the focused type's page.
         var inspected: String?
         /// On the changes level, whether the details show the selected type's whole page rather than only
@@ -188,6 +192,7 @@ final class Workspace {
             focusFrom = other.focusFrom
             focusMode = other.focusMode
             reachDepth = other.reachDepth
+            expanded = other.expanded
             inspected = other.inspected
             showsFullPage = other.showsFullPage
         }
@@ -224,9 +229,32 @@ final class Workspace {
     var focusMode: FocusMode {
         get { tabs[current].focusMode }
         set {
+            // Another mode draws other types, so what was expanded in this one is folded.
+            if newValue != tabs[current].focusMode { tabs[current].expanded = [] }
             tabs[current].focusMode = newValue
             redraw()
         }
+    }
+
+    /// Draws one more step past a type in the focus, its own next step only, as if the depth were one
+    /// deeper there, so a reader can follow one type further without drawing every type a step more.
+    ///
+    /// - Parameter id: A type the focus draws at its frontier.
+    func expand(_ id: String) {
+        guard scopeID == Self.focus else { return }
+        Timing.event("expand", id)
+        tabs[current].expanded.insert(id)
+        redraw()
+    }
+
+    /// Folds away the step an expansion drew past a type, and with it whatever was expanded from there.
+    ///
+    /// - Parameter id: A type the reader expanded.
+    func fold(_ id: String) {
+        guard scopeID == Self.focus else { return }
+        Timing.event("fold", id)
+        tabs[current].expanded.remove(id)
+        redraw()
     }
     /// The steps a reach draws in the current tab, chosen with the depth stepper and kept across modes until
     /// another type is selected; `nil`, the default, draws 1 for Neighbors and as many whole steps as fit
@@ -763,6 +791,8 @@ final class Workspace {
             selection = target
             inspected = nil
             showsFullPage = false
+            // Expansions belong to the type the focus grew from.
+            if rerooted { tabs[current].expanded = [] }
             scopeID = scope(for: target)
             // A new type starts at the default depth; switching modes keeps the chosen one.
             if rerooted, reachDepth != nil { reachDepth = nil } else { redraw() }
@@ -1318,7 +1348,8 @@ final class Workspace {
         drawingsAsked += 1
         let asked = drawingsAsked
         let request = DrawingRequest(atlas: atlas, scopes: scopes, scopeID: scopeID, selection: selection, focusMode: focusMode,
-                                     reachDepth: reachDepth, minimumRank: minimumRank, focusFrom: focusFrom, diff: diff,
+                                     reachDepth: reachDepth, expanded: tabs[current].expanded, minimumRank: minimumRank,
+                                     focusFrom: focusFrom, diff: diff,
                                      comparison: comparison, comparisonPhrase: comparisonPhrase, comparisonProblem: comparisonProblem,
                                      showsUntouched: showsUntouched)
         isDrawing = true
@@ -1367,7 +1398,8 @@ final class Workspace {
         // Every focus is a reach: Neighbors goes both ways from depth 1, and the other two fit the budget.
         if request.scopeID == Self.focus, case .type(let id) = request.selection, let node = atlas.byID[id],
            let reach = atlas.reach(from: id, toward: focusMode.direction,
-                                   depth: request.reachDepth ?? (focusMode == .neighbors ? 1 : nil), minimumRank: request.minimumRank) {
+                                   depth: request.reachDepth ?? (focusMode == .neighbors ? 1 : nil), minimumRank: request.minimumRank,
+                                   expanding: request.expanded) {
             let from = scopes.first { $0.id == request.focusFrom } ?? scopes.first
             let what = switch focusMode {
             case .neighbors: "its neighbors"

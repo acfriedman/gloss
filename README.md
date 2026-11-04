@@ -93,7 +93,11 @@ on; or All above, everything that uses it. All three are one reach (`Atlas.reach
 stepper. By default Neighbors draws depth 1 and the other two draw whole steps while they fit 30
 boxes; a chosen depth stays when the mode changes, and a new type starts at the default. A reach
 draws only the edges from one step to the next, marks types at the cut that lead further as dashed
-boxes counting what lies beyond, and keeps the most connected when even the first step is over;
+boxes, and keeps the most connected when even the first step is over. Such a box takes a pill on the
+edge its next step waits past, counting it, `+4` for four types: clicking it, or Expand
+One Step from the box's menu, draws that box's own next step and no other's, so one type can be
+followed further without the whole reach growing a step, and what it draws can be expanded in turn.
+An expanded box's `−` pill, or Fold, folds the step away; a new type or mode starts folded;
 clicking a box re-roots it. A focus or reach that crosses modules draws them as lanes, the focused
 type's module a little warmer, split into bands of rows where that saves width: each row starts as a
 band of its own, and neighboring bands merge when a module continues across the rows where they meet

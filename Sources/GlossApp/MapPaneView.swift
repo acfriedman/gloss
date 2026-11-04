@@ -80,7 +80,8 @@ struct MapPaneView: View {
                 ScrollView([.horizontal, .vertical]) {
                     MapCanvasView(layout: drawing.layout, lit: workspace.litID, trail: workspace.litTrail, anchor: workspace.anchorID,
                                   scale: scale, colors: workspace.atlas?.moduleColors ?? [:],
-                                  marks: workspace.boxMarks, edgeMarks: workspace.edgeMarks, group: workspace.litGroup)
+                                  marks: workspace.boxMarks, edgeMarks: workspace.edgeMarks, group: workspace.litGroup,
+                                  reach: drawing.reach)
                         .padding(Self.inset)
                         .frame(minWidth: proxy.size.width, minHeight: proxy.size.height)
                         // A click on the ground between boxes clears the selection back to the level's page;
@@ -240,6 +241,9 @@ struct MapCanvasView: View {
     /// Boxes lit together, such as the types a story's theme is about, in place of the lit box; empty
     /// lights them by ``lit`` alone.
     var group: Set<String> = []
+    /// The focus's reach, whose frontier boxes take a pill that expands them and whose expanded boxes one
+    /// that folds them; `nil` at the other levels.
+    var reach: Reach?
 
     var body: some View {
         let trailed = Set(trail.map { [$0.from, $0.to] })
@@ -290,7 +294,8 @@ struct MapCanvasView: View {
                        isCurrent: isGrouping ? group.contains(box.item.id) : (isLighting && box.item.id == lit) || box.item.id == anchor,
                        isDimmed: isLighting && !near.contains(box.item.id) && (isGrouping || box.item.id != lit),
                        tint: Self.module(of: box.item.unit).flatMap { colors[$0] }.map(Palette.moduleTint),
-                       mark: marks[box.item.id])
+                       mark: marks[box.item.id], beyond: reach?.beyond[box.item.id],
+                       isExpanded: reach?.expanded.contains(box.item.id) ?? false, isAbove: reach?.aboveIDs.contains(box.item.id) ?? false)
                     .offset(x: box.x * scale, y: box.y * scale)
             }
         }
@@ -368,6 +373,13 @@ struct MapBoxView: View {
     /// How the box differs from the base a comparison reads, drawn as a badge on its corner; `nil` for
     /// none.
     var mark: InterfaceDiff.Change?
+    /// In a focus, what waits past the box, drawn as a pill on the edge it waits past that expands it;
+    /// `nil` for none.
+    var beyond: Reach.Beyond?
+    /// Whether the reader expanded the box, which then takes a pill that folds it.
+    var isExpanded = false
+    /// Whether the box is above the focus's root, so its expanded step, and its pill, are above it.
+    var isAbove = false
 
     /// The tooltip: what a click and a double click do here.
     private var help: String {
@@ -424,7 +436,52 @@ struct MapBoxView: View {
         .onHover { $0 ? workspace.hoverBegan(Workspace.selection(of: box.item.unit)) : workspace.hoverEnded() }
         .contextMenu {
             Button("Open in New Tab") { workspace.openInNewTab(Workspace.selection(of: box.item.unit)) }
+            if let beyond {
+                Button("Expand One Step \(beyond.isBelow ? "Below" : "Above")") { workspace.expand(box.item.id) }
+            }
+            if isExpanded {
+                Button("Fold") { workspace.fold(box.item.id) }
+            }
         }
         .help(help)
+        // Outside the box's own click area, so clicking the pill expands or folds without selecting.
+        .overlay(alignment: (beyond.map { !$0.isBelow } ?? isAbove) ? .top : .bottom) {
+            let below = !(beyond.map { !$0.isBelow } ?? isAbove)
+            Group {
+                if let beyond {
+                    ExpandPillView(text: "+\(beyond.count)", scale: scale) { workspace.expand(box.item.id) }
+                        .help("Draw the \(beyond.count) type\(beyond.count == 1 ? "" : "s") \(beyond.isBelow ? "it depends on" : "that use it") past it")
+                } else if isExpanded {
+                    ExpandPillView(text: "−", scale: scale) { workspace.fold(box.item.id) }
+                        .help("Fold the step drawn past it")
+                }
+            }
+            .offset(y: (below ? 9 : -9) * scale)
+        }
+    }
+}
+
+/// The pill on a box's edge in a focus that draws the step past it, or folds that step away again.
+struct ExpandPillView: View {
+    @State private var isHovered = false
+    /// What the pill says: how many types it would draw, or `−` to fold them.
+    var text: String
+    /// The magnification the map is drawn at.
+    var scale: CGFloat
+    /// What a click does.
+    var action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Text(text)
+                .font(.system(size: 9.5 * scale, weight: .semibold, design: .monospaced))
+                .foregroundStyle(isHovered ? Palette.accent : .secondary)
+                .padding(.horizontal, 6 * scale)
+                .padding(.vertical, 1.5 * scale)
+                .background(Capsule().fill(Palette.surface))
+                .overlay(Capsule().strokeBorder(isHovered ? Palette.accent : Palette.line))
+        }
+        .buttonStyle(.plain)
+        .onHover { isHovered = $0 }
     }
 }

@@ -325,10 +325,25 @@ final class InterfaceTests: XCTestCase {
         XCTAssertEqual(boxes(tight), ["App", "Cart", "Screen", "Store"])
         let cart = try XCTUnwrap(tight.layout.boxes.first { $0.item.label == "Cart" })
         XCTAssertTrue(cart.item.flags.contains(.boundary))
-        XCTAssertEqual(cart.item.detail, "struct · +1 below", "A box at the cut counts its next step.")
+        XCTAssertEqual(cart.item.detail, "struct", "What lies past the cut is the reach's to count, not the box's text.")
         let users = try XCTUnwrap(atlas.reach(from: "Shop/Line", toward: .users, depth: 1, minimumRank: 0))
         XCTAssertEqual(boxes(users), ["Cart", "Line"])
-        XCTAssertEqual(users.layout.boxes.first { $0.item.label == "Cart" }?.item.detail, "struct · +2 above")
+        XCTAssertEqual(users.beyond["Shop/Cart"], Reach.Beyond(count: 2, isBelow: false))
+        XCTAssertEqual(tight.beyond["Shop/Cart"], Reach.Beyond(count: 1, isBelow: true), "The frontier says what waits past it.")
+
+        let grown = try XCTUnwrap(atlas.reach(from: "Shop/App", toward: .dependencies, depth: 2, minimumRank: 0, expanding: ["Shop/Cart"]))
+        XCTAssertEqual(boxes(grown), ["App", "Cart", "Line", "Screen", "Store"], "Cart's own next step, and no step more.")
+        XCTAssertEqual(grown.depth, 2, "The depth stays; only Cart grew.")
+        XCTAssertEqual(grown.expanded, ["Shop/Cart"])
+        XCTAssertNil(grown.beyond["Shop/Cart"])
+        XCTAssertEqual(grown.beyond["Shop/Line"], Reach.Beyond(count: 1, isBelow: true), "What the expansion drew is the frontier now.")
+        XCTAssertEqual(grown.parents["Shop/Line"], ["Shop/Cart"], "It ties back to the root through the expanded type.")
+        let further = try XCTUnwrap(atlas.reach(from: "Shop/App", toward: .dependencies, depth: 2, minimumRank: 0,
+                                                expanding: ["Shop/Cart", "Shop/Line"]))
+        XCTAssertEqual(boxes(further).last, "Store")
+        XCTAssertTrue(boxes(further).contains("Price"), "Expanding what an expansion drew goes on from there.")
+        let above = try XCTUnwrap(atlas.reach(from: "Shop/Line", toward: .users, depth: 1, minimumRank: 0, expanding: ["Shop/Cart"]))
+        XCTAssertEqual(boxes(above), ["Cart", "Line", "Screen", "Store"], "Above the root, an expansion draws what uses the type.")
     }
 
     func testLanesKeepEachGroupsBoxesInsideItsOwnColumn() {

@@ -32,6 +32,20 @@ public struct Reach: Sendable {
     public var parents: [String: [String]] = [:]
     /// The drawn types above the root, which use it, as against those below, which it depends on.
     public var aboveIDs: Set<String> = []
+    /// The drawn types whose next step is left undrawn, each with how many types wait there and which
+    /// way; a reader can expand one to draw that step.
+    public var beyond: [String: Beyond] = [:]
+    /// The drawn types whose next step is drawn because the reader expanded them, past the depth.
+    public var expanded: Set<String> = []
+
+    /// What waits past a drawn type the reach stops at: how many types, and which way.
+    public struct Beyond: Sendable, Equatable {
+        /// How many types the next step holds that are not drawn.
+        public var count: Int
+        /// `true` when the step is below the type, the types it depends on; `false` when it is above, the
+        /// types that use it.
+        public var isBelow: Bool
+    }
     /// How many types are drawn besides the root.
     public var drawn: Int { above + below }
 
@@ -78,6 +92,8 @@ extension Atlas {
     ///     followed and drawn.
     ///   - budget: The most boxes an automatic depth draws, the root included, and the most the first
     ///     step draws at any depth.
+    ///   - expanded: Drawn types whose own next step is drawn too, past the depth, as a reader explores
+    ///     one type further without drawing a whole step more; the root's draws what the budget left out.
     /// - Returns: The drawing and how much of the reach it shows, or `nil` for an unknown id.
     ///
     /// Types from two or more modules are drawn in module lanes, the root's emphasized, and split at the
@@ -86,11 +102,12 @@ extension Atlas {
     /// type's own nested types are among what it depends on. Every dependency counts, signature and body
     /// alike. Only the edges from one step to the next are drawn, which show how each type leads back to
     /// the root; a type on both sides of a cycle is drawn once, below. A type at the last drawn step that
-    /// leads further is a boundary box whose detail counts its next step not drawn. When the first step
+    /// leads further is a dashed boundary box, and ``Reach/beyond`` counts its next step not drawn, until it
+    /// is expanded. When the first step
     /// is over the budget, its most connected types are drawn, the budget shared between the sides, and
     /// the rest are listed as ``Reach/overflow``.
     public func reach(from id: String, toward direction: ReachDirection, depth: Int? = nil,
-                      minimumRank: Int, budget: Int = mapBudget) -> Reach? {
+                      minimumRank: Int, budget: Int = mapBudget, expanding expanded: Set<String> = []) -> Reach? {
         let phase = Timing.begin("reach"); defer { Timing.end(phase, "\(id) \(direction)") }
         guard let root = byID[id] else { return nil }
         // The indexes the atlas keeps, rather than a pass over every edge per reach.
@@ -146,29 +163,54 @@ extension Atlas {
         var aboveStep: [String: Int] = [:]
         for (index, layer) in below.prefix(drawnDepth + 1).enumerated() { for id in layer { belowStep[id] = index } }
         for (index, layer) in above.prefix(drawnDepth + 1).enumerated() { for id in layer { aboveStep[id] = index } }
-        let drawnAbove = above.dropFirst().prefix(drawnDepth).flatMap { $0 }
-        let drawnBelow = below.dropFirst().prefix(drawnDepth).flatMap { $0 }
+        var drawnAbove = above.dropFirst().prefix(drawnDepth).flatMap { $0 }
+        var drawnBelow = below.dropFirst().prefix(drawnDepth).flatMap { $0 }
+        var drawnSet = Set([root.id] + drawnAbove + drawnBelow)
+
+        // A type the reader expanded draws its own next step past the depth, on its side, and so on for
+        // each of those the reader expanded in turn; the root's next step holds what the budget left out.
+        var applied: Set<String> = []
+        var queue = ([root.id] + drawnAbove + drawnBelow).filter(expanded.contains)
+        while !queue.isEmpty {
+            let id = queue.removeFirst()
+            guard applied.insert(id).inserted else { continue }
+            if direction != .users, let step = belowStep[id] {
+                for next in down(id) where shown(next) && !drawnSet.contains(next) {
+                    belowStep[next] = step + 1
+                    drawnSet.insert(next)
+                    drawnBelow.append(next)
+                    if expanded.contains(next) { queue.append(next) }
+                }
+            }
+            if direction != .dependencies, let step = aboveStep[id] {
+                for next in up(id) where shown(next) && !drawnSet.contains(next) {
+                    aboveStep[next] = step + 1
+                    drawnSet.insert(next)
+                    drawnAbove.append(next)
+                    if expanded.contains(next) { queue.append(next) }
+                }
+            }
+        }
         let drawn = [root.id] + drawnAbove + drawnBelow
-        let drawnSet = Set(drawn)
+        var beyonds: [String: Reach.Beyond] = [:]
 
         let items = drawn.compactMap { id -> GraphLayout.Item? in
             guard let node = byID[id] else { return nil }
             var beyond = 0
-            var further = ""
-            if belowStep[id] == drawnDepth {
+            // The frontier: the last drawn step, and every step an expansion drew past it. What waits past
+            // a frontier type is counted in `beyond`, which the map draws on the box's edge.
+            if id != root.id, !applied.contains(id), let step = belowStep[id], step >= drawnDepth {
                 beyond = down(id).filter { shown($0) && !drawnSet.contains($0) }.count
-                further = "below"
-            } else if aboveStep[id] == drawnDepth {
+                if beyond > 0 { beyonds[id] = Reach.Beyond(count: beyond, isBelow: true) }
+            } else if id != root.id, !applied.contains(id), let step = aboveStep[id], step >= drawnDepth {
                 beyond = up(id).filter { shown($0) && !drawnSet.contains($0) }.count
-                further = "above"
+                if beyond > 0 { beyonds[id] = Reach.Beyond(count: beyond, isBelow: false) }
             }
             var flags: GraphLayout.Flags = []
             if findings(under: id) > 0 { flags.insert(.dirty) }
             if rank(of: node) == 0 { flags.insert(.private) }
             if beyond > 0 { flags.insert(.boundary) }
-            let more = beyond > 0 ? ["+\(beyond) \(further)"] : []
-            return GraphLayout.Item(unit: .type(id), label: label(node),
-                                    detail: ([Wording.kind(of: node)] + more).joined(separator: " · "), flags: flags,
+            return GraphLayout.Item(unit: .type(id), label: label(node), detail: Wording.kind(of: node), flags: flags,
                                     group: node.module)
         }
         // Only the edges from one step to the next, which show how each type leads back to the root;
@@ -190,7 +232,8 @@ extension Atlas {
                              title: "\(label(of: .type(link.from))) \(Wording.words(link.roles)) \(label(of: .type(link.to)))")
         }
         return Reach(layout: GraphLayout.layered(items, links, emphasis: root.module, splitAt: root.id), depth: drawnDepth, totalDepth: totalDepth,
-                     above: drawnAbove.count, below: drawnBelow.count, total: total, overflow: overflow,
-                     parents: parents, aboveIDs: Set(drawnAbove))
+                     above: drawnAbove.count, below: drawnBelow.count, total: total,
+                     overflow: overflow.filter { !drawnSet.contains($0) },
+                     parents: parents, aboveIDs: Set(drawnAbove), beyond: beyonds, expanded: applied)
     }
 }

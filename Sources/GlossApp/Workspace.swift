@@ -14,6 +14,9 @@ final class Workspace {
     enum Selection: Hashable, Sendable {
         /// The overview of each module's entry points, drawn at the map's default level.
         case overview
+        /// The interface's size, documentation, and findings, overall and by module, drawn at the map's
+        /// default level.
+        case summary
         /// Every module with the modules it depends on, drawn at the modules level.
         case modules
         /// One module, by name, drawn at its own level.
@@ -730,7 +733,7 @@ final class Workspace {
     private func restore() {
         let stillThere: Bool
         switch selection {
-        case .overview, .modules, .changes: stillThere = true
+        case .overview, .summary, .modules, .changes: stillThere = true
         case .module(let module): stillThere = atlas?.modules.contains(module) == true
         case .folder(let module, let folder): stillThere = scopes.contains { $0.kind == .folder(module, folder) }
         case .type(let id): stillThere = atlas?.byID[id] != nil
@@ -1078,6 +1081,7 @@ final class Workspace {
     func title(of tab: Tab) -> String {
         switch tab.selection {
         case .overview: "Overview"
+        case .summary: "Summary"
         case .changes: "Changes"
         case .modules: "Modules"
         case .module(let module): module
@@ -1092,7 +1096,7 @@ final class Workspace {
     /// - Returns: The module's name.
     func module(of tab: Tab) -> String? {
         switch tab.selection {
-        case .overview, .modules, .changes: nil
+        case .overview, .summary, .modules, .changes: nil
         case .module(let module), .folder(let module, _): module
         case .type(let id): atlas?.byID[id]?.module
         }
@@ -1188,7 +1192,7 @@ final class Workspace {
     private func scope(for target: Selection) -> String {
         let first = scopes.first?.id ?? ""
         switch target {
-        case .overview:
+        case .overview, .summary:
             return first
         case .changes:
             return Self.changes
@@ -1265,7 +1269,7 @@ final class Workspace {
     var litID: String? {
         if let hovered { return hovered }
         switch shown {
-        case .overview, .modules, .changes: return nil
+        case .overview, .summary, .modules, .changes: return nil
         case .module(let module): return MapScope.Unit.module(module).id
         case .folder(let module, let folder): return MapScope.Unit.folder(module, folder).id
         case .type(let id):

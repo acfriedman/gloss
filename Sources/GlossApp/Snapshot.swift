@@ -3,7 +3,7 @@ import AppKit
 /// Writes the window to a PNG and quits, so the app can be reviewed from a script without screen access.
 ///
 /// Set `GLOSS_SNAPSHOT` to the output path. `GLOSS_SELECT` names what to select first: a node id such
-/// as `GlossCore/Linter`, `module:Name`, or `changes`, or several to select in turn, joined by commas,
+/// as `GlossCore/Linter`, `module:Name`, `overview`, `summary`, or `changes`, or several to select in turn, joined by commas,
 /// such as `changes,GlossMap/Atlas`. `GLOSS_ZOOM` is how many times to zoom in after that, and
 /// `GLOSS_PREVIEW` names a node to preview as if the pointer rested on it. `GLOSS_COMPARE` compares
 /// with a base from where the head left it, `develop`, or names the head too, `develop..feature`, and
@@ -42,7 +42,13 @@ extension Workspace {
             }
             await settle()
             for target in (environment["GLOSS_SELECT"] ?? "").split(separator: ",").map(String.init) {
-                select(target == "changes" ? .changes : target.hasPrefix("module:") ? .module(String(target.dropFirst("module:".count))) : .type(target))
+                switch target {
+                case "overview": select(.overview)
+                case "summary": select(.summary)
+                case "changes": select(.changes)
+                case _ where target.hasPrefix("module:"): select(.module(String(target.dropFirst("module:".count))))
+                default: select(.type(target))
+                }
                 await settle()
             }
             for _ in 0..<(Int(environment["GLOSS_ZOOM"] ?? "") ?? 0) {

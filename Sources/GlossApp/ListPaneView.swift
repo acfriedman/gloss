@@ -26,6 +26,10 @@ struct ListPaneView: View {
             Label("Overview", systemImage: "square.grid.2x2")
                 .modifier(RowHover(target: .overview))
                 .tag(Workspace.Selection.overview)
+            Label("Summary", systemImage: "chart.bar.doc.horizontal")
+                .modifier(RowHover(target: .summary))
+                .tag(Workspace.Selection.summary)
+                .help("The interface's size, documentation, and findings")
             if workspace.comparison != .off {
                 Label {
                     HStack {
@@ -63,7 +67,7 @@ struct ListPaneView: View {
             }
         }
         .searchable(text: $workspace.search, placement: .sidebar, prompt: "Find a type or member")
-        .safeAreaInset(edge: .bottom) { SummaryView() }
+        .safeAreaInset(edge: .bottom) { ListFilterView() }
     }
 }
 
@@ -165,33 +169,20 @@ extension RowHover: ViewModifier {
     }
 }
 
-/// The size of the interface under the list, and the findings filter.
-struct SummaryView: View {
+/// The list's filter under it: only the types with findings, or every type.
+struct ListFilterView: View {
     @Environment(Workspace.self) private var workspace
 
     var body: some View {
         @Bindable var workspace = workspace
-        if let interface = workspace.interface {
-            let owed = zip(interface.contracts, interface.assessments).filter { $0.1.requiresDoc }.map(\.0)
-            let findings = interface.assessments.reduce(0) { $0 + $1.findings.count }
-            VStack(alignment: .leading, spacing: 8) {
-                Grid(alignment: .leading, horizontalSpacing: 16, verticalSpacing: 6) {
-                    GridRow {
-                        StatView(title: "Declarations", value: "\(interface.contracts.filter { Contract.rank($0.access) >= 1 }.count)")
-                        StatView(title: "Public", value: "\(interface.contracts.filter { Contract.rank($0.access) >= 3 }.count)")
-                    }
-                    GridRow {
-                        StatView(title: "Documented", value: "\(owed.filter(\.isDocumented).count)/\(owed.count)")
-                        StatView(title: "Findings", value: "\(findings)", tint: findings == 0 ? Palette.ok : Palette.danger)
-                    }
-                }
-                Toggle("Only types with findings", isOn: $workspace.findingsOnly)
-                    .toggleStyle(.checkbox)
-                    .font(.callout)
-            }
-            .padding(12)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(.bar)
+        if workspace.interface != nil {
+            Toggle("Only types with findings", isOn: $workspace.findingsOnly)
+                .toggleStyle(.checkbox)
+                .font(.callout)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(.bar)
         }
     }
 }

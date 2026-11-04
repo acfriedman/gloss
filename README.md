@@ -77,7 +77,11 @@ where you are, ⌘W closes it (the last one leaves the blank page), ⌘⇧[ and 
 it in a new tab. Tabs are named for what they show, marked with its module's color, and dragged
 to reorder; the line between the details and the map drags too, and keeps its place. ⌘1 hides the list, or shows it again. ⌘⇧O is Open Quickly, as in Xcode: type a few letters of a type's name, in order but not
 necessarily together (`dpv` finds `DetailPaneView`), move with the arrow keys, and press Return to
-open it in the map's focus, with only what uses it and what it uses. The list is an outline: each
+open it in the map's focus, with only what uses it and what it uses. Under Overview, Summary opens
+the interface's size and health on a page of its own (`Atlas.interfaceSummary`): declarations, public
+declarations, types, how much of what must be documented is, and the findings, then the findings by
+rule, each module's share, the types with the most findings, and the declarations by access; the
+findings filter stays under the list. The list is an outline: each
 module as its source folders hold it, at full depth, with nested types under the type that declares
 them. Modules, folders, and nested types all start closed, so the list opens as one row per module,
 and closing a row closes everything under it, so opening it again shows only what it holds directly;

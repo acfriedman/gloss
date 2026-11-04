@@ -109,6 +109,7 @@ struct DetailPageView: View {
                 if let atlas = workspace.atlas {
                     switch target {
                     case .overview: OverviewView(atlas: atlas)
+                    case .summary: SummaryPageView(atlas: atlas)
                     case .changes: ChangesView(atlas: atlas)
                     case .modules: ModulesView(atlas: atlas)
                     case .module(let module): ModuleView(atlas: atlas, module: module)

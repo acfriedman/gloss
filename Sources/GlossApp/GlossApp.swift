@@ -14,6 +14,7 @@ import SwiftUI
 struct GlossApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var delegate
     @State private var workspace = Workspace(arguments: CommandLine.arguments)
+    @AppStorage(TextSize.key) private var textSize = 1.0
 
     /// Makes a process started from the command line a regular app before any scene opens, so it gets
     /// a window, a Dock icon, and a menu bar.
@@ -75,6 +76,17 @@ struct GlossApp: App {
                     .keyboardShortcut("-")
                     .disabled(workspace.zoomOutTarget == nil)
                 Divider()
+                // As in Safari: Command zooms, here the map's levels, and Option-Command sizes the text.
+                Button("Make Text Bigger") { TextSize.bigger(than: textSize).map { textSize = $0 } }
+                    .keyboardShortcut("=", modifiers: [.command, .option])
+                    .disabled(TextSize.bigger(than: textSize) == nil)
+                Button("Make Text Smaller") { TextSize.smaller(than: textSize).map { textSize = $0 } }
+                    .keyboardShortcut("-", modifiers: [.command, .option])
+                    .disabled(TextSize.smaller(than: textSize) == nil)
+                Button("Make Text Normal Size") { textSize = 1 }
+                    .keyboardShortcut("0", modifiers: [.command, .option])
+                    .disabled(textSize == 1)
+                Divider()
             }
             CommandMenu("Navigate") {
                 Button("Back") { travel(workspace.goBack, orMoveBy: #selector(NSResponder.moveToBeginningOfLine(_:))) }
@@ -91,6 +103,9 @@ struct GlossApp: App {
                     .keyboardShortcut("]", modifiers: [.command, .shift])
                     .disabled(workspace.tabs.count < 2)
             }
+        }
+        Settings {
+            SettingsView()
         }
     }
 

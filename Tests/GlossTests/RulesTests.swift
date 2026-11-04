@@ -40,6 +40,11 @@ final class RulesTests: XCTestCase {
         XCTAssertEqual(lint("override func f() {}"), [])
     }
 
+    func testAViewModifiersBodyIsTheProtocolsToDocument() {
+        XCTAssertEqual(lint("/// Shouts.\nstruct Shout: ViewModifier {\n    func body(content: Content) -> some View { content }\n}"), [])
+        XCTAssertEqual(lint("/// Presses.\nstruct Press: ButtonStyle {\n    func makeBody(configuration: Configuration) -> some View { configuration.label }\n}"), [])
+    }
+
     func testBlockCommentIsRefused() {
         XCTAssertEqual(lint("/** Does a thing. */\nfunc f() {}"), [.blockDoc])
     }

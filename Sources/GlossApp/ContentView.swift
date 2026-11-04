@@ -100,11 +100,13 @@ struct ContentView: View {
 /// between them, 440 points at first, and the map taking the rest.
 struct EditorSplitView: View {
     @AppStorage("detailWidth") private var width = 440.0
+    @AppStorage(TextSize.key) private var textSize = 1.0
     @State private var dragStart: Double?
 
     var body: some View {
         HStack(spacing: 0) {
             DetailPaneView()
+                .environment(\.textScale, TextSize.override ?? textSize)
                 .frame(width: width)
             Rectangle()
                 .fill(Palette.line.opacity(0.6))

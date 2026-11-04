@@ -183,6 +183,8 @@ public struct Declaration: Sendable, Equatable {
         "makeIterator()", "next()", "index(after:)", "index(before:)",
         // Entry points and command runners
         "main()", "run()", "validate()",
+        // SwiftUI's ViewModifier and its style protocols, such as ButtonStyle
+        "body(content:)", "makeBody(configuration:)",
         // Codable with configuration
         "encode(to:configuration:)", "init(from:configuration:)",
         // Properties: View, Identifiable, the description protocols, RawRepresentable, Hashable,

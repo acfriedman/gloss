@@ -21,18 +21,18 @@ struct StoryOverviewView: View {
         VStack(alignment: .leading, spacing: 16) {
             VStack(alignment: .leading, spacing: 6) {
                 if let headline = story.headline {
-                    Text(headline).font(.title2.weight(.semibold))
+                    Text(headline).textStyle(.title2, weight: .semibold)
                 }
                 ForEach(Array(story.summary.enumerated()), id: \.offset) { _, paragraph in
-                    DocTextView(text: StoryProse.markdown(paragraph)).font(.body)
+                    DocTextView(text: StoryProse.markdown(paragraph)).textStyle(.body)
                 }
                 HStack(spacing: 10) {
                     if let pullRequest = story.pullRequest {
-                        Text("Pull request #\(pullRequest)").font(.caption).foregroundStyle(.secondary)
+                        Text("Pull request #\(pullRequest)").textStyle(.caption).foregroundStyle(.secondary)
                     }
                     Button("Edit the Story") { workspace.writeStory() }
                         .buttonStyle(.link)
-                        .font(.caption)
+                        .textStyle(.caption)
                         .help(workspace.storyFile?.path ?? "")
                 }
             }
@@ -66,13 +66,13 @@ struct ThemeView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .firstTextBaseline, spacing: 8) {
-                Text(title).font(.headline)
+                Text(title).textStyle(.headline)
                 if let caption {
-                    Text(caption).font(.caption).foregroundStyle(.tertiary)
+                    Text(caption).textStyle(.caption).foregroundStyle(.tertiary)
                 }
             }
             ForEach(Array(paragraphs.enumerated()), id: \.offset) { _, paragraph in
-                DocTextView(text: StoryProse.markdown(paragraph), codeColor: Palette.accent).font(.callout).foregroundStyle(.secondary)
+                DocTextView(text: StoryProse.markdown(paragraph), codeColor: Palette.accent).textStyle(.callout).foregroundStyle(.secondary)
             }
             if !types.isEmpty {
                 Wrap(spacing: 6) {
@@ -83,7 +83,7 @@ struct ThemeView: View {
                                 ChipView(unit: .type(id), atlas: atlas)
                             } else {
                                 Text(diff.change(ofNode: id)?.node.name ?? id)
-                                    .font(.system(.callout, design: .monospaced))
+                                    .textStyle(.callout, design: .monospaced)
                                     .strikethrough()
                                     .foregroundStyle(.secondary)
                             }
@@ -119,7 +119,7 @@ struct StoryGapsView: View {
             VStack(alignment: .leading, spacing: 8) {
                 EyebrowView(text: "Not in the story · \(coverage.unexplained.count)")
                 Text("These changed what they declare, and no theme links them.")
-                    .font(.callout)
+                    .textStyle(.callout)
                     .foregroundStyle(.secondary)
                 ForEach(coverage.unexplained, id: \.self) { id in
                     if let change = diff.change(ofNode: id) { NodeChangeView(change: change, atlas: atlas) }
@@ -130,14 +130,14 @@ struct StoryGapsView: View {
             VStack(alignment: .leading, spacing: 8) {
                 EyebrowView(text: "No note of its own · \(coverage.withoutNotes.count)")
                 Text("A theme explains these, but none tells the change from their side under a ### heading that links them.")
-                    .font(.callout)
+                    .textStyle(.callout)
                     .foregroundStyle(.secondary)
                 Wrap(spacing: 6) {
                     ForEach(coverage.withoutNotes, id: \.self) { id in
                         if atlas.byID[id] != nil {
                             ChipView(unit: .type(id), atlas: atlas)
                         } else {
-                            Text(diff.change(ofNode: id)?.node.name ?? id).font(.system(.callout, design: .monospaced)).strikethrough()
+                            Text(diff.change(ofNode: id)?.node.name ?? id).textStyle(.callout, design: .monospaced).strikethrough()
                         }
                     }
                 }
@@ -148,8 +148,8 @@ struct StoryGapsView: View {
                 EyebrowView(text: "Links that name nothing · \(coverage.deadLinks.count)")
                 ForEach(Array(coverage.deadLinks.enumerated()), id: \.offset) { _, dead in
                     HStack(alignment: .firstTextBaseline, spacing: 6) {
-                        Text(dead.link).font(.system(.callout, design: .monospaced)).foregroundStyle(Palette.danger)
-                        Text("in \(dead.theme)").font(.caption).foregroundStyle(.secondary)
+                        Text(dead.link).textStyle(.callout, design: .monospaced).foregroundStyle(Palette.danger)
+                        Text("in \(dead.theme)").textStyle(.caption).foregroundStyle(.secondary)
                     }
                 }
             }
@@ -169,9 +169,9 @@ struct StoryPromptView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             VStack(alignment: .leading, spacing: 6) {
-                Text("No story yet").font(.title3.weight(.semibold))
+                Text("No story yet").textStyle(.title3, weight: .semibold)
                 Text("Say why this change was made in \(workspace.storyFile.map { StoryProse.shortPath($0) } ?? "a story file"): a headline, then a theme for each part, linking the types it is about. The page then leads with it, and each type's page with its theme.")
-                    .font(.callout)
+                    .textStyle(.callout)
                     .foregroundStyle(.secondary)
                 Button("Draft the Story from the Commits") { workspace.writeStory() }
                     .disabled(workspace.storyFile == nil)
@@ -281,9 +281,9 @@ struct StoryThemesView: View {
                     EyebrowView(text: "From the story")
                     ForEach(themes, id: \.self) { index in
                         VStack(alignment: .leading, spacing: 4) {
-                            Text(story.themes[index].title).font(.headline)
+                            Text(story.themes[index].title).textStyle(.headline)
                             ForEach(Array(story.themes[index].paragraphs.enumerated()), id: \.offset) { _, paragraph in
-                                DocTextView(text: StoryProse.markdown(paragraph), codeColor: Palette.accent).font(.callout)
+                                DocTextView(text: StoryProse.markdown(paragraph), codeColor: Palette.accent).textStyle(.callout)
                                     .foregroundStyle(.secondary)
                             }
                             // The change told from this type's side, beside the theme it belongs to.
@@ -331,9 +331,9 @@ struct StoryNoteView: View {
         HStack(alignment: .top, spacing: 8) {
             RoundedRectangle(cornerRadius: 1).fill(Palette.accent).frame(width: 2)
             VStack(alignment: .leading, spacing: 4) {
-                Text(note.link).font(.system(.caption, design: .monospaced).weight(.semibold)).foregroundStyle(Palette.accent)
+                Text(note.link).textStyle(.caption, design: .monospaced, weight: .semibold).foregroundStyle(Palette.accent)
                 ForEach(Array(note.paragraphs.enumerated()), id: \.offset) { _, paragraph in
-                    DocTextView(text: StoryProse.markdown(paragraph), codeColor: Palette.accent).font(.callout)
+                    DocTextView(text: StoryProse.markdown(paragraph), codeColor: Palette.accent).textStyle(.callout)
                 }
             }
         }

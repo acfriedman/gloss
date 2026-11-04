@@ -33,7 +33,7 @@ struct ChangePageBarView: View {
             .controlSize(.small)
             .help(workspace.showsFullPage ? "Show only what changed" : "Show \(name)'s whole page")
         }
-        .font(.callout)
+        .textStyle(.callout)
         .foregroundStyle(.secondary)
         .padding(.horizontal, 24)
         .padding(.vertical, 8)
@@ -103,7 +103,7 @@ struct DeclarationChangesView: View {
                 HStack(alignment: .firstTextBaseline, spacing: 6) {
                     ChangeBadgeView(change: .moved)
                     Text("Moved from \(was.module) to \(change.node.module)\(change.declarations.isEmpty ? ", declared the same." : ".")")
-                        .font(.callout)
+                        .textStyle(.callout)
                 }
                 .padding(.bottom, 10)
             }
@@ -111,7 +111,7 @@ struct DeclarationChangesView: View {
                 HStack(alignment: .firstTextBaseline, spacing: 6) {
                     ChangeBadgeView(change: .changed)
                     VStack(alignment: .leading, spacing: 4) {
-                        Text("The declaration itself changed: its \(Self.what(own)).").font(.callout)
+                        Text("The declaration itself changed: its \(Self.what(own)).").textStyle(.callout)
                         if own.signatureChanged, let was = own.was { WasNowView(was: was, now: nil, atlas: atlas) }
                     }
                 }
@@ -130,13 +130,13 @@ struct DeclarationChangesView: View {
                             MemberRowView(member: member)
                         } else if let was = declaration.was {
                             CodeView(runs: Highlight.runs(was, projectTypes: Self.projectTypes(atlas)))
-                                .font(.system(.callout, design: .monospaced))
+                                .textStyle(.callout, design: .monospaced)
                                 .strikethrough(color: Palette.removed)
                                 .padding(.vertical, 6)
                         }
                         if declaration.change == .changed || declaration.change == .implementation {
                             Text("Its \(Self.what(declaration)) changed.")
-                                .font(.caption)
+                                .textStyle(.caption)
                                 .foregroundStyle(.secondary)
                             if declaration.signatureChanged, let was = declaration.was { WasNowView(was: was, now: nil, atlas: atlas) }
                             if declaration.docChanged, declaration.wasSummary != declaration.nowSummary {
@@ -144,7 +144,7 @@ struct DeclarationChangesView: View {
                             }
                         } else if declaration.change == .removed {
                             Text("Gone.")
-                                .font(.caption)
+                                .textStyle(.caption)
                                 .foregroundStyle(.secondary)
                         }
                         MemberNotesView(node: change.node.id, name: declaration.name)
@@ -188,13 +188,13 @@ struct WasNowView: View {
         let types = DeclarationChangesView.projectTypes(atlas)
         Grid(alignment: .leadingFirstTextBaseline, horizontalSpacing: 8, verticalSpacing: 2) {
             GridRow {
-                Text("was").font(.caption).foregroundStyle(Palette.removed)
-                CodeView(runs: Highlight.runs(was, projectTypes: types)).font(.system(.caption, design: .monospaced))
+                Text("was").textStyle(.caption).foregroundStyle(Palette.removed)
+                CodeView(runs: Highlight.runs(was, projectTypes: types)).textStyle(.caption, design: .monospaced)
             }
             if let now {
                 GridRow {
-                    Text("now").font(.caption).foregroundStyle(Palette.added)
-                    CodeView(runs: Highlight.runs(now, projectTypes: types)).font(.system(.caption, design: .monospaced))
+                    Text("now").textStyle(.caption).foregroundStyle(Palette.added)
+                    CodeView(runs: Highlight.runs(now, projectTypes: types)).textStyle(.caption, design: .monospaced)
                 }
             }
         }
@@ -219,11 +219,11 @@ struct DependencyChangeView: View {
                 ChipView(unit: .type(edge.from), atlas: atlas)
                 Text(edge.change == .removed ? "no longer \(Wording.words(edge.before))"
                      : edge.before.isEmpty || edge.before == edge.after ? Wording.words(edge.after) : "now \(Wording.words(edge.after))")
-                    .font(.callout)
+                    .textStyle(.callout)
                 ChipView(unit: .type(edge.to), atlas: atlas)
                 if edge.change == .changed {
                     Text(edge.before != edge.after ? "(was: \(Wording.words(edge.before)))" : Self.through(edge))
-                        .font(.caption)
+                        .textStyle(.caption)
                         .foregroundStyle(.secondary)
                 }
             }
@@ -253,7 +253,7 @@ struct ReachedView: View {
             EyebrowView(text: "How the changes reach it")
             if reasons.isEmpty {
                 Text("They do not: its dependencies on changed types are as they were, and it uses nothing in them that changed.")
-                    .font(.callout)
+                    .textStyle(.callout)
                     .foregroundStyle(.secondary)
             }
             ForEach(Array(reasons.enumerated()), id: \.offset) { _, reason in
@@ -265,9 +265,9 @@ struct ReachedView: View {
                         ChangeBadgeView(change: .changed)
                         VStack(alignment: .leading, spacing: 4) {
                             Wrap(spacing: 6) {
-                                Text("Uses").font(.callout)
+                                Text("Uses").textStyle(.callout)
                                 ChipView(unit: .type(reason.changed), atlas: atlas)
-                                Text("whose declaration changed").font(.callout)
+                                Text("whose declaration changed").textStyle(.callout)
                             }
                             if let was = declaration.was { WasNowView(was: was, now: declaration.now, atlas: atlas) }
                         }
@@ -277,11 +277,11 @@ struct ReachedView: View {
                         ChangeBadgeView(change: member.change)
                         VStack(alignment: .leading, spacing: 4) {
                             Wrap(spacing: 6) {
-                                Text(Self.callers(reason.via)).font(.system(.callout, design: .monospaced))
-                                Text(reason.via.count == 1 ? "uses" : "use").font(.callout)
+                                Text(Self.callers(reason.via)).textStyle(.callout, design: .monospaced)
+                                Text(reason.via.count == 1 ? "uses" : "use").textStyle(.callout)
                                 ChipView(unit: .type(reason.changed), atlas: atlas)
-                                Text(".\(member.name)").font(.system(.callout, design: .monospaced))
-                                Text(member.change == .removed ? "which is gone" : "whose signature changed").font(.callout)
+                                Text(".\(member.name)").textStyle(.callout, design: .monospaced)
+                                Text(member.change == .removed ? "which is gone" : "whose signature changed").textStyle(.callout)
                             }
                             if let was = member.was { WasNowView(was: was, now: member.now, atlas: atlas) }
                         }
@@ -310,12 +310,12 @@ struct DocWasNowView: View {
     var body: some View {
         Grid(alignment: .leadingFirstTextBaseline, horizontalSpacing: 8, verticalSpacing: 2) {
             GridRow {
-                Text("doc was").font(.caption).foregroundStyle(Palette.removed)
-                Text(was ?? "No summary.").font(.caption).foregroundStyle(.secondary)
+                Text("doc was").textStyle(.caption).foregroundStyle(Palette.removed)
+                Text(was ?? "No summary.").textStyle(.caption).foregroundStyle(.secondary)
             }
             GridRow {
-                Text("now").font(.caption).foregroundStyle(Palette.added)
-                Text(now ?? "No summary.").font(.caption)
+                Text("now").textStyle(.caption).foregroundStyle(Palette.added)
+                Text(now ?? "No summary.").textStyle(.caption)
             }
         }
         .padding(.horizontal, 8)

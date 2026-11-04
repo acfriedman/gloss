@@ -188,7 +188,7 @@ struct ListFilterView: View {
     }
 }
 
-/// One labeled number in the summary.
+/// One labeled number in the summary, at the detail pane's text size there and the system's in the list.
 struct StatView: View {
     /// The name of the number, shown in uppercase above it.
     var title: String
@@ -201,11 +201,11 @@ struct StatView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 1) {
             Text(title.uppercased())
-                .font(.system(size: 9.5, weight: .semibold))
+                .textSize(9.5, weight: .semibold)
                 .tracking(0.6)
                 .foregroundStyle(.secondary)
             Text(value)
-                .font(.system(.body, design: .monospaced).weight(.medium))
+                .textStyle(.body, design: .monospaced, weight: .medium)
                 .foregroundStyle(tint)
         }
     }

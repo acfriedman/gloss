@@ -55,6 +55,8 @@ Build for release: a debug build is several times slower on a large codebase.
 - **Changes** compares with a base: where the branch left `main` by default, another branch, or any
   base and head. New types are marked `+`, changed ones `~`, and the page opens on the branch's story.
 - **Summary** sums up the interface's size, documentation, and findings, module by module.
+- **Text size:** ⌥⌘+ and ⌥⌘− make the details' text bigger and smaller, ⌥⌘0 resets it, and Settings (⌘,) has
+  the same choice; the list and the map keep their sizes.
 
 ## Change stories
 
@@ -137,6 +139,7 @@ anything. A key or rule code gloss doesn't know stops the run, so a typo can't l
 | `GLOSS_SELECT` | selects first, comma-separated: `overview`, `summary`, `changes`, `module:Name`, or a type's id |
 | `GLOSS_COMPARE` | compares with `<base>` or `<base>..<head>` first |
 | `GLOSS_ZOOM`, `GLOSS_PREVIEW` | zooms in that many steps; previews a type's id as if hovered |
+| `GLOSS_TEXT_SIZE` | sets the details' text size for one run, such as `1.5`, without storing it |
 
 ## The package
 

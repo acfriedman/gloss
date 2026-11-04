@@ -41,7 +41,7 @@ struct DetailPaneView: View {
                         Button("Keep") { workspace.keep(preview) }
                             .controlSize(.small)
                     }
-                    .font(.callout)
+                    .textStyle(.callout)
                     .foregroundStyle(.secondary)
                     .padding(.horizontal, 24)
                     .padding(.vertical, 8)
@@ -53,6 +53,8 @@ struct DetailPaneView: View {
                 .id(preview)
             }
         }
+        // Text that names no style of its own, such as a doc's notes, is body text at the pane's size.
+        .textStyle(.body)
         .onHover { workspace.detailsHovered($0) }
     }
 }
@@ -81,7 +83,7 @@ struct InspectionBarView: View {
             .disabled(workspace.isQuickOpenShown)
             .help("Back to \(root)'s page (Esc)")
         }
-        .font(.callout)
+        .textStyle(.callout)
         .foregroundStyle(.secondary)
         .padding(.horizontal, 24)
         .padding(.vertical, 8)
@@ -209,7 +211,7 @@ struct ChangeBadgeView: View {
 
     var body: some View {
         Text(Palette.glyph(of: change))
-            .font(.system(.callout, design: .monospaced).weight(change == .implementation ? .regular : .heavy))
+            .textStyle(.callout, design: .monospaced, weight: change == .implementation ? .regular : .heavy)
             .foregroundStyle(Palette.color(of: change))
             .frame(width: 14)
     }
@@ -229,7 +231,7 @@ struct NodeChangeView: View {
                 ChangeBadgeView(change: change.change)
                 if change.change == .removed {
                     Text(change.node.name)
-                        .font(.system(.callout, design: .monospaced))
+                        .textStyle(.callout, design: .monospaced)
                         .strikethrough()
                         .foregroundStyle(.secondary)
                 } else {
@@ -237,12 +239,12 @@ struct NodeChangeView: View {
                 }
                 if change.change == .added || change.change == .removed {
                     Text("\(change.declarations.count) declaration\(change.declarations.count == 1 ? "" : "s")")
-                        .font(.caption)
+                        .textStyle(.caption)
                         .foregroundStyle(.secondary)
                 }
                 if let was = change.movedFrom {
                     Text("from \(was.module)")
-                        .font(.caption)
+                        .textStyle(.caption)
                         .foregroundStyle(.secondary)
                 }
             }
@@ -250,10 +252,10 @@ struct NodeChangeView: View {
                 ForEach(Array(change.declarations.enumerated()), id: \.offset) { _, declaration in
                     HStack(alignment: .firstTextBaseline, spacing: 6) {
                         ChangeBadgeView(change: declaration.change)
-                        Text("\(declaration.keyword) \(declaration.name)").font(.system(.callout, design: .monospaced))
+                        Text("\(declaration.keyword) \(declaration.name)").textStyle(.callout, design: .monospaced)
                         if declaration.change == .changed || declaration.change == .implementation {
                             Text(DeclarationChangesView.what(declaration))
-                                .font(.caption)
+                                .textStyle(.caption)
                                 .foregroundStyle(.secondary)
                         }
                     }
@@ -277,12 +279,12 @@ struct EdgeChangeView: View {
             Wrap(spacing: 6) {
                 ChipView(unit: .type(edge.from), atlas: atlas)
                 Text(edge.entersInterface ? "now \(Wording.words(edge.after))" : "no longer \(Wording.words(edge.before))")
-                    .font(.callout)
+                    .textStyle(.callout)
                 ChipView(unit: .type(edge.to), atlas: atlas)
                 // What it was is news only when it was something: a body use, or a role it gave up.
                 if !edge.before.isEmpty, !edge.after.isEmpty {
                     Text("(was: \(Wording.words(edge.before)))")
-                        .font(.caption)
+                        .textStyle(.caption)
                         .foregroundStyle(.secondary)
                 }
             }
@@ -308,10 +310,10 @@ struct CardView: View {
         Button { workspace.select(.type(node.id)) } label: {
             VStack(alignment: .leading, spacing: 4) {
                 Text(Wording.kind(of: node).uppercased())
-                    .font(.system(size: 9.5, weight: .semibold)).tracking(0.6).foregroundStyle(.secondary)
-                Text(atlas.label(node)).font(.system(.body, design: .monospaced).weight(.semibold))
+                    .textSize(9.5, weight: .semibold).tracking(0.6).foregroundStyle(.secondary)
+                Text(atlas.label(node)).textStyle(.body, design: .monospaced, weight: .semibold)
                 if let summary { DocTextView(text: summary).foregroundStyle(.primary) }
-                if !facts.isEmpty { Text(facts.joined(separator: " · ")).font(.caption).foregroundStyle(.secondary) }
+                if !facts.isEmpty { Text(facts.joined(separator: " · ")).textStyle(.caption).foregroundStyle(.secondary) }
             }
             .padding(12)
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -337,9 +339,9 @@ struct ModulesView: View {
             let uses = atlas.dependencies(ofModule: module).uses
             Button { workspace.select(.module(module)) } label: {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(module).font(.system(.body, design: .monospaced).weight(.semibold))
-                    Text(atlas.summary(of: atlas.types(in: module))).font(.caption).foregroundStyle(.secondary)
-                    if !uses.isEmpty { Text("depends on " + uses.joined(separator: ", ")).font(.caption).foregroundStyle(.secondary) }
+                    Text(module).textStyle(.body, design: .monospaced, weight: .semibold)
+                    Text(atlas.summary(of: atlas.types(in: module))).textStyle(.caption).foregroundStyle(.secondary)
+                    if !uses.isEmpty { Text("depends on " + uses.joined(separator: ", ")).textStyle(.caption).foregroundStyle(.secondary) }
                 }
                 .padding(12)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -439,7 +441,7 @@ struct RelationView: View {
             }
             if more > 0 {
                 Text("\(more) more way\(more == 1 ? "" : "s") back to \(rootName)")
-                    .font(.caption)
+                    .textStyle(.caption)
                     .foregroundStyle(.secondary)
             }
         }
@@ -460,13 +462,13 @@ struct TypeHeaderView: View {
             EyebrowView(text: "\(node.module) · \(Wording.kind(of: node))")
             if let head = group.head {
                 CodeView(runs: Highlight.runs(of: head.contract))
-                    .font(.system(.title3, design: .monospaced).weight(.semibold))
-                if let summary = head.summary { DocTextView(text: summary).font(.title3) }
+                    .textStyle(.title3, design: .monospaced, weight: .semibold)
+                if let summary = head.summary { DocTextView(text: summary).textStyle(.title3) }
                 ForEach(head.notes, id: \.self) { note in NoteView(text: note) }
                 FindingsView(findings: head.findings)
                 SourceLinkView(file: head.file, line: head.line)
             } else {
-                Text(atlas.label(node)).font(.system(.title3, design: .monospaced).weight(.semibold))
+                Text(atlas.label(node)).textStyle(.title3, design: .monospaced, weight: .semibold)
                 Text(node.keyword == "extension" ? "Extends a type no scanned source declares." : "Declarations at file scope.")
                     .foregroundStyle(.secondary)
             }
@@ -574,7 +576,7 @@ struct WhyRowView: View {
                     ChipView(unit: .type(other), atlas: atlas)
                 }
             }
-            .font(.callout)
+            .textStyle(.callout)
             .padding(.vertical, 4)
         }
     }
@@ -647,16 +649,16 @@ struct ReasonView: View {
 
     var body: some View {
         let inSignature = reason.roles != [.body]
-        let declaration = Text(Self.declaration(reason)).font(.system(.callout, design: .monospaced))
+        let declaration = Text(Self.declaration(reason)).textStyle(.callout, design: .monospaced)
         let marks = HStack(alignment: .firstTextBaseline, spacing: 8) {
             Text(Wording.words(reason.roles))
-                .font(.caption.weight(.medium))
+                .textStyle(.caption, weight: .medium)
                 .foregroundStyle(inSignature ? Palette.accent : .secondary)
                 .padding(.horizontal, 6)
                 .padding(.vertical, 1)
                 .background(Capsule().fill(inSignature ? Palette.accentSoft : Palette.surface))
             Button { workspace.reveal(reason.file, line: reason.line) } label: {
-                Image(systemName: "arrow.up.forward.app").font(.caption)
+                Image(systemName: "arrow.up.forward.app").textStyle(.caption)
             }
             .buttonStyle(.link)
             .help("Open \(reason.file):\(reason.line) in Xcode")
@@ -679,14 +681,14 @@ struct ReasonView: View {
             ForEach(Array(reason.entries.enumerated()), id: \.offset) { _, entry in
                 VStack(alignment: .leading, spacing: 1) {
                     Text(entry.parameter ?? (entry.role == .returns ? "Returns" : "Throws"))
-                        .font(entry.parameter == nil ? .caption.weight(.semibold) : .system(.caption, design: .monospaced))
+                        .textStyle(.caption, design: entry.parameter == nil ? .default : .monospaced, weight: entry.parameter == nil ? .semibold : nil)
                         .foregroundStyle(.secondary)
-                    DocTextView(text: entry.text ?? "Undocumented.", codeColor: Self.code).font(.callout)
+                    DocTextView(text: entry.text ?? "Undocumented.", codeColor: Self.code).textStyle(.callout)
                         .foregroundStyle(entry.text == nil ? Palette.danger : .primary)
                 }
             }
             if let summary = reason.summary {
-                DocTextView(text: summary, codeColor: Self.code).font(.callout)
+                DocTextView(text: summary, codeColor: Self.code).textStyle(.callout)
                     .foregroundStyle(reason.entries.contains { $0.text != nil } ? .secondary : .primary)
             } else if !reason.forwarded.isEmpty {
                 // Forwarded docs are the used type's words, not this declaration's, so they read quieter
@@ -694,11 +696,11 @@ struct ReasonView: View {
                 ForEach(Array(reason.forwarded.enumerated()), id: \.offset) { _, forward in
                     VStack(alignment: .leading, spacing: 1) {
                         Text(Self.via(forward.name))
-                        DocTextView(text: forward.summary, codeColor: Self.code).font(.callout).foregroundStyle(.secondary)
+                        DocTextView(text: forward.summary, codeColor: Self.code).textStyle(.callout).foregroundStyle(.secondary)
                     }
                 }
             } else if reason.entries.isEmpty {
-                Text("Undocumented.").font(.callout).foregroundStyle(.secondary)
+                Text("Undocumented.").textStyle(.callout).foregroundStyle(.secondary)
             }
         }
     }
@@ -786,7 +788,7 @@ struct MemberRowView: View {
                 }
                 ForEach(member.notes, id: \.self) { note in NoteView(text: note) }
                 if let exemption = member.exemption {
-                    Text("Exempt: \(exemption)").font(.caption).foregroundStyle(.secondary)
+                    Text("Exempt: \(exemption)").textStyle(.caption).foregroundStyle(.secondary)
                 }
                 FindingsView(findings: member.findings)
                 SourceLinkView(file: member.file, line: member.line)
@@ -797,16 +799,16 @@ struct MemberRowView: View {
             VStack(alignment: .leading, spacing: 3) {
                 HStack(alignment: .firstTextBaseline, spacing: 6) {
                     CodeView(runs: Highlight.runs(of: member.contract))
-                        .font(.system(.callout, design: .monospaced))
+                        .textStyle(.callout, design: .monospaced)
                         .lineLimit(isOpen ? nil : 2)
                     if !member.findings.isEmpty {
                         Circle().fill(Palette.danger).frame(width: 6, height: 6)
                     }
                 }
                 if let brief {
-                    DocTextView(text: brief).font(.callout).foregroundStyle(.secondary)
+                    DocTextView(text: brief).textStyle(.callout).foregroundStyle(.secondary)
                 } else if member.requiresDoc {
-                    Text("Undocumented").font(.callout).foregroundStyle(Palette.danger)
+                    Text("Undocumented").textStyle(.callout).foregroundStyle(Palette.danger)
                 }
             }
             .padding(.vertical, 6)
@@ -828,7 +830,7 @@ struct HeadingView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             if let eyebrow { EyebrowView(text: eyebrow) }
-            Text(title).font(.system(.title, design: .serif).italic())
+            Text(title).textStyle(.title, design: .serif, italic: true)
             if let lede { Text(lede).foregroundStyle(.secondary) }
         }
     }
@@ -855,7 +857,7 @@ struct EyebrowView: View {
 
     var body: some View {
         Text(text.uppercased())
-            .font(.system(size: 10.5, weight: .semibold))
+            .textSize(10.5, weight: .semibold)
             .tracking(0.8)
             .foregroundStyle(.secondary)
     }
@@ -897,7 +899,7 @@ struct NoteView: View {
                         Text(code)
                     }
                 }
-                .font(.system(.callout, design: .monospaced))
+                .textStyle(.callout, design: .monospaced)
                 .fixedSize()
                 .padding(10)
             }
@@ -935,9 +937,9 @@ struct TermsView: View {
             ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
                 HStack(alignment: .firstTextBaseline, spacing: 10) {
                     if !row.term.isEmpty {
-                        Text(row.term).font(.system(.callout, design: .monospaced))
+                        Text(row.term).textStyle(.callout, design: .monospaced)
                     }
-                    DocTextView(text: row.text).font(.callout).foregroundStyle(row.missing ? Palette.danger : .primary)
+                    DocTextView(text: row.text).textStyle(.callout).foregroundStyle(row.missing ? Palette.danger : .primary)
                 }
             }
         }
@@ -954,8 +956,8 @@ struct FindingsView: View {
             VStack(alignment: .leading, spacing: 4) {
                 ForEach(Array(findings.enumerated()), id: \.offset) { _, finding in
                     HStack(alignment: .firstTextBaseline, spacing: 8) {
-                        Text(finding.rule).font(.system(.caption, design: .monospaced).weight(.semibold))
-                        Text(finding.message).font(.callout)
+                        Text(finding.rule).textStyle(.caption, design: .monospaced, weight: .semibold)
+                        Text(finding.message).textStyle(.callout)
                     }
                     .foregroundStyle(Palette.danger)
                 }
@@ -977,7 +979,7 @@ struct SourceLinkView: View {
     var body: some View {
         Button { workspace.reveal(file, line: line) } label: {
             Label("\(file):\(line)", systemImage: "arrow.up.forward.app")
-                .font(.caption)
+                .textStyle(.caption)
         }
         .buttonStyle(.link)
         // The file on disk is not the one read when the window shows another revision.
@@ -1008,8 +1010,8 @@ struct ChipBlockView: View {
             VStack(alignment: .leading, spacing: 6) {
                 if !title.isEmpty {
                     HStack(spacing: 6) {
-                        Text(title).font(.callout.weight(.semibold))
-                        Text("\(units.count)").font(.caption.monospacedDigit()).foregroundStyle(.secondary)
+                        Text(title).textStyle(.callout, weight: .semibold)
+                        Text("\(units.count)").textStyle(.caption, monospacedDigit: true).foregroundStyle(.secondary)
                     }
                 }
                 Wrap(spacing: 6) {
@@ -1019,7 +1021,7 @@ struct ChipBlockView: View {
                     if shown < units.count {
                         Button("\(units.count - shown) more") { showsAll = true }
                             .buttonStyle(.link)
-                            .font(.callout)
+                            .textStyle(.callout)
                             .help("Show every one")
                     }
                 }
@@ -1048,7 +1050,7 @@ struct ChipView: View {
             if NSEvent.modifierFlags.contains(.command) { workspace.openInNewTab(target) } else { workspace.select(target) }
         } label: {
             Text(atlas.label(of: unit))
-                .font(.system(.callout, design: .monospaced))
+                .textStyle(.callout, design: .monospaced)
                 .padding(.horizontal, 7)
                 .padding(.vertical, 3)
                 .foregroundStyle(isHovered ? Palette.accent : .primary)

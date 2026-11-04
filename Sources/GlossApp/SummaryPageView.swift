@@ -31,14 +31,14 @@ struct SummaryPageView: View {
             EyebrowView(text: "Findings by rule · \(summary.findingsByRule.count)")
             if summary.findingsByRule.isEmpty {
                 Text("No findings: every declaration's doc has the shape the rules ask for.")
-                    .font(.callout)
+                    .textStyle(.callout)
                     .foregroundStyle(.secondary)
             } else {
                 Grid(alignment: .leadingFirstTextBaseline, horizontalSpacing: 16, verticalSpacing: 4) {
                     ForEach(summary.findingsByRule, id: \.name) { rule in
                         GridRow {
-                            Text(rule.name).font(.system(.callout, design: .monospaced))
-                            Text("\(rule.count)").font(.system(.callout, design: .monospaced)).foregroundStyle(Palette.danger)
+                            Text(rule.name).textStyle(.callout, design: .monospaced)
+                            Text("\(rule.count)").textStyle(.callout, design: .monospaced).foregroundStyle(Palette.danger)
                                 .gridColumnAlignment(.trailing)
                         }
                     }
@@ -55,13 +55,13 @@ struct SummaryPageView: View {
                         HStack(alignment: .firstTextBaseline) {
                             ModuleNameView(module: module.name)
                             Text(module.findings == 0 ? "no findings" : "\(module.findings) finding\(module.findings == 1 ? "" : "s")")
-                                .font(.callout)
+                                .textStyle(.callout)
                                 .foregroundStyle(module.findings == 0 ? Palette.ok : Palette.danger)
                                 .fixedSize()
                         }
                         Text("\(module.types) type\(module.types == 1 ? "" : "s") · \(module.declarations) declarations · "
                              + "\(module.publicDeclarations) public · \(module.documented) of \(module.owed) documented")
-                            .font(.caption)
+                            .textStyle(.caption)
                             .foregroundStyle(.secondary)
                             .padding(.leading, 14)
                     }
@@ -76,7 +76,7 @@ struct SummaryPageView: View {
                 ForEach(summary.mostFindings, id: \.name) { type in
                     HStack(spacing: 8) {
                         ChipView(unit: .type(type.name), atlas: atlas)
-                        Text("\(type.count)").font(.system(.callout, design: .monospaced)).foregroundStyle(Palette.danger)
+                        Text("\(type.count)").textStyle(.callout, design: .monospaced).foregroundStyle(Palette.danger)
                     }
                 }
             }
@@ -86,7 +86,7 @@ struct SummaryPageView: View {
             Grid(alignment: .leadingFirstTextBaseline, horizontalSpacing: 16, verticalSpacing: 4) {
                 ForEach(summary.byAccess, id: \.name) { access in
                     GridRow {
-                        Text(access.name).font(.system(.callout, design: .monospaced))
+                        Text(access.name).textStyle(.callout, design: .monospaced)
                         Self.number(access.count).gridColumnAlignment(.trailing)
                     }
                 }
@@ -99,7 +99,7 @@ struct SummaryPageView: View {
     /// - Parameter count: The count.
     /// - Returns: The count, monospaced so a column lines up, and never wrapped.
     static func number(_ count: Int) -> some View {
-        Text("\(count)").font(.system(.callout, design: .monospaced)).lineLimit(1).fixedSize()
+        Text("\(count)").textStyle(.callout, design: .monospaced).lineLimit(1).fixedSize()
     }
 }
 
@@ -115,7 +115,7 @@ struct ModuleNameView: View {
             HStack(spacing: 6) {
                 ModuleDotView(module: module)
                 Text(module)
-                    .font(.system(.callout, design: .monospaced))
+                    .textStyle(.callout, design: .monospaced)
                     .lineLimit(1)
                     .truncationMode(.middle)
             }

@@ -11,33 +11,45 @@ public enum Linter {
     /// - Parameters:
     ///   - source: The file's contents.
     ///   - file: The path reported in diagnostics.
-    /// - Returns: Violations in source order.
-    public static func check(source: String, file: String) -> [Diagnostic] {
-        DeclarationReader.read(source: source, file: file)
-            .flatMap { Rules.check($0.declaration, doc: $0.doc) }
-            .sorted(by: inSourceOrder)
+    ///   - style: The project's house style; gloss's own when not given.
+    /// - Returns: Violations in source order, at the levels the style sets.
+    public static func check(source: String, file: String, style: HouseStyle = HouseStyle()) -> [Diagnostic] {
+        style.report(DeclarationReader.read(source: source, file: file)
+            .flatMap { Rules.check($0.declaration, doc: $0.doc, style: style) }
+            .sorted(by: inSourceOrder))
     }
 
     /// Lints a whole project: every file's own rules, then the links each file makes into the others.
     ///
-    /// - Parameter sources: Each file's path, as it should be reported, and its contents.
-    /// - Returns: Violations, file by file in the order given, each file's in source order.
-    public static func check(sources: [(file: String, source: String)]) -> [Diagnostic] {
+    /// - Parameters:
+    ///   - sources: Each file's path, as it should be reported, and its contents.
+    ///   - style: The project's house style; gloss's own when not given. Files it excludes are read, so
+    ///     links into them resolve, but not linted.
+    /// - Returns: Violations, file by file in the order given, each file's in source order, at the levels
+    ///   the style sets.
+    public static func check(sources: [(file: String, source: String)], style: HouseStyle = HouseStyle()) -> [Diagnostic] {
         let reading = Reading(sources: sources)
-        return reading.files.flatMap { file in
-            file.entries.flatMap { Rules.check($0.declaration, doc: $0.doc) + deadLinks($0, index: reading.index) }
-                .sorted(by: inSourceOrder)
+        return reading.files.filter { !style.excludes($0.file) }.flatMap { file in
+            style.report(file.entries.flatMap { Rules.check($0.declaration, doc: $0.doc, style: style) + deadLinks($0, index: reading.index) }
+                .sorted(by: inSourceOrder))
         }
     }
 
     /// Assesses every declaration of sources already read, links into every file included.
     ///
-    /// - Parameter reading: The sources, read once.
+    /// - Parameters:
+    ///   - reading: The sources, read once.
+    ///   - style: The project's house style; gloss's own when not given.
     /// - Returns: One assessment per declaration, in file order and then source order, the order the
-    ///   contract model keeps its contracts in.
-    public static func assess(_ reading: Reading) -> [Assessment] {
+    ///   contract model keeps its contracts in; a file the style excludes owes no docs and has no findings.
+    public static func assess(_ reading: Reading, style: HouseStyle = HouseStyle()) -> [Assessment] {
         Timing.measure("lint", "\(reading.files.count) files") {
-            concurrentMap(reading.files) { file in file.entries.map { assess($0, index: reading.index) } }.flatMap { $0 }
+            concurrentMap(reading.files) { file in
+                guard !style.excludes(file.file) else {
+                    return file.entries.map { _ in Assessment(requiresDoc: false, exemption: "Excluded by the house style", findings: []) }
+                }
+                return file.entries.map { assess($0, index: reading.index, style: style) }
+            }.flatMap { $0 }
         }
     }
 
@@ -64,14 +76,15 @@ public enum Linter {
     ///   - entry: A declaration from ``DeclarationReader``.
     ///   - index: Every declaration of the project, to check the comment's links against; `nil` skips
     ///     them.
-    /// - Returns: The assessment, findings in source order.
-    public static func assess(_ entry: DeclarationReader.Entry, index: SymbolIndex? = nil) -> Assessment {
-        let diagnostics = Rules.check(entry.declaration, doc: entry.doc) + (index.map { deadLinks(entry, index: $0) } ?? [])
+    ///   - style: The project's house style; gloss's own when not given.
+    /// - Returns: The assessment, findings in source order at the levels the style sets.
+    public static func assess(_ entry: DeclarationReader.Entry, index: SymbolIndex? = nil, style: HouseStyle = HouseStyle()) -> Assessment {
+        let diagnostics = Rules.check(entry.declaration, doc: entry.doc, style: style) + (index.map { deadLinks(entry, index: $0) } ?? [])
         return Assessment(
-            requiresDoc: entry.declaration.requiresDoc,
+            requiresDoc: style.requiresDoc(entry.declaration),
             exemption: entry.declaration.exemption.map(describe),
-            findings: diagnostics.sorted(by: inSourceOrder).map {
-                Assessment.Finding(rule: $0.rule.rawValue, line: $0.line, message: $0.message)
+            findings: style.report(diagnostics.sorted(by: inSourceOrder)).map {
+                Assessment.Finding(rule: $0.rule.rawValue, line: $0.line, message: $0.message, severity: $0.severity)
             }
         )
     }
@@ -100,7 +113,7 @@ public enum Linter {
     }
 }
 
-/// What the linter concluded about one declaration, kept beside its ``Contract`` rather than in it.
+/// What the linter concluded about one declaration, kept beside its contract rather than in it.
 public struct Assessment: Sendable, Equatable, Codable {
     /// One rule finding, addressed by line so a view can place it next to the contract it breaks.
     public struct Finding: Sendable, Equatable, Codable {
@@ -110,9 +123,11 @@ public struct Assessment: Sendable, Equatable, Codable {
         public var line: Int
         /// The fix in one or two sentences, quoting the fragment it names.
         public var message: String
+        /// How loudly the house style reports it.
+        public var severity: Diagnostic.Severity
     }
 
-    /// `true` when the harness demands a doc comment on the declaration.
+    /// `true` when the house style demands a doc comment on the declaration.
     public var requiresDoc: Bool
     /// Why the declaration is excused from the harness, in words, or `nil` when it is not.
     public var exemption: String?

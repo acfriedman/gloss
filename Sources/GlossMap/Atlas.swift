@@ -92,7 +92,7 @@ public struct Atlas: Sendable {
     ///
     /// - Parameters:
     ///   - interface: The interface to arrange.
-    ///   - assessments: One assessment per contract, at the same index, as ``GlossLint/Linter/assess(_:)``
+    ///   - assessments: One assessment per contract, at the same index, as ``GlossLint/Linter/assess(_:style:)``
     ///     makes them from the reading the interface was built from; `nil` arranges the interface alone.
     ///
     /// The contracts come from what the docs say, so an interface arranged without the lint reads the same;

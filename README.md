@@ -30,15 +30,15 @@ swift run -c release GlossApp --root path/to/YourPackage      # read it
 ```
 
 Each finding is one line in compiler format, so Xcode and GitHub Actions show it as is, and the exit status
-is 1 when there are any, so the same command gates CI. Build for release: a debug build is several times
+is 1 when any is an error, so the same command gates CI. Build for release: a debug build is several times
 slower on a large codebase.
 
 ## Commands
 
 | Command | Does |
 | --- | --- |
-| `gloss <paths>` | lints; `--include-tests` reads `*Tests` folders too, `--summary` prints only counts by rule |
-| `gloss interface <paths>` | exports the interface: `--json <file>`, `--html <file>`, `--title <name>` |
+| `gloss <paths>` | lints; `--include-tests` reads `*Tests` folders too, `--summary` prints only counts by rule, `--style <file>` reads a house style other than the nearest |
+| `gloss interface <paths>` | exports the interface: `--json <file>`, `--html <file>`, `--title <name>`, `--style <file>` |
 | `gloss story [--base main] <paths>` | prints what the branch's story covers; fails while a changed type is left out |
 | `gloss bench [--base <rev>] <paths>` | runs the app's work without a window and times each phase |
 
@@ -81,7 +81,7 @@ no note, or a link names nothing.
 
 | Code | Fires when |
 | --- | --- |
-| `missing-doc` | a non-private declaration has no `///` comment |
+| `missing-doc` | a non-private declaration has no `///` comment; the house style can ask only from `public` |
 | `block-doc` | the comment is `/** */` |
 | `summary-empty`, `summary-sentences`, `summary-terminator`, `summary-capital`, `summary-opener` | the summary is missing, isn't one or two sentences, has no period, starts lowercase, or opens with "This method…" |
 | `markup-order`, `markup-spacing`, `markup-case`, `markup-unknown` | a callout follows prose, touches the summary, is lowercase, or is a near miss like `- Return:` |
@@ -101,6 +101,31 @@ A protocol requirement inherits the protocol's doc, so gloss skips:
 - **members of a conformance extension** (`extension T: P`), for `missing-doc` only;
 - **memberwise initializers**, whose body only assigns their parameters;
 - **anything marked** `// gloss:exempt <reason>` on the line above.
+
+## House style
+
+The rules above are gloss's own house style. A project picks its own in `.gloss/style.json`, which gloss
+reads from the current directory or the nearest folder above it, and the app from the folder it opens.
+Every key is optional:
+
+```json
+{
+  "severity": "warning",
+  "rules": { "missing-doc": "error", "summary-*": "off" },
+  "exclude": ["Sources/Generated", "**/*.pb.swift"],
+  "requireDocs": "public"
+}
+```
+
+| Key | Does |
+| --- | --- |
+| `severity` | the level of every rule `rules` doesn't name: `error` (the default), `warning`, or `off` |
+| `rules` | a level per rule code, or per prefix ending in `*`; a code wins over a prefix |
+| `exclude` | paths not linted, from the folder holding `.gloss`: `*`, `**`, `?`, or a folder for all of it; their declarations still resolve links |
+| `requireDocs` | the narrowest access that owes a doc for `missing-doc`: `public`, `package`, or `internal` (the default) |
+
+Warnings print as `warning:` and leave the exit status 0, so a team can bring a rule in before it gates
+anything. A key or rule code gloss doesn't know stops the run, so a typo can't leave a rule on unnoticed.
 
 ## Environment
 

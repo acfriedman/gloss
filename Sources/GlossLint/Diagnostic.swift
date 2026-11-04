@@ -63,6 +63,14 @@ public enum Rule: String, CaseIterable, Sendable {
 ///
 /// Rendering as `file:line:column: error: message [rule]` lets any CI surface the finding unchanged.
 public struct Diagnostic: Sendable, Equatable {
+    /// How loudly a finding is reported, as a project's ``HouseStyle`` sets its rule.
+    public enum Severity: String, Sendable, Equatable, Codable {
+        /// Reported as `error:`, failing the run.
+        case error
+        /// Reported as `warning:`, leaving the run passing.
+        case warning
+    }
+
     /// The path as given on the command line.
     public var file: String
     /// The 1-based line: the offending comment line for a doc rule, the declaration's line for `missing-doc`,
@@ -75,6 +83,8 @@ public struct Diagnostic: Sendable, Equatable {
     public var rule: Rule
     /// The fix in one or two sentences, quoting the fragment it names.
     public var message: String
+    /// How loudly it is reported; every rule is an error until a style says otherwise.
+    public var severity: Severity = .error
 
     /// Creates a diagnostic at a source position.
     ///
@@ -96,8 +106,8 @@ public struct Diagnostic: Sendable, Equatable {
     /// Renders the diagnostic on one line in compiler format. The bracketed rule code at the end keeps
     /// the message human-first while staying greppable.
     ///
-    /// - Returns: `file:line:column: error: message [rule]`.
+    /// - Returns: `file:line:column: error: message [rule]`, or `warning:` for a warning.
     public var rendered: String {
-        "\(file):\(line):\(column): error: \(message) [\(rule.rawValue)]"
+        "\(file):\(line):\(column): \(severity.rawValue): \(message) [\(rule.rawValue)]"
     }
 }

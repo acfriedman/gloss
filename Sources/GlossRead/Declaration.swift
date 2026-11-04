@@ -87,6 +87,8 @@ public struct Declaration: Sendable, Equatable {
     public var isPrivate: Bool
     /// `true` for `override`; excuses `missing-doc`, since the doc is inherited.
     public var isOverride: Bool
+    /// The effective access level: `open`, `public`, `package`, `internal`, `fileprivate`, or `private`.
+    public var access: String
     /// The path diagnostics report.
     public var file: String
     /// The 1-based source line of the name token, or of the keyword for an initializer, subscript, property,
@@ -109,6 +111,7 @@ public struct Declaration: Sendable, Equatable {
     ///   - isPrivate: `true` for `private` or `fileprivate`, including members of a private type or
     ///     extension; excuses `missing-doc` only.
     ///   - isOverride: `true` for `override`; excuses `missing-doc`, since the doc is inherited.
+    ///   - access: The effective access level, such as `public` or `internal`.
     ///   - file: The path diagnostics report.
     ///   - line: The 1-based source line of the name token, or of the keyword for an initializer,
     ///     subscript, property, or enum case.
@@ -122,6 +125,7 @@ public struct Declaration: Sendable, Equatable {
         throwsErrors: Bool = false,
         isPrivate: Bool = false,
         isOverride: Bool = false,
+        access: String = "internal",
         file: String = "<memory>",
         line: Int = 1,
         column: Int = 1
@@ -134,6 +138,7 @@ public struct Declaration: Sendable, Equatable {
         self.throwsErrors = throwsErrors
         self.isPrivate = isPrivate
         self.isOverride = isOverride
+        self.access = access
         self.file = file
         self.line = line
         self.column = column
@@ -145,6 +150,19 @@ public struct Declaration: Sendable, Equatable {
     public var signature: String {
         guard let parameters else { return name }
         return name + "(" + parameters.map { ($0.label ?? "_") + ":" }.joined() + ")"
+    }
+
+    /// How wide an access level is, so two can be compared.
+    ///
+    /// - Parameter access: An access level as written, such as `public`.
+    /// - Returns: 3 for `open` and `public`, 2 for `package`, 1 for `internal`, and 0 for the private ones.
+    public static func rank(_ access: String) -> Int {
+        switch access {
+        case "open", "public": 3
+        case "package": 2
+        case "internal": 1
+        default: 0
+        }
     }
 
     /// Signatures the standard library, Foundation, and the macro system require of conformers.

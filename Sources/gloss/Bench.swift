@@ -15,17 +15,19 @@ enum Bench {
     ///
     /// - Parameters:
     ///   - sources: Each file's path and its text.
+    ///   - style: The house style the lint follows, as the app would read it.
     ///   - base: A revision to compare with, as the Changes level does, or `nil` for no comparison.
     ///   - directory: A directory inside the repository the revision is read from.
     ///   - includeTests: Whether the base's test directories are read too, as the sources' were.
     /// - Returns: The phases in the order they finished.
-    static func run(sources: [(file: String, source: String)], base: String?, in directory: String, includeTests: Bool) -> [Timing.Sample] {
+    static func run(sources: [(file: String, source: String)], style: HouseStyle, base: String?, in directory: String,
+                    includeTests: Bool) -> [Timing.Sample] {
         Timing.record {
             // The calls that can be slow time themselves; only the steps made of several calls are
             // measured here.
             let reading = Reading(sources: sources)
             let interface = Interface.build(reading)
-            let atlas = Atlas(interface, assessments: Linter.assess(reading))
+            let atlas = Atlas(interface, assessments: Linter.assess(reading, style: style))
             let scopes = atlas.mapScopes()
             _ = atlas.levelsDrawing(scopes)
             for scope in scopes {

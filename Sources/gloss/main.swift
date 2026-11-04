@@ -5,14 +5,16 @@ import GlossMap
 import GlossPage
 import Foundation
 
-/// Command-line entry: `gloss [--include-tests] [--summary] <path>...` lints;
+/// Command-line entry: `gloss [--include-tests] [--summary] [--style <file>] <path>...` lints;
 /// `gloss interface [--include-tests] [--json <file>] [--html <file>] [--title <name>] <path>...` exports;
 /// `gloss bench [--include-tests] [--base <revision>] <path>...` times what the app does with the paths;
 /// `gloss story [--include-tests] [--base <revision>] <path>...` checks the branch's story covers its change.
 ///
 /// Paths may be files or directories; directories are walked for `.swift` files, skipping `.build`
 /// and, unless `--include-tests` is given, any directory whose name ends in `Tests`. The interface
-/// command writes JSON to standard output when neither `--json` nor `--html` names a file.
+/// command writes JSON to standard output when neither `--json` nor `--html` names a file. The lint, the
+/// export, and the bench follow the project's house style: the file `--style` names, else the nearest
+/// `.gloss/style.json` in the current directory or above it, else gloss's own.
 var arguments = Array(CommandLine.arguments.dropFirst())
 let interfaceMode = arguments.first == "interface"
 let benchMode = arguments.first == "bench"
@@ -27,7 +29,8 @@ while index < arguments.count {
     let argument = arguments[index]
     index += 1
     guard argument.hasPrefix("--") else { paths.append(argument); continue }
-    if (interfaceMode && ["--json", "--html", "--title"].contains(argument)) || ((benchMode || storyMode) && argument == "--base") {
+    if (interfaceMode && ["--json", "--html", "--title"].contains(argument)) || ((benchMode || storyMode) && argument == "--base")
+        || (!storyMode && argument == "--style") {
         guard index < arguments.count else {
             FileHandle.standardError.write(Data("gloss: \(argument) needs a value\n".utf8))
             exit(64)
@@ -39,14 +42,24 @@ while index < arguments.count {
 
 guard !paths.isEmpty else {
     FileHandle.standardError.write(Data("""
-    usage: gloss [--include-tests] [--summary] <path>...
-           gloss interface [--include-tests] [--json <file>] [--html <file>] [--title <name>] <path>...
-           gloss bench [--include-tests] [--base <revision>] <path>...
+    usage: gloss [--include-tests] [--summary] [--style <file>] <path>...
+           gloss interface [--include-tests] [--style <file>] [--json <file>] [--html <file>] [--title <name>] <path>...
+           gloss bench [--include-tests] [--style <file>] [--base <revision>] <path>...
            gloss story [--include-tests] [--base <revision>] <path>...
 
     """.utf8))
     exit(64)
 }
+
+/// The project's house style, which a broken file stops the run over rather than linting by another.
+let style: HouseStyle = {
+    do {
+        return try options["--style"].map { try HouseStyle.load($0) } ?? HouseStyle.find(from: FileManager.default.currentDirectoryPath)
+    } catch {
+        FileHandle.standardError.write(Data("gloss: \(error)\n".utf8))
+        exit(65)
+    }
+}()
 
 /// Collects the `.swift` files under a path. A path that does not exist exits with status 66, so a
 /// typo cannot pass as a clean run.
@@ -75,7 +88,7 @@ if storyMode {
 }
 
 if benchMode {
-    let samples = readSamples + Bench.run(sources: sources, base: options["--base"], in: paths[0], includeTests: includeTests)
+    let samples = readSamples + Bench.run(sources: sources, style: style, base: options["--base"], in: paths[0], includeTests: includeTests)
     print(Bench.table(samples))
     exit(0)
 }
@@ -83,7 +96,7 @@ if benchMode {
 if interfaceMode {
     let reading = Reading(sources: sources)
     let interface = Interface.build(reading)
-    let assessments = Linter.assess(reading)
+    let assessments = Linter.assess(reading, style: style)
     let export = Export(interface, assessments: assessments)
     let encoder = JSONEncoder()
     encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
@@ -110,15 +123,19 @@ if interfaceMode {
     exit(0)
 }
 
-let diagnostics = Linter.check(sources: sources)
+let diagnostics = Linter.check(sources: sources, style: style)
 
 if !summaryOnly {
     for diagnostic in diagnostics { print(diagnostic.rendered) }
 }
 let byRule = Dictionary(grouping: diagnostics, by: \.rule).mapValues(\.count)
-var summary = "\(diagnostics.count) error\(diagnostics.count == 1 ? "" : "s") in \(sources.count) file\(sources.count == 1 ? "" : "s")"
+let errors = diagnostics.filter { $0.severity == .error }.count
+let warnings = diagnostics.count - errors
+var summary = "\(errors) error\(errors == 1 ? "" : "s")" + (warnings > 0 ? " and \(warnings) warning\(warnings == 1 ? "" : "s")" : "")
+    + " in \(sources.count) file\(sources.count == 1 ? "" : "s")"
 if !byRule.isEmpty {
     summary += "\n" + byRule.sorted { $0.value > $1.value }.map { "  \($0.value)\t\($0.key.rawValue)" }.joined(separator: "\n")
 }
 FileHandle.standardError.write(Data((summary + "\n").utf8))
-exit(diagnostics.isEmpty ? 0 : 1)
+// Only errors fail the run, so a style can bring a rule in as a warning before it gates anything.
+exit(errors == 0 ? 0 : 1)

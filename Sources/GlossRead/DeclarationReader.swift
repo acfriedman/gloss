@@ -321,11 +321,13 @@ public final class DeclarationReader: SyntaxVisitor {
         } else if isMemberwise {
             declaration.exemption = .memberwiseInit
         }
+        let access = effectiveAccess(modifiers, kind: kind)
+        declaration.access = access
         let details = Details(
             keyword: Header.keyword(of: node),
             mentions: Mentions.collect(node, parameters: parameters, returnType: returnType, effects: effects),
             container: scopes.map(\.name),
-            access: effectiveAccess(modifiers, kind: kind),
+            access: access,
             header: Header.text(of: node),
             parameterTypes: (parameters ?? []).map { ($0.type.trimmedDescription + ($0.ellipsis?.text ?? ""), $0.defaultValue != nil) },
             returnType: returnType?.trimmedDescription,

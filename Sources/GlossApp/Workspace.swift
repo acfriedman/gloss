@@ -479,8 +479,9 @@ final class Workspace {
         ///   - root: The folder.
         ///   - head: The revision to read, or `nil` for the files on disk.
         /// - Returns: The interface and its arrangement, with files named relative to `root`.
-        /// - Throws: ``GlossRead/SourceFiles/Missing`` when the folder is gone, or
-        ///   ``GlossRead/Revision/Failure`` when git cannot read the revision.
+        /// - Throws: ``GlossRead/SourceFiles/Missing`` when the folder is gone,
+        ///   ``GlossRead/Revision/Failure`` when git cannot read the revision, or
+        ///   ``GlossLint/HouseStyle/Problem`` when the folder's house style cannot be read.
         static func read(_ root: URL, head: String?) throws -> Loaded {
             let scanned = scanned(root)
             let pairs: [(file: String, source: String)] = try Timing.measure("read files", head ?? "working tree") {
@@ -495,7 +496,8 @@ final class Workspace {
             }
             let reading = Reading(sources: pairs)
             let interface = Interface.build(reading)
-            let atlas = Atlas(interface, assessments: Linter.assess(reading))
+            // The house style is the folder's own, read from the working tree whatever revision is shown.
+            let atlas = Atlas(interface, assessments: Linter.assess(reading, style: try HouseStyle.find(from: root.path)))
             let scopes = atlas.mapScopes()
             let levels = atlas.levelsDrawing(scopes)
             let (branch, refs, current) = Timing.measure("read branches") {

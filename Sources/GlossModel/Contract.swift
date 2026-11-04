@@ -93,12 +93,7 @@ public struct Contract: Sendable, Equatable, Codable {
     /// - Parameter access: An access keyword.
     /// - Returns: 3 for `open` and `public`, 2 for `package`, 1 for `internal`, 0 for the private levels.
     public static func rank(_ access: String) -> Int {
-        switch access {
-        case "open", "public": 3
-        case "package": 2
-        case "internal": 1
-        default: 0
-        }
+        Declaration.rank(access)
     }
 
     /// Builds the contract of one declaration as read. The doc is parsed with the same parser the rules

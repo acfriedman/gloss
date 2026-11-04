@@ -12,8 +12,10 @@ public enum Rules {
     /// - Parameters:
     ///   - declaration: The declaration under review.
     ///   - doc: Its doc comment, or `nil` when it has none.
+    ///   - style: The project's house style, which decides whether a missing doc is owed; gloss's own when
+    ///     not given. Levels are the style's to apply, in ``HouseStyle/report(_:)``.
     /// - Returns: Every violation found, in source order.
-    public static func check(_ declaration: Declaration, doc: DocComment?) -> [Diagnostic] {
+    public static func check(_ declaration: Declaration, doc: DocComment?, style: HouseStyle = HouseStyle()) -> [Diagnostic] {
         switch declaration.exemption {
         case .knownRequirement:
             return []
@@ -31,7 +33,7 @@ public enum Rules {
             break
         }
         guard let doc else {
-            guard declaration.requiresDoc else { return [] }
+            guard style.requiresDoc(declaration) else { return [] }
             return [diagnostic(declaration, line: declaration.line, column: declaration.column, .missingDoc,
                                "`\(declaration.name)` has no doc comment. Write `///` lines: one sentence for what it does, one for why it exists, then `- Parameter`/`- Returns:`/`- Throws:` entries.")]
         }

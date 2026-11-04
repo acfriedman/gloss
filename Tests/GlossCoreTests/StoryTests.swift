@@ -88,6 +88,47 @@ final class StoryTests: XCTestCase {
         XCTAssertEqual(thin.unexplained, ["Shop/Discount", "Shop/Coupon"], "The new and the gone type have no theme.")
     }
 
+    func testNotesTellAThemeFromEachTypesSide() throws {
+        let before = Interface.build(sources: [("Sources/Shop/Cart.swift", base)])
+        let after = Interface.build(sources: [("Sources/Shop/Cart.swift", head)])
+        let diff = InterfaceDiff(base: before, head: after)
+        let read = ChangeStory.parse("""
+        # Price carts in fractions
+
+        ## Totals return a Double
+
+        Carts total in fractions now.
+
+        ### ``Cart``
+
+        Cart's total is a Double, and it holds no coupon.
+
+        ### ``Cart/total()``
+
+        Returns a Double.
+
+        ### A heading that is not a link
+
+        Stays prose of the note above.
+
+        ## Discounts
+
+        ``Discount`` and ``Coupon``.
+        """)
+        XCTAssertEqual(read.themes[0].paragraphs, ["Carts total in fractions now."])
+        XCTAssertEqual(read.themes[0].notes.map(\.link), ["Cart", "Cart/total()"])
+        XCTAssertEqual(read.themes[0].notes[1].paragraphs, ["Returns a Double.", "A heading that is not a link", "Stays prose of the note above."],
+                       "A heading that is not one link is prose, a paragraph of its own.")
+        XCTAssertEqual(read.themes[0].links, ["Cart", "Cart/total()"], "A note's link counts toward its theme.")
+        let coverage = StoryCoverage(story: read, diff: diff, head: after, base: before)
+        XCTAssertEqual(coverage.typeNotes["Shop/Cart"], [StoryCoverage.NotePlace(theme: 0, note: 0)])
+        XCTAssertEqual(coverage.memberNotes[StoryCoverage.MemberLink(node: "Shop/Cart", name: "total()")], [StoryCoverage.NotePlace(theme: 0, note: 1)])
+        XCTAssertTrue(coverage.unexplained.isEmpty)
+        XCTAssertEqual(coverage.withoutNotes, ["Shop/Discount", "Shop/Coupon"],
+                       "Explained by a theme, but with no note of their own; Cart's covers its nested Receipt.")
+        XCTAssertFalse(coverage.isComplete)
+    }
+
     func testADraftHasAThemePerModuleWithoutCommits() {
         let before = Interface.build(sources: [("Sources/Shop/Cart.swift", base)])
         let after = Interface.build(sources: [("Sources/Shop/Cart.swift", head)])
@@ -96,6 +137,8 @@ final class StoryTests: XCTestCase {
         let read = ChangeStory.parse(draft)
         XCTAssertNotNil(read.headline)
         XCTAssertEqual(read.themes.map(\.title), ["Shop"])
-        XCTAssertTrue(StoryCoverage(story: read, diff: diff, head: after, base: before).isComplete, "A draft covers the change it was made from.")
+        XCTAssertTrue(StoryCoverage(story: read, diff: diff, head: after, base: before).isComplete,
+                      "A draft covers the change it was made from, a note to fill in for each type.")
+        XCTAssertEqual(read.themes[0].notes.map(\.link), ["Cart", "Cart/Receipt", "Discount", "Coupon"])
     }
 }

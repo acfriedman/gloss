@@ -269,15 +269,16 @@ the branch, so it is reviewed with the change and stays as its record; `pr:` in 
 the pull request once there is one. `gloss story --base main Sources` prints what the branch's story
 covers and fails while a type it should explain has no theme, for CI.
 
-Each changed type's page says why in its authors' words (`ChangeCommits`, in `GlossCore`): the
-messages of the commits that made its changes, oldest first, each subject over its body's first
-paragraph, unfolding to the rest. Every changed declaration lists its own commits by short hash and
-subject, and its doc's summary before and now when the doc changed. A declaration is matched to
-commits by its lines alone, its doc comment included: `git blame` over the range names the commit in
-it that last wrote each line, and for a declaration that is gone, `git blame --reverse` names the last
-commit that had it, after which the next one deleted it. Lines not committed yet say so instead. A
-commit's message speaks for everything it changed, so one large commit explains each declaration it
-touched in the same words.
+A theme can hold notes: a `###` heading that is one link, ``` ### ``Cart`` ``` or
+``` ### ``Cart/total()`` ```, opens the change told from that type's or member's side, even where it
+repeats the theme, since the two together triangulate it. A type's page sets each theme that explains
+it over the type's own note, or one on a type it is nested in, and a member's row its member's note;
+the Changes page counts each theme's notes. Every type whose interface changed needs a note of its own
+as well as a theme, and the types without one are listed until they have one; the draft stubs a note
+for each. Each changed declaration's row also shows its doc's summary before and now when the doc
+changed. Commit messages are left to where a commit is shown whole, the outline without a story and
+the draft (`ChangeCommits` matches each change to the commits that wrote its lines with `git blame`),
+since a commit's message speaks for everything it touched rather than for one type.
 
 The page is three panes on one screen: every type listed on the left, the text of one type in the
 middle, and the dependency map on the right, where it takes whatever width the other two leave.

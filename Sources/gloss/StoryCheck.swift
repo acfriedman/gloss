@@ -2,8 +2,8 @@ import GlossCore
 import Foundation
 
 /// What `gloss story` checks: that the branch's story, at `.gloss/changes/<branch>.md`, explains every
-/// type whose interface changed since where the branch left its base, and that its links name
-/// something, so a pull request can be held to saying why as its declarations are held to saying what.
+/// type whose interface changed since where the branch left its base, each in a note of its own as well
+/// as a theme, and that its links name something, so a pull request can be held to saying why as its declarations are held to saying what.
 enum StoryCheck {
     /// Reads the branch's story and its change, prints what the story covers and leaves out, and says
     /// whether it is complete.
@@ -40,6 +40,9 @@ enum StoryCheck {
             }
             for id in coverage.unexplained {
                 print("not in the story: \(diff.change(ofNode: id).map { "\($0.node.name) (\($0.change.rawValue))" } ?? id)")
+            }
+            for id in coverage.withoutNotes {
+                print("no note of its own: \(diff.change(ofNode: id).map { "\($0.node.name) (\($0.change.rawValue))" } ?? id)")
             }
             for dead in coverage.deadLinks {
                 print("names nothing: ``\(dead.link)`` in \(dead.theme)")

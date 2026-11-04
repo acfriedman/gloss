@@ -31,8 +31,21 @@ public struct ChangeStory: Sendable, Equatable {
         public var title: String
         /// The theme's paragraphs, each joined onto one line.
         public var paragraphs: [String]
-        /// The theme's links, as written between double backticks, in order and each once.
+        /// The theme's links, as written between double backticks, in order and each once: its prose's,
+        /// then each note's own and its prose's.
         public var links: [String]
+        /// The theme's notes, each the change told from one type's or member's side.
+        public var notes: [Note] = []
+    }
+
+    /// One type's or member's side of a theme: a `###` heading that is one link, and the paragraphs under
+    /// it, shown on that type's page beside the theme, so a reader zoomed in on the type reads the change
+    /// from where it stands.
+    public struct Note: Sendable, Equatable {
+        /// The link the heading is, as written between double backticks.
+        public var link: String
+        /// The note's paragraphs, each joined onto one line.
+        public var paragraphs: [String]
     }
 
     /// The headline, the `#` line, or `nil` when there is none.
@@ -72,7 +85,9 @@ public struct ChangeStory: Sendable, Equatable {
             let text = paragraph.joined(separator: " ").trimmingCharacters(in: .whitespaces)
             paragraph = []
             guard !text.isEmpty else { return }
-            if story.themes.isEmpty { story.summary.append(text) } else { story.themes[story.themes.count - 1].paragraphs.append(text) }
+            guard let theme = story.themes.indices.last else { return story.summary.append(text) }
+            if let note = story.themes[theme].notes.indices.last { story.themes[theme].notes[note].paragraphs.append(text) }
+            else { story.themes[theme].paragraphs.append(text) }
         }
         for line in lines {
             let trimmed = line.trimmingCharacters(in: .whitespaces)
@@ -83,13 +98,24 @@ public struct ChangeStory: Sendable, Equatable {
                 continue
             }
             if inFence { continue }
-            if trimmed.hasPrefix("## ") {
+            // A `###` heading that is one link opens a note, in the theme above it; any other is prose.
+            if trimmed.hasPrefix("### "), !story.themes.isEmpty,
+               case let heading = String(trimmed.dropFirst(4)).trimmingCharacters(in: .whitespaces),
+               heading.hasPrefix("``"), heading.hasSuffix("``"), let link = links(in: heading).first, links(in: heading).count == 1 {
+                endParagraph()
+                story.themes[story.themes.count - 1].notes.append(Note(link: link, paragraphs: []))
+            } else if trimmed.hasPrefix("## ") {
                 endParagraph()
                 story.themes.append(Theme(title: String(trimmed.dropFirst(3)).trimmingCharacters(in: .whitespaces), paragraphs: [], links: []))
             } else if trimmed.hasPrefix("# "), story.headline == nil, story.themes.isEmpty {
                 endParagraph()
                 story.headline = String(trimmed.dropFirst(2)).trimmingCharacters(in: .whitespaces)
             } else if trimmed.isEmpty {
+                endParagraph()
+            } else if trimmed.hasPrefix("### ") {
+                // A heading that is not one link stands as a paragraph of its own, without its marker.
+                endParagraph()
+                paragraph.append(String(trimmed.dropFirst(4)))
                 endParagraph()
             } else {
                 paragraph.append(trimmed)
@@ -98,7 +124,9 @@ public struct ChangeStory: Sendable, Equatable {
         endParagraph()
         for index in story.themes.indices {
             var seen: Set<String> = []
-            story.themes[index].links = story.themes[index].paragraphs.flatMap(links(in:)).filter { seen.insert($0).inserted }
+            let theme = story.themes[index]
+            story.themes[index].links = (theme.paragraphs.flatMap(links(in:)) + theme.notes.flatMap { [$0.link] + $0.paragraphs.flatMap(links(in:)) })
+                .filter { seen.insert($0).inserted }
         }
         return story
     }
@@ -121,7 +149,8 @@ public struct ChangeStory: Sendable, Equatable {
 
     /// A first draft of a branch's story, to edit rather than write from nothing: a headline and summary
     /// to fill in, then one theme per commit, its subject as the title, its body as the prose, and links to
-    /// the types it changed; or, with no commits, one theme per module.
+    /// the types it changed; or, with no commits, one theme per module. Each changed type gets a note to
+    /// fill in under the first theme that names it.
     ///
     /// - Parameters:
     ///   - diff: How the branch differs from its base.
@@ -134,6 +163,11 @@ public struct ChangeStory: Sendable, Equatable {
         func sentence(_ ids: [String]) -> String {
             ids.isEmpty ? "" : "Changes " + ids.map(link).joined(separator: ", ") + "."
         }
+        // Each type gets one note to tell the change from its side, under the first theme that names it.
+        var noted: Set<String> = []
+        func notes(_ ids: [String]) -> String {
+            ids.filter { noted.insert($0).inserted }.map { "\n### " + link($0) + "\n\nWhat changed in it, from its side, and why.\n" }.joined()
+        }
         var text = "# What this change does, in a line\n\nWhy it was made, and what a reviewer should look at first.\n"
         let changed = diff.nodes.filter { $0.change != .implementation }
         if let commits, !commits.commits.isEmpty {
@@ -142,13 +176,14 @@ public struct ChangeStory: Sendable, Equatable {
                 guard !ids.isEmpty else { continue }
                 text += "\n## \(commit.subject)\n\n"
                 if !commit.body.isEmpty { text += commit.body.components(separatedBy: "\n\n").first.map { $0.replacingOccurrences(of: "\n", with: " ") + "\n\n" } ?? "" }
-                text += sentence(ids) + "\n"
+                text += sentence(ids) + "\n" + notes(ids)
             }
         }
         if !text.contains("\n## ") {
             var seen: Set<String> = []
             for module in changed.map(\.node.module) where seen.insert(module).inserted {
-                text += "\n## \(module)\n\nWhat changed here, and why.\n\n" + sentence(changed.filter { $0.node.module == module }.map(\.node.id)) + "\n"
+                let ids = changed.filter { $0.node.module == module }.map(\.node.id)
+                text += "\n## \(module)\n\nWhat changed here, and why.\n\n" + sentence(ids) + "\n" + notes(ids)
             }
         }
         return text
@@ -162,7 +197,8 @@ public struct ChangeStory: Sendable, Equatable {
 /// with or without its module first, and a member when the rest is one of the type's members as a
 /// caller writes it, with its argument labels. A theme explains the types it links and their nested
 /// types, and the members it links. Every type whose interface changed, new, gone, or changed, needs a
-/// theme; a type changed only inside its bodies needs none.
+/// theme and a note of its own, or one on a type it is nested in; a type changed only inside its bodies
+/// needs neither.
 public struct StoryCoverage: Sendable, Equatable {
     /// For each theme, in order, the ids of the changed types it explains, in the order it links them.
     public var types: [[String]]
@@ -172,6 +208,21 @@ public struct StoryCoverage: Sendable, Equatable {
     public var unexplained: [String]
     /// The links that name no type in the head or the base, by theme title.
     public var deadLinks: [(theme: String, link: String)]
+    /// The ids of the types whose interface changed that have no note of their own, nor one on a type
+    /// they are nested in, in the diff's order.
+    public var withoutNotes: [String]
+    /// Where each type's notes are, by its id, as the theme and the note within it.
+    public var typeNotes: [String: [NotePlace]]
+    /// Where each member's notes are, by its link.
+    public var memberNotes: [MemberLink: [NotePlace]]
+
+    /// Where a note is in the story: its theme's index and its own within the theme.
+    public struct NotePlace: Sendable, Equatable, Hashable {
+        /// The theme's index.
+        public var theme: Int
+        /// The note's index in the theme.
+        public var note: Int
+    }
 
     /// A link to a member: its type's id and its name as a caller writes it.
     public struct MemberLink: Sendable, Equatable, Hashable {
@@ -179,6 +230,16 @@ public struct StoryCoverage: Sendable, Equatable {
         public var node: String
         /// The member's name as a caller writes it.
         public var name: String
+
+        /// Names a member.
+        ///
+        /// - Parameters:
+        ///   - node: The id of the member's type.
+        ///   - name: The member's name as a caller writes it.
+        public init(node: String, name: String) {
+            self.node = node
+            self.name = name
+        }
     }
 
     /// Resolves a story's links against both sides of a diff.
@@ -196,49 +257,66 @@ public struct StoryCoverage: Sendable, Equatable {
             if !(byName[node.name]?.contains(node.id) ?? false) { byName[node.name, default: []].append(node.id) }
         }
         let changed = Set(diff.nodes.map(\.node.id))
+        // A link names the longest leading run of names that is a type, and what follows is one of its members.
+        func resolve(_ link: String) -> (id: String, member: String?)? {
+            var parts = link.split(separator: "/").map { SymbolIndex.dropDisambiguation(String($0)) }
+            if parts.count > 1, modules.contains(parts[0]) { parts.removeFirst() }
+            guard !parts.isEmpty,
+                  let length = (1...parts.count).reversed().first(where: { byName[parts.prefix($0).joined(separator: ".")] != nil }),
+                  let id = byName[parts.prefix(length).joined(separator: ".")]?.first else { return nil }
+            return (id, length < parts.count ? parts[length...].joined(separator: "/") : nil)
+        }
         var types: [[String]] = []
         var members: [[MemberLink]] = []
         var dead: [(theme: String, link: String)] = []
         var linked: Set<String> = []
-        for theme in story.themes {
+        var typeNotes: [String: [NotePlace]] = [:]
+        var memberNotes: [MemberLink: [NotePlace]] = [:]
+        for (themeIndex, theme) in story.themes.enumerated() {
             var themeTypes: [String] = []
             var themeMembers: [MemberLink] = []
             for link in theme.links {
-                var parts = link.split(separator: "/").map { SymbolIndex.dropDisambiguation(String($0)) }
-                if parts.count > 1, modules.contains(parts[0]) { parts.removeFirst() }
-                // The longest leading run of names that is a type; what follows is one of its members.
-                guard !parts.isEmpty,
-                      let length = (1...parts.count).reversed().first(where: { byName[parts.prefix($0).joined(separator: ".")] != nil }),
-                      let id = byName[parts.prefix(length).joined(separator: ".")]?.first else {
+                guard let (id, member) = resolve(link) else {
                     dead.append((theme.title, link))
                     continue
                 }
                 linked.insert(id)
                 let explained = changed.filter { $0 == id || $0.hasPrefix(id + ".") }
                 for each in [id] + explained.sorted() where changed.contains(each) && !themeTypes.contains(each) { themeTypes.append(each) }
-                if length < parts.count { themeMembers.append(MemberLink(node: id, name: parts[length...].joined(separator: "/"))) }
+                if let member { themeMembers.append(MemberLink(node: id, name: member)) }
+            }
+            for (noteIndex, note) in theme.notes.enumerated() {
+                guard let (id, member) = resolve(note.link) else { continue }
+                let place = NotePlace(theme: themeIndex, note: noteIndex)
+                if let member { memberNotes[MemberLink(node: id, name: member), default: []].append(place) }
+                else { typeNotes[id, default: []].append(place) }
             }
             types.append(themeTypes)
             members.append(themeMembers)
         }
         self.types = types
         self.members = members
+        self.typeNotes = typeNotes
+        self.memberNotes = memberNotes
         deadLinks = dead
-        unexplained = diff.nodes.filter { change in
-            guard change.change != .implementation else { return false }
-            // A type is explained by a link to it or to a type it is nested in.
+        // Whether a changed type or a type it is nested in is in a set of ids.
+        func coveredBy(_ ids: Set<String>, _ change: InterfaceDiff.NodeChange) -> Bool {
             var name = change.node.name
             while true {
-                if linked.contains(Graph.id(change.node.module, name)) { return false }
-                guard let dot = name.lastIndex(of: ".") else { return true }
+                if ids.contains(Graph.id(change.node.module, name)) { return true }
+                guard let dot = name.lastIndex(of: ".") else { return false }
                 name = String(name[..<dot])
             }
-        }.map(\.node.id)
+        }
+        let interface = diff.nodes.filter { $0.change != .implementation }
+        unexplained = interface.filter { !coveredBy(linked, $0) }.map(\.node.id)
+        withoutNotes = interface.filter { !coveredBy(Set(typeNotes.keys), $0) }.map(\.node.id)
     }
 
-    /// Whether the story explains every type whose interface changed, and every link names something.
+    /// Whether the story explains every type whose interface changed, each in a note of its own too, and
+    /// every link names something.
     public var isComplete: Bool {
-        unexplained.isEmpty && deadLinks.isEmpty
+        unexplained.isEmpty && deadLinks.isEmpty && withoutNotes.isEmpty
     }
 
     /// The themes that explain a type, by index.
@@ -256,7 +334,8 @@ public struct StoryCoverage: Sendable, Equatable {
     ///   - rhs: Another.
     /// - Returns: `true` when they say the same.
     public static func == (lhs: StoryCoverage, rhs: StoryCoverage) -> Bool {
-        lhs.types == rhs.types && lhs.members == rhs.members && lhs.unexplained == rhs.unexplained
+        lhs.types == rhs.types && lhs.members == rhs.members && lhs.unexplained == rhs.unexplained && lhs.withoutNotes == rhs.withoutNotes
+            && lhs.typeNotes == rhs.typeNotes && lhs.memberNotes == rhs.memberNotes
             && lhs.deadLinks.map { [$0.theme, $0.link] } == rhs.deadLinks.map { [$0.theme, $0.link] }
     }
 }

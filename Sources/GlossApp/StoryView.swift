@@ -36,7 +36,8 @@ struct StoryOverviewView: View {
                 }
             }
             ForEach(Array(story.themes.enumerated()), id: \.offset) { index, theme in
-                ThemeView(title: theme.title, paragraphs: theme.paragraphs, types: coverage.types[index], diff: diff, atlas: atlas)
+                ThemeView(title: theme.title, paragraphs: theme.paragraphs, types: coverage.types[index], diff: diff, atlas: atlas,
+                          caption: theme.notes.isEmpty ? nil : "\(theme.notes.count) note\(theme.notes.count == 1 ? "" : "s"), on each type's page")
             }
             StoryGapsView(coverage: coverage, diff: diff, atlas: atlas)
         }
@@ -66,7 +67,7 @@ struct ThemeView: View {
             HStack(alignment: .firstTextBaseline, spacing: 8) {
                 Text(title).font(.headline)
                 if let caption {
-                    Text(caption).font(.system(.caption, design: .monospaced)).foregroundStyle(.tertiary)
+                    Text(caption).font(.caption).foregroundStyle(.tertiary)
                 }
             }
             ForEach(Array(paragraphs.enumerated()), id: \.offset) { _, paragraph in
@@ -102,8 +103,8 @@ struct ThemeView: View {
     }
 }
 
-/// What the story leaves out: the types whose interface changed that no theme links, and the links that
-/// name nothing, so an author can see the story covers the change.
+/// What the story leaves out: the types whose interface changed that no theme links, those with no note
+/// of their own, and the links that name nothing, so an author can see the story covers the change.
 struct StoryGapsView: View {
     /// Which changes the story explains.
     var coverage: StoryCoverage
@@ -121,6 +122,23 @@ struct StoryGapsView: View {
                     .foregroundStyle(.secondary)
                 ForEach(coverage.unexplained, id: \.self) { id in
                     if let change = diff.change(ofNode: id) { NodeChangeView(change: change, atlas: atlas) }
+                }
+            }
+        }
+        if !coverage.withoutNotes.isEmpty {
+            VStack(alignment: .leading, spacing: 8) {
+                EyebrowView(text: "No note of its own · \(coverage.withoutNotes.count)")
+                Text("A theme explains these, but none tells the change from their side under a ### heading that links them.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                Wrap(spacing: 6) {
+                    ForEach(coverage.withoutNotes, id: \.self) { id in
+                        if atlas.byID[id] != nil {
+                            ChipView(unit: .type(id), atlas: atlas)
+                        } else {
+                            Text(diff.change(ofNode: id)?.node.name ?? id).font(.system(.callout, design: .monospaced)).strikethrough()
+                        }
+                    }
                 }
             }
         }
@@ -232,11 +250,27 @@ struct EveryChangeView: View {
     }
 }
 
-/// The story's types on one type's page: each theme that explains it, its title over its prose.
+/// The story on one type's page: each theme that explains it, its title over its prose, and the note
+/// that tells the theme from the type's own side, or from the side of a type it is nested in.
 struct StoryThemesView: View {
     @Environment(Workspace.self) private var workspace
     /// The id of the type.
     var id: String
+
+    /// The notes on the type, or failing those on the nearest type it is nested in, within one theme.
+    ///
+    /// - Parameters:
+    ///   - theme: The theme's index.
+    ///   - coverage: Where the story's notes are.
+    /// - Returns: The notes' places, in the story's order.
+    private func notes(in theme: Int, coverage: StoryCoverage) -> [StoryCoverage.NotePlace] {
+        var outer = id
+        while true {
+            if let places = coverage.typeNotes[outer], !places.isEmpty { return places.filter { $0.theme == theme } }
+            guard let dot = outer.lastIndex(of: ".") else { return [] }
+            outer = String(outer[..<dot])
+        }
+    }
 
     var body: some View {
         if let story = workspace.story, let coverage = workspace.storyCoverage {
@@ -249,6 +283,12 @@ struct StoryThemesView: View {
                             Text(story.themes[index].title).font(.headline)
                             ForEach(Array(story.themes[index].paragraphs.enumerated()), id: \.offset) { _, paragraph in
                                 DocTextView(text: StoryProse.markdown(paragraph), codeColor: Palette.accent).font(.callout)
+                                    .foregroundStyle(.secondary)
+                            }
+                            // The change told from this type's side, beside the theme it belongs to.
+                            ForEach(notes(in: index, coverage: coverage), id: \.self) { place in
+                                StoryNoteView(note: story.themes[place.theme].notes[place.note])
+                                    .padding(.top, 6)
                             }
                         }
                         .padding(10)
@@ -277,5 +317,46 @@ enum StoryProse {
     /// - Returns: The path from `.gloss` on.
     static func shortPath(_ file: URL) -> String {
         file.path.range(of: "/.gloss/").map { String(file.path[file.path.index(after: $0.lowerBound)...]) } ?? file.lastPathComponent
+    }
+}
+
+/// One note of the story: the change told from one type's or member's side, set off from the theme
+/// around it by a bar in the accent color.
+struct StoryNoteView: View {
+    /// The note.
+    var note: ChangeStory.Note
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 8) {
+            RoundedRectangle(cornerRadius: 1).fill(Palette.accent).frame(width: 2)
+            VStack(alignment: .leading, spacing: 4) {
+                Text(note.link).font(.system(.caption, design: .monospaced).weight(.semibold)).foregroundStyle(Palette.accent)
+                ForEach(Array(note.paragraphs.enumerated()), id: \.offset) { _, paragraph in
+                    DocTextView(text: StoryProse.markdown(paragraph), codeColor: Palette.accent).font(.callout)
+                }
+            }
+        }
+        .fixedSize(horizontal: false, vertical: true)
+    }
+}
+
+/// The story's notes on one member, under its row on its type's page.
+struct MemberNotesView: View {
+    @Environment(Workspace.self) private var workspace
+    /// The id of the member's type.
+    var node: String
+    /// The member's name as a caller writes it.
+    var name: String
+
+    var body: some View {
+        if let story = workspace.story,
+           let places = workspace.storyCoverage?.memberNotes[StoryCoverage.MemberLink(node: node, name: name)], !places.isEmpty {
+            VStack(alignment: .leading, spacing: 6) {
+                ForEach(places, id: \.self) { place in StoryNoteView(note: story.themes[place.theme].notes[place.note]) }
+            }
+            .padding(8)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(RoundedRectangle(cornerRadius: 6).fill(Palette.accentSoft.opacity(0.6)))
+        }
     }
 }

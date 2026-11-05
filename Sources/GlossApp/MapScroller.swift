@@ -1,12 +1,14 @@
 import AppKit
 import SwiftUI
 
-/// Moves the map with a mouse as canvases do: the wheel zooms toward the pointer, and a drag pans. A
-/// trackpad keeps its own ways, two fingers to pan and a pinch to zoom, since its scrolling is smooth
-/// where a wheel's comes in steps.
+/// Moves the map with a mouse as canvases do: the wheel zooms toward the pointer, and a drag with the
+/// right button held pans, leaving the left button to click and select. A trackpad keeps its own ways,
+/// two fingers to pan and a pinch to zoom, since its scrolling is smooth where a wheel's comes in steps.
 ///
 /// It finds the scroll view the map is drawn in from inside it, with ``MapScrollReader``, and watches
-/// the window's scroll events for those over the map, answering a wheel's and passing a trackpad's on.
+/// the window's events for those over the map: it answers a wheel's and passes a trackpad's on, and holds
+/// a right press until it knows whether it is a drag, which pans, or a click, which it hands back on
+/// release so a box's menu still opens.
 @MainActor
 final class MapScroller {
     /// The scroll view the map is drawn in, once the reader has found it.
@@ -15,14 +17,60 @@ final class MapScroller {
     var zoom: ((CGFloat) -> Void)?
     /// The scale the map shows now, fitted or chosen, which a wheel's zoom starts from.
     var scale: CGFloat = 1
+    /// The room the canvas leaves past the figure on each side, which does not scale with it.
+    var margin: CGSize = .zero
     private var watch: Any?
+    private var pressWatch: Any?
+    /// A right press over the map not yet known to be a drag or a click: where it was, the last place a
+    /// drag reached, and what is needed to hand it back as a click.
+    private var press: Press?
+    /// Whether the right press in progress has moved far enough to pan.
+    private var isPanning = false
+    /// `true` while a held press is handed back, so the watch lets it through.
+    private var isReplaying = false
+
+    /// A right press, held as plain values so it can be handed back when it proves to be a click.
+    private struct Press {
+        var window: Int
+        var start: NSPoint
+        var last: NSPoint
+        var modifiers: UInt
+        var timestamp: TimeInterval
+        var eventNumber: Int
+        var clickCount: Int
+    }
+
+    /// How far a right press moves before it pans rather than clicks, in points.
+    private static let slop: CGFloat = 3
 
     /// The most a single step of the wheel zooms by.
     private static let step: CGFloat = 1.1
 
-    /// Starts answering the wheel over the map; starting again does nothing.
+    /// Starts answering the wheel and the right button over the map; starting again does nothing.
     func start() {
         guard watch == nil else { return }
+        pressWatch = NSEvent.addLocalMonitorForEvents(matching: [.rightMouseDown, .rightMouseDragged, .rightMouseUp]) { [weak self] event in
+            // Only plain values cross into the main actor; the event itself stays here.
+            let type = event.type
+            let number = event.windowNumber
+            let location = event.locationInWindow
+            let modifiers = event.modifierFlags.rawValue
+            let timestamp = event.timestamp
+            let eventNumber = event.eventNumber
+            let clickCount = event.clickCount
+            let answered = MainActor.assumeIsolated { () -> Bool in
+                guard let self else { return false }
+                switch type {
+                case .rightMouseDown:
+                    return self.pressed(at: location, inWindow: number,
+                                        press: Press(window: number, start: location, last: location, modifiers: modifiers,
+                                                     timestamp: timestamp, eventNumber: eventNumber, clickCount: clickCount))
+                case .rightMouseDragged: return self.dragged(to: location)
+                default: return self.released()
+                }
+            }
+            return answered ? nil : event
+        }
         watch = NSEvent.addLocalMonitorForEvents(matching: .scrollWheel) { [weak self] event in
             // Only plain values cross into the main actor; the event itself stays here.
             let isWheel = !event.hasPreciseScrollingDeltas
@@ -37,10 +85,72 @@ final class MapScroller {
         }
     }
 
-    /// Stops answering the wheel.
+    /// Stops answering the wheel and the right button.
     func stop() {
         if let watch { NSEvent.removeMonitor(watch) }
+        if let pressWatch { NSEvent.removeMonitor(pressWatch) }
         watch = nil
+        pressWatch = nil
+        if isPanning { NSCursor.pop() }
+        press = nil
+        isPanning = false
+    }
+
+    /// Holds a right press over the map until it proves to be a drag or a click.
+    ///
+    /// - Parameters:
+    ///   - location: Where the pointer is, in the window's coordinates.
+    ///   - number: The window the event is for.
+    ///   - press: The press, as plain values.
+    /// - Returns: `true` when the press was over the map and is held; a press handed back is let through.
+    private func pressed(at location: NSPoint, inWindow number: Int, press: Press) -> Bool {
+        guard !isReplaying, let scrollView, let window = scrollView.window, number == window.windowNumber else { return false }
+        let clip = scrollView.contentView
+        guard clip.bounds.contains(clip.convert(location, from: nil)) else { return false }
+        self.press = press
+        isPanning = false
+        return true
+    }
+
+    /// Pans the map with a held right press once it has moved past the slop.
+    ///
+    /// - Parameter location: Where the pointer is now, in the window's coordinates.
+    /// - Returns: `true` while a held press is being answered.
+    private func dragged(to location: NSPoint) -> Bool {
+        guard var press else { return false }
+        if !isPanning {
+            guard hypot(location.x - press.start.x, location.y - press.start.y) >= Self.slop else { return true }
+            isPanning = true
+            NSCursor.closedHand.push()
+        }
+        // The window's y runs up and a pan's down, so the map follows the pointer.
+        pan(by: CGSize(width: location.x - press.last.x, height: press.last.y - location.y))
+        press.last = location
+        self.press = press
+        return true
+    }
+
+    /// Ends a held right press: a drag is done, and a click is handed back to the view under it, so a
+    /// box's menu opens on release.
+    ///
+    /// - Returns: `true` when the release belonged to a held press.
+    private func released() -> Bool {
+        guard let press else { return false }
+        self.press = nil
+        if isPanning {
+            isPanning = false
+            NSCursor.pop()
+            return true
+        }
+        guard let window = scrollView?.window,
+              let down = NSEvent.mouseEvent(with: .rightMouseDown, location: press.start,
+                                            modifierFlags: NSEvent.ModifierFlags(rawValue: press.modifiers), timestamp: press.timestamp,
+                                            windowNumber: press.window, context: nil, eventNumber: press.eventNumber,
+                                            clickCount: press.clickCount, pressure: 1) else { return true }
+        isReplaying = true
+        window.sendEvent(down)
+        isReplaying = false
+        return true
     }
 
     /// Zooms toward a point for a turn of the wheel over the map, keeping the point under the pointer.
@@ -75,12 +185,25 @@ final class MapScroller {
         // Several steps can come before the map draws again, so each goes on from the last.
         scale = target
         // The map lays out again at its new scale on the next pass; then the point that was under the
-        // pointer is brought back under it.
+        // pointer is brought back under it. Only the figure scales, not the room around it.
+        let margin = self.margin
         DispatchQueue.main.async { [weak self] in
             guard let self, let scrollView = self.scrollView else { return }
-            self.scroll(to: CGPoint(x: inClip.x * factor - pointer.x, y: inClip.y * factor - pointer.y), in: scrollView)
+            self.scroll(to: CGPoint(x: margin.width + (inClip.x - margin.width) * factor - pointer.x,
+                                    y: margin.height + (inClip.y - margin.height) * factor - pointer.y), in: scrollView)
         }
         return true
+    }
+
+    /// Centers the canvas on the figure once it has laid out again, as a new figure opens.
+    func center() {
+        // The figure lays out at its new size on the next pass, and the canvas with it.
+        DispatchQueue.main.async { [weak self] in
+            guard let self, let scrollView = self.scrollView else { return }
+            let clip = scrollView.contentView.bounds.size
+            let document = scrollView.documentView?.frame.size ?? .zero
+            self.scroll(to: CGPoint(x: (document.width - clip.width) / 2, y: (document.height - clip.height) / 2), in: scrollView)
+        }
     }
 
     /// Pans the map by a drag's movement, the map following the pointer.

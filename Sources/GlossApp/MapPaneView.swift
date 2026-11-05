@@ -6,7 +6,8 @@ import SwiftUI
 /// The right pane: the dependency map at the current level, with breadcrumbs back to wider levels.
 ///
 /// Each figure opens centered and shrunk to fit the pane, never past its natural size. A pinch or the
-/// magnify control zooms from there, and a new figure fits again.
+/// magnify control zooms from there, and a new figure fits again. The canvas reaches a pane past the
+/// figure on every side, so it pans freely as a canvas does, a strip of it always kept in view.
 struct MapPaneView: View {
     @Environment(Workspace.self) private var workspace
     /// The reader's magnification, or `nil` to fit the figure to the pane.
@@ -14,10 +15,20 @@ struct MapPaneView: View {
     /// The magnification the pinch in progress started from.
     @State private var pinchStart: CGFloat?
     @State private var scroller = MapScroller()
-    @State private var dragged: CGSize?
 
     /// The margin kept around a fitted figure.
     static let inset: CGFloat = 24
+    /// How much of the figure a pan past its edge leaves in view, in points.
+    static let kept: CGFloat = 120
+
+    /// The room a canvas leaves past the figure on each side, so it can be panned until only a strip of
+    /// it shows: the pane's width and height, less that strip.
+    ///
+    /// - Parameter pane: The pane's size.
+    /// - Returns: The room to the left and right, and above and below.
+    static func margin(for pane: CGSize) -> CGSize {
+        CGSize(width: max(0, pane.width - kept), height: max(0, pane.height - kept))
+    }
 
     var body: some View {
         @Bindable var workspace = workspace
@@ -80,36 +91,26 @@ struct MapPaneView: View {
             Divider()
             GeometryReader { proxy in
                 let scale = zoom ?? Self.fit(drawing.layout, in: proxy.size)
+                let margin = Self.margin(for: proxy.size)
                 ScrollView([.horizontal, .vertical]) {
                     MapCanvasView(layout: drawing.layout, lit: workspace.litID, trail: workspace.litTrail, anchor: workspace.anchorID,
                                   scale: scale, colors: workspace.atlas?.moduleColors ?? [:],
                                   marks: workspace.boxMarks, edgeMarks: workspace.edgeMarks, group: workspace.litGroup,
                                   reach: drawing.reach)
                         .padding(Self.inset)
+                        .padding(.horizontal, margin.width)
+                        .padding(.vertical, margin.height)
                         .frame(minWidth: proxy.size.width, minHeight: proxy.size.height)
                         // A click on the ground between boxes clears the selection back to the level's page;
-                        // a box's own click comes first.
+                        // a box's own click comes first. A right-button drag pans, which the scroller answers.
                         .contentShape(Rectangle())
                         .onTapGesture { workspace.clickedBackground() }
                         .background(MapScrollReader(scroller: scroller))
-                        // A drag, on the ground or a box, pans the map under the pointer; a click without
-                        // moving still selects.
-                        .simultaneousGesture(
-                            DragGesture(minimumDistance: 4)
-                                .onChanged { drag in
-                                    if dragged == nil { NSCursor.closedHand.push() }
-                                    let last = dragged ?? .zero
-                                    scroller.pan(by: CGSize(width: drag.translation.width - last.width,
-                                                            height: drag.translation.height - last.height))
-                                    dragged = drag.translation
-                                }
-                                .onEnded { _ in
-                                    if dragged != nil { NSCursor.pop() }
-                                    dragged = nil
-                                }
-                        )
                 }
                 .defaultScrollAnchor(.center)
+                .onChange(of: margin, initial: true) {
+                    scroller.margin = CGSize(width: margin.width + Self.inset, height: margin.height + Self.inset)
+                }
                 .onAppear {
                     scroller.zoom = { zoom = $0 }
                     scroller.start()
@@ -126,7 +127,11 @@ struct MapPaneView: View {
                         .onEnded { _ in pinchStart = nil }
                 )
                 .overlay(alignment: .bottomTrailing) {
-                    MagnifierView(scale: scale, isFitted: zoom == nil) { zoom = $0 }
+                    // Fitting again centers too, so a figure panned away comes back whole.
+                    MagnifierView(scale: scale, isFitted: zoom == nil, zoom: { scale in
+                        zoom = scale
+                        if scale == nil { scroller.center() }
+                    }, recenter: { scroller.center() })
                         .padding(12)
                 }
             }
@@ -151,7 +156,11 @@ struct MapPaneView: View {
             }
         }
         .background(Palette.background)
-        .onChange(of: drawing.layout) { zoom = nil }
+        // A new figure fits again, and opens centered however far the last one was panned.
+        .onChange(of: drawing.layout) {
+            zoom = nil
+            scroller.center()
+        }
     }
 
     /// The scale that fits a figure in a pane with ``inset`` around it, never above its natural size.
@@ -176,7 +185,8 @@ struct MapPaneView: View {
     }
 }
 
-/// The map's magnification: smaller, the current scale, which fits the figure again, and larger.
+/// The map's place and magnification: a button that centers the figure, then smaller, the current scale,
+/// which fits and centers the figure again, and larger.
 struct MagnifierView: View {
     /// The map's scale, 1 for natural size, which the control shows as a percentage and steps by 1.25 times.
     var scale: CGFloat
@@ -185,9 +195,14 @@ struct MagnifierView: View {
     /// Sets the reader's magnification, already held to ``MapPaneView/clamp(_:)``'s range, or `nil` to fit
     /// the figure to the pane again.
     var zoom: (CGFloat?) -> Void
+    /// Brings the figure back to the middle of the pane, at the magnification it has.
+    var recenter: () -> Void
 
     var body: some View {
         HStack(spacing: 2) {
+            Button(action: recenter) { Image(systemName: "scope").frame(width: 22, height: 20) }
+                .help("Center the figure")
+            Divider().frame(height: 14)
             Button { zoom(MapPaneView.clamp(scale / 1.25)) } label: { Image(systemName: "minus").frame(width: 22, height: 20) }
                 .help("Smaller")
             Button { zoom(nil) } label: {
@@ -195,7 +210,7 @@ struct MagnifierView: View {
                     .monospacedDigit()
                     .frame(minWidth: 44)
             }
-            .help(isFitted ? "Fitted to the pane" : "Fit to the pane")
+            .help(isFitted ? "Fitted to the pane; click to center it too" : "Fit to the pane and center")
             .foregroundStyle(isFitted ? .secondary : .primary)
             Button { zoom(MapPaneView.clamp(scale * 1.25)) } label: { Image(systemName: "plus").frame(width: 22, height: 20) }
                 .help("Larger")

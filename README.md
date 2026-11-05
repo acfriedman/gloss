@@ -53,8 +53,9 @@ Build for release: a debug build is several times slower on a large codebase.
 - **Three panes:** the list, an outline of modules, folders, and types; the details of what's selected; and
   the map.
 - **The map** reads at levels: every type, the modules, one module, one folder. Focus on a type to see what
-  uses it above and what it depends on below. A `+4` pill expands just that box. Pinch or scroll to zoom,
-  drag to pan.
+  uses it above and what it depends on below. A `+4` pill expands just that box. Pinch or turn the wheel
+  to zoom, and drag with the right button held, or two fingers, to pan well past the figure's edges; the
+  scope button centers it again.
 - **Changes** compares with a base: where the branch left `main` by default, another branch, or any
   base and head. New types are marked `+`, changed ones `~`, and the page opens on the branch's story.
 - **Summary** sums up the interface's size, documentation, and findings, module by module.

@@ -77,4 +77,27 @@ final class ReachWhyTests: XCTestCase {
         XCTAssertEqual(split.rest, "Last.")
         XCTAssertEqual(Sentences.split("One thought only", after: 2).lead, "One thought only")
     }
+
+    func testADroppedDependencyIsExplainedByTheDeclarationThatDroppedIt() throws {
+        let before = Interface.build(sources: [("Sources/Shop/Shop.swift", "/// A cart.\nstruct Cart {\n    /// Its receipt.\n    var receipt: Receipt?\n}\n/// A receipt.\nstruct Receipt {}")])
+        let after = Interface.build(sources: [("Sources/Shop/Shop.swift", "/// A cart.\nstruct Cart {}\n/// A receipt.\nstruct Receipt {}")])
+        let diff = InterfaceDiff(base: before, head: after)
+        let atlas = Atlas(after)
+        let reason = try XCTUnwrap(atlas.changeReasons(of: "Shop/Receipt", in: diff).first)
+        let story = ChangeStory.parse("""
+        # Receipts
+
+        ## Receipts
+
+        ``Cart`` leaves receipts to checkout.
+
+        ### ``Cart/receipt``
+
+        Gone, since checkout prints the receipt.
+        """)
+        let why = atlas.why(reason, reaching: "Shop/Receipt", in: diff, story: story,
+                            coverage: StoryCoverage(story: story, diff: diff, head: after, base: before), commits: nil)
+        XCTAssertEqual(why.changed?.lead, "Gone, since checkout prints the receipt.", "The removed property's note, not the theme's.")
+        XCTAssertEqual(why.changed?.source, "the note on Cart/receipt")
+    }
 }

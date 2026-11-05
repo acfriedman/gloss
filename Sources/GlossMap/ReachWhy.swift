@@ -60,9 +60,9 @@ extension Atlas {
     ///   - story: The branch's story, or `nil` when it has none.
     ///   - coverage: What the story's links resolve to, or `nil` without a story.
     ///   - commits: The commits behind each change, or `nil` when git could not say.
-    /// - Returns: Why it changed, from the story's note on the member, else on the type or a type it is
-    ///   nested in, else the theme that explains it, else the commit that made it; and why the type relies
-    ///   on it, from each relying declaration's doc.
+    /// - Returns: Why it changed, from the story's note on the member, or on a declaration a dependency
+    ///   runs through, else on the type or a type it is nested in, else the theme that explains it, else the
+    ///   commit that made it; and why the type relies on it, from each relying declaration's doc.
     public func why(_ reason: ChangeReason, reaching id: String, in diff: InterfaceDiff, story: ChangeStory?,
                     coverage: StoryCoverage?, commits: ChangeCommits?) -> ReachWhy {
         let changedName = byID[reason.changed].map(label) ?? reason.changed
@@ -87,6 +87,16 @@ extension Atlas {
             if case .member(let member) = reason.kind {
                 changed = note(coverage.memberNotes[StoryCoverage.MemberLink(node: reason.changed, name: member.name)]?.first,
                                "the note on \(changedName)/\(member.name)")
+            }
+            // A dependency is made or dropped by the declarations it runs through, so a note on one of them
+            // says why more nearly than the type's.
+            if changed == nil, case .dependency(let edge) = reason.kind {
+                let through = Set((edge.viaRemoved + edge.viaAdded).map { String($0.split(separator: ".").last ?? Substring($0)) })
+                let owner = byID[edge.from].map(label) ?? edge.from
+                let links = coverage.memberNotes.keys.filter { $0.node == edge.from && through.contains(String($0.name.prefix { $0 != "(" })) }
+                if let link = links.sorted(by: { $0.name < $1.name }).first {
+                    changed = note(coverage.memberNotes[link]?.first, "the note on \(owner)/\(link.name)")
+                }
             }
             // A note on a type it is nested in speaks for a nested type too.
             var node = reason.changed

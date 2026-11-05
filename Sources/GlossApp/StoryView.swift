@@ -353,6 +353,24 @@ struct TypeNotesView: View {
     }
 }
 
+/// A reason for a change set as the story's notes are, an accent bar beside it in the quiet box, so a
+/// reason reads the same wherever it shows: under a member's row, or under a reach.
+struct StoryReasonView: View {
+    /// The reason, as the story or a commit writes it, its links as code.
+    var text: String
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 8) {
+            RoundedRectangle(cornerRadius: 1).fill(Palette.accent).frame(width: 2)
+            DocTextView(text: StoryProse.markdown(text), codeColor: Palette.accent).textStyle(.callout)
+        }
+        .fixedSize(horizontal: false, vertical: true)
+        .padding(8)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: 6).fill(Palette.accentSoft.opacity(0.6)))
+    }
+}
+
 /// Notes in the quiet box that sets a reason beside the change it belongs to, each without its link,
 /// which the row above names already.
 struct NotesBoxView: View {

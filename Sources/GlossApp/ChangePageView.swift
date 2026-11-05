@@ -280,8 +280,9 @@ struct ReachedView: View {
     }
 }
 
-/// One way a change reaches a type: what reaches it in a line, then why that changed and why the type
-/// relies on it, a sentence or two each, with the rest folded beneath, so one reach is one thought.
+/// One way a change reaches a type: what reaches it in a line, then why that changed, set as the story's
+/// reasons are, and why the type relies on it, in its doc's quieter text, a sentence or two each, with
+/// the rest folded beneath, so one reach is one thought.
 struct ReachRowView: View {
     /// The way the change reaches the type.
     var reason: ChangeReason
@@ -295,11 +296,19 @@ struct ReachRowView: View {
         VStack(alignment: .leading, spacing: 8) {
             what
             VStack(alignment: .leading, spacing: 6) {
-                WhyLineView(title: "Why it changed", answer: why.changed, missing: "Neither the story nor a commit says yet.")
-                let first = why.uses.first
-                let user = why.user == reason.changed ? atlas.byID[why.user].map(atlas.label) ?? why.user : first?.name ?? "it"
-                WhyLineView(title: "Why \(user) relies on it", answer: first?.answer,
-                            missing: "\(first.map { "\($0.name)'s doc" } ?? "No doc") says nothing about it.")
+                // Why it changed is the change's reason, the story's or a commit's, so it reads as a note does.
+                if let changed = why.changed {
+                    StoryReasonView(text: changed.lead)
+                } else {
+                    Text("Neither the story nor a commit says why it changed.").textStyle(.callout).foregroundStyle(.tertiary)
+                }
+                // A dependency that is gone is relied on no more, so only one still there is asked why.
+                if !isDropped {
+                    let first = why.uses.first
+                    let user = why.user == reason.changed ? atlas.byID[why.user].map(atlas.label) ?? why.user : first?.name ?? "it"
+                    WhyLineView(title: "Why \(user) relies on it", answer: first?.answer,
+                                missing: first.map { "\($0.name)'s doc doesn't say why." } ?? "Nothing it declares says why.")
+                }
                 if hasMore {
                     Button { isOpen.toggle() } label: {
                         HStack(spacing: 4) {
@@ -353,10 +362,16 @@ struct ReachRowView: View {
         }
     }
 
+    /// Whether the reach is a dependency that is gone, which nothing relies on any more.
+    private var isDropped: Bool {
+        if case .dependency(let edge) = reason.kind { return edge.change == .removed }
+        return false
+    }
+
     /// Whether anything is folded: what was written, the rest of either answer, or more declarations.
     private var hasMore: Bool {
-        declaration?.was != nil || !(why.changed?.more.isEmpty ?? true) || why.uses.count > 1
-            || !(why.uses.first?.answer?.more.isEmpty ?? true)
+        declaration?.was != nil || !(why.changed?.more.isEmpty ?? true)
+            || (!isDropped && (why.uses.count > 1 || !(why.uses.first?.answer?.more.isEmpty ?? true)))
     }
 
     /// What unfolds: the declaration before and now, each answer's rest and where it was written, and the
@@ -364,15 +379,17 @@ struct ReachRowView: View {
     @ViewBuilder private var more: some View {
         if let declaration, let was = declaration.was { WasNowView(was: was, now: declaration.now, atlas: atlas) }
         if let changed = why.changed { WhyMoreView(answer: changed) }
-        if let answer = why.uses.first?.answer { WhyMoreView(answer: answer) }
-        ForEach(Array(why.uses.dropFirst().enumerated()), id: \.offset) { _, use in
-            WhyLineView(title: "Why \(use.name) relies on it", answer: use.answer, missing: "\(use.name)'s doc says nothing about it.")
+        if !isDropped {
+            if let answer = why.uses.first?.answer { WhyMoreView(answer: answer) }
+            ForEach(Array(why.uses.dropFirst().enumerated()), id: \.offset) { _, use in
+                WhyLineView(title: "Why \(use.name) relies on it", answer: use.answer, missing: "\(use.name)'s doc doesn't say why.")
+            }
         }
     }
 }
 
-/// One why: a small title, then an answer's lead in a sentence or two, or a quiet line saying nothing
-/// was written.
+/// One doc's why: a small title, then the answer's lead in a sentence or two, quieter as doc text is,
+/// or a quieter line still when the doc says nothing.
 struct WhyLineView: View {
     /// What the line answers, such as `Why it changed`.
     var title: String
@@ -386,6 +403,7 @@ struct WhyLineView: View {
             Text(title).textStyle(.caption, weight: .semibold).foregroundStyle(.secondary)
             if let answer {
                 DocTextView(text: StoryProse.markdown(answer.lead), codeColor: Palette.accent).textStyle(.callout)
+                    .foregroundStyle(.secondary)
             } else {
                 Text(missing).textStyle(.callout).foregroundStyle(.tertiary)
             }

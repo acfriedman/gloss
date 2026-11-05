@@ -13,6 +13,8 @@ Arranges the model for reading: which types a module leads with, what each map l
 - ``Atlas``
 - ``InterfaceSummary``
 - ``OutlineItem``
+- ``ListFilter``
+- ``ListOutline``
 - ``QuickOpenMatch``
 - ``Wording``
 

@@ -44,7 +44,7 @@ extension Atlas {
     /// - Returns: The module's top rows, with no empty folders.
     public func outline(of module: String, showing shows: (Graph.Node) -> Bool) -> [OutlineItem] {
         let phase = Timing.begin("outline"); defer { Timing.end(phase, module) }
-        let members = nodes.filter { $0.module == module }
+        let members = nodesByModule[module] ?? []
         var nestedIn: [String: [Graph.Node]] = [:]
         var placed: [Graph.Node] = []
         for node in members {
@@ -115,5 +115,91 @@ extension Atlas {
     private func enclosingType(of node: Graph.Node) -> Graph.Node? {
         guard node.root != node.id, let dot = node.name.lastIndex(of: ".") else { return nil }
         return byID[Graph.id(node.module, String(node.name[..<dot]))]
+    }
+}
+
+/// What narrows the list: a search, the findings filter, and the access filter.
+public struct ListFilter: Sendable, Hashable {
+    /// The search, trimmed and lowercased; empty searches for nothing.
+    public var query: String
+    /// `true` to keep only types with findings.
+    public var findingsOnly: Bool
+    /// The narrowest access a type needs to be listed, as ``Atlas/rank(of:)`` ranks it.
+    public var minimumRank: Int
+
+    /// The most matching types the list shows while it is narrowed, so a short search in a huge project
+    /// still draws at once.
+    public static let limit = 300
+
+    /// Makes a filter from what the reader typed and chose.
+    ///
+    /// - Parameters:
+    ///   - search: The search as typed.
+    ///   - findingsOnly: `true` to keep only types with findings.
+    ///   - minimumRank: The narrowest access a type needs.
+    public init(search: String, findingsOnly: Bool, minimumRank: Int) {
+        query = search.trimmingCharacters(in: .whitespaces).lowercased()
+        self.findingsOnly = findingsOnly
+        self.minimumRank = minimumRank
+    }
+
+    /// Whether the search or the findings filter narrows the list, which then opens every row that
+    /// holds a match and leaves out every module that holds none.
+    public var isNarrowing: Bool {
+        findingsOnly || !query.isEmpty
+    }
+}
+
+/// The whole list for one filter, worked out at once so drawing it only reads it.
+public struct ListOutline: Sendable {
+    /// One module's rows.
+    public struct Module: Sendable, Identifiable {
+        /// The module's name.
+        public var name: String
+        /// Its rows, as ``Atlas/outline(of:showing:)`` arranges them.
+        public var rows: [OutlineItem]
+        /// The module's name, which tells it apart from the others.
+        public var id: String { name }
+    }
+
+    /// The modules in order: every one, or while narrowing only those that hold a match.
+    public var modules: [Module]
+    /// How many types match while narrowing; zero otherwise.
+    public var matches: Int
+    /// How many of them the rows show, at most ``ListFilter/limit``.
+    public var shown: Int
+
+    /// The list with nothing read yet.
+    public static let empty = ListOutline(modules: [], matches: 0, shown: 0)
+}
+
+extension Atlas {
+    /// Works out the list for a filter: each module's rows, the matches in graph order and at most
+    /// ``ListFilter/limit`` of them while narrowing, so a search draws quickly however large the project.
+    ///
+    /// - Parameter filter: What narrows the list.
+    /// - Returns: The modules and their rows, and how many types matched and are shown.
+    public func listOutline(_ filter: ListFilter) -> ListOutline {
+        let phase = Timing.begin("list"); defer { Timing.end(phase, filter.query) }
+        guard filter.isNarrowing else {
+            let modules = modules.map { module in
+                ListOutline.Module(name: module, rows: outline(of: module) { self.rank(of: $0) >= filter.minimumRank })
+            }
+            return ListOutline(modules: modules, matches: 0, shown: 0)
+        }
+        // A type matches by its name or a member's, among those the access and findings filters keep.
+        var kept = Set<String>()
+        var matches = 0
+        for node in nodes where rank(of: node) >= filter.minimumRank {
+            if filter.findingsOnly, group(node.id).findingCount == 0 { continue }
+            if !filter.query.isEmpty, !(searchNames[node.id] ?? []).contains(where: { $0.contains(filter.query) }) { continue }
+            matches += 1
+            if kept.count < ListFilter.limit { kept.insert(node.id) }
+        }
+        let modules = modules.compactMap { module -> ListOutline.Module? in
+            let rows = outline(of: module) { kept.contains($0.id) }
+            return rows.isEmpty ? nil : ListOutline.Module(name: module, rows: rows)
+        }
+        return ListOutline(modules: modules, matches: matches, shown: kept.count)
     }
 }

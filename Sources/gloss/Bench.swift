@@ -28,6 +28,10 @@ enum Bench {
             let reading = Reading(sources: sources)
             let interface = Interface.build(reading)
             let atlas = Atlas(interface, assessments: Linter.assess(reading, style: style))
+            // The list as typing narrows it: nothing yet, one letter, then words.
+            for search in ["", "s", "token", "visitor"] {
+                _ = atlas.listOutline(ListFilter(search: search, findingsOnly: false, minimumRank: Atlas.defaultMinimumRank))
+            }
             let scopes = atlas.mapScopes()
             _ = atlas.levelsDrawing(scopes)
             for scope in scopes {

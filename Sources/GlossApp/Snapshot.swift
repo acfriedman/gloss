@@ -7,7 +7,7 @@ import AppKit
 /// such as `changes,GlossMap/Atlas`. `GLOSS_ZOOM` is how many times to zoom in after that, and
 /// `GLOSS_PREVIEW` names a node to preview as if the pointer rested on it. `GLOSS_COMPARE` compares
 /// with a base from where the head left it, `develop`, or names the head too, `develop..feature`, and
-/// it is read before anything is selected. Without `--root`, the
+/// it is read before anything is selected. `GLOSS_SEARCH` types a search into the list. Without `--root`, the
 /// snapshot is of the welcome window. A snapshot run leaves the folders the next launch lists alone.
 extension Workspace {
     /// Whether a snapshot was started, so a second read of the folder starts no second one.
@@ -56,6 +56,7 @@ extension Workspace {
                 await settle()
             }
             if let target = environment["GLOSS_PREVIEW"] { hoverBegan(.type(target)) }
+            if let typed = environment["GLOSS_SEARCH"] { search = typed }
             Self.capture(to: output, after: .seconds(2))
         }
     }

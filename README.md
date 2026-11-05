@@ -188,6 +188,7 @@ anything. A key or rule code gloss doesn't know stops the run, so a typo can't l
 | `GLOSS_COMPARE` | compares with `<base>` or `<base>..<head>` first |
 | `GLOSS_ZOOM`, `GLOSS_PREVIEW` | zooms in that many steps; previews a type's id as if hovered |
 | `GLOSS_TEXT_SIZE` | sets the details' text size for one run, such as `1.5`, without storing it |
+| `GLOSS_SEARCH` | types a search into the list for one run, as a snapshot asks |
 
 ## The package
 

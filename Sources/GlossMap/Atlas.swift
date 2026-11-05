@@ -90,6 +90,11 @@ public struct Atlas: Sendable {
 
     /// Each module's page, by the module whose folder it is in.
     private var pages: [String: ModulePage] = [:]
+    /// Each module's nodes in graph order, so an outline reads its own without scanning every node.
+    private(set) var nodesByModule: [String: [Graph.Node]] = [:]
+    /// Each node's name and its members' names, lowercased once, so a search compares without
+    /// lowercasing thousands of names at every keystroke.
+    private(set) var searchNames: [String: [String]] = [:]
 
     /// The page a module keeps in its folder, which says what the module does and groups its types.
     ///
@@ -147,7 +152,11 @@ public struct Atlas: Sendable {
                 directories[node.id] = Array(parts[(index + 1)..<(parts.count - 1)])
             }
         }
-        for node in nodes { ranks[node.id] = rankUncached(of: node) }
+        for node in nodes {
+            ranks[node.id] = rankUncached(of: node)
+            nodesByModule[node.module, default: []].append(node)
+            searchNames[node.id] = [node.name.lowercased()] + (groups[node.id]?.members ?? []).map { $0.name.lowercased() }
+        }
         rolledWithBody = Self.roll(edges, byID: byID, includeBody: true)
         rolledSignature = Self.roll(edges, byID: byID, includeBody: false)
         moduleColors = Self.colorSlots(for: modules)

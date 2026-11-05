@@ -48,27 +48,60 @@ struct ListPaneView: View {
                 .help("What changed \(workspace.comparisonPhrase), and the types one step around it")
             }
             if let atlas = workspace.atlas {
-                ForEach(atlas.modules, id: \.self) { module in
-                    Section(isExpanded: workspace.expansion(ofModule: module)) {
-                        ForEach(workspace.outline(of: module)) { item in
-                            OutlineRowView(item: item, atlas: atlas)
+                let list = workspace.listOutline
+                if workspace.isFiltering {
+                    // A short search in a huge project matches more than the list can draw at once.
+                    Text(list.matches == 0 ? "Nothing matches."
+                         : list.shown < list.matches ? "Showing the first \(list.shown) of \(list.matches) matches; type more to narrow them."
+                         : "\(list.matches) match\(list.matches == 1 ? "" : "es")")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                ForEach(list.modules) { entry in
+                    // While filtering, a module that holds a match is simply open: flipping a section's
+                    // expansion as its rows change makes the outline view reenter itself.
+                    if workspace.isFiltering {
+                        Section { rows(of: entry, atlas: atlas) } header: { header(of: entry.name) }
+                    } else {
+                        Section(isExpanded: workspace.expansion(ofModule: entry.name)) {
+                            rows(of: entry, atlas: atlas)
+                        } header: {
+                            header(of: entry.name)
                         }
-                    } header: {
-                        Button { workspace.select(.module(module)) } label: {
-                            HStack(spacing: 6) {
-                                ModuleDotView(module: module)
-                                Text(module)
-                            }
-                        }
-                        .buttonStyle(.plain)
-                        .help("Show \(module) and draw its types")
-                        .onHover { $0 ? workspace.hoverBegan(.module(module)) : workspace.hoverEnded() }
                     }
                 }
             }
         }
         .searchable(text: $workspace.search, placement: .sidebar, prompt: "Find a type or member")
         .safeAreaInset(edge: .bottom) { ListFilterView() }
+    }
+
+    /// A module's rows in the list.
+    ///
+    /// - Parameters:
+    ///   - entry: The module and its rows, as the list worked them out.
+    ///   - atlas: The arranged interface the rows read their names and findings from.
+    /// - Returns: One row per folder or type at the top of the module.
+    private func rows(of entry: ListOutline.Module, atlas: Atlas) -> some View {
+        ForEach(entry.rows) { item in
+            OutlineRowView(item: item, atlas: atlas)
+        }
+    }
+
+    /// A module's header: its color and name, which opens the module's page.
+    ///
+    /// - Parameter module: The module's name.
+    /// - Returns: The header.
+    private func header(of module: String) -> some View {
+        Button { workspace.select(.module(module)) } label: {
+            HStack(spacing: 6) {
+                ModuleDotView(module: module)
+                Text(module)
+            }
+        }
+        .buttonStyle(.plain)
+        .help("Show \(module) and draw its types")
+        .onHover { $0 ? workspace.hoverBegan(.module(module)) : workspace.hoverEnded() }
     }
 }
 

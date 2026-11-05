@@ -276,7 +276,10 @@ final class Workspace {
     /// What reading the folder produced, or `nil` until the first read finishes.
     private(set) var interface: Interface?
     /// The interface arranged for reading, which every pane draws from.
-    private(set) var atlas: Atlas?
+    private(set) var atlas: Atlas? { didSet { listCache = nil } }
+    /// The list worked out for the filter it was asked for, until the filter or the atlas changes, so a
+    /// hover or any other redraw reads it instead of working it out again.
+    @ObservationIgnored private var listCache: (filter: ListFilter, outline: ListOutline)?
     /// The map's levels, the default first, as ``GlossMap/Atlas/mapScopes()`` orders them.
     private(set) var scopes: [MapScope] = []
     /// The levels that draw each root type as itself, keyed by root id, widest first.
@@ -1467,20 +1470,14 @@ final class Workspace {
         (atlas?.rank(of: node) ?? 0) >= minimumRank
     }
 
-    /// One module's rows in the list, after the access filter, the findings filter, and the search.
-    ///
-    /// - Parameter module: The module name.
-    /// - Returns: Folders and types as ``GlossMap/Atlas/outline(of:showing:)`` arranges them.
-    func outline(of module: String) -> [OutlineItem] {
-        guard let atlas else { return [] }
-        let query = search.trimmingCharacters(in: .whitespaces).lowercased()
-        return atlas.outline(of: module) { node in
-            guard isShown(node) else { return false }
-            let group = atlas.group(node.id)
-            if findingsOnly, group.findingCount == 0 { return false }
-            guard !query.isEmpty else { return true }
-            return ([node.name] + group.members.map(\.name)).contains { $0.lowercased().contains(query) }
-        }
+    /// The list after the access filter, the findings filter, and the search: every module, or while
+    /// narrowing only those holding a match, worked out once per filter.
+    var listOutline: ListOutline {
+        let filter = ListFilter(search: search, findingsOnly: findingsOnly, minimumRank: minimumRank)
+        if let listCache, listCache.filter == filter { return listCache.outline }
+        let outline = atlas?.listOutline(filter) ?? .empty
+        listCache = (filter, outline)
+        return outline
     }
 
     /// Whether the list is shown.
@@ -1505,10 +1502,10 @@ final class Workspace {
     /// details go elsewhere.
     var listSelection: Selection?
 
-    /// Whether the search or the findings filter is narrowing the list, which then opens every row
-    /// that holds a match.
+    /// Whether the search or the findings filter is narrowing the list, which then opens every module
+    /// and row that holds a match.
     var isFiltering: Bool {
-        findingsOnly || !search.trimmingCharacters(in: .whitespaces).isEmpty
+        ListFilter(search: search, findingsOnly: findingsOnly, minimumRank: minimumRank).isNarrowing
     }
 
     /// Whether a folder or type row is open, for its disclosure triangle.
@@ -1527,7 +1524,8 @@ final class Workspace {
     /// Whether a module's section is open.
     ///
     /// - Parameter module: The module name.
-    /// - Returns: A binding over the open modules; closing one closes every row in it too.
+    /// - Returns: A binding over the open modules; closing one closes every row in it too. While filtering
+    ///   the list draws each module open without it.
     func expansion(ofModule module: String) -> Binding<Bool> {
         Binding(
             get: { self.openModules.contains(module) },

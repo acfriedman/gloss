@@ -830,7 +830,7 @@ struct HeadingView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             if let eyebrow { EyebrowView(text: eyebrow) }
-            Text(title).textStyle(.title, design: .serif, italic: true)
+            Text(title).textStyle(.title, design: .serif)
             if let lede { Text(lede).foregroundStyle(.secondary) }
         }
     }

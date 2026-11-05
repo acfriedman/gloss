@@ -4,7 +4,7 @@ import SwiftUI
 /// How big the detail pane sets its text, as a scale of macOS's own sizes, remembered between launches.
 ///
 /// macOS has no Dynamic Type for an app's text styles to follow, so the pane's text scales itself: each
-/// view names a text style with ``SwiftUI/View/textStyle(_:design:weight:italic:monospacedDigit:)``,
+/// view names a text style with ``SwiftUI/View/textStyle(_:design:weight:monospacedDigit:)``,
 /// and the style becomes a font at the scale the View menu and Settings choose.
 enum TextSize {
     /// The key the scale is stored under.
@@ -76,15 +76,12 @@ struct ScaledTextStyle: ViewModifier {
     var design: Font.Design
     /// The weight, or `nil` for the style's own.
     var weight: Font.Weight?
-    /// `true` for italic.
-    var italic: Bool
     /// `true` for digits of one width, so counts line up.
     var monospacedDigit: Bool
 
     func body(content: Content) -> some View {
         var font = scale == 1 ? Font.system(style, design: design, weight: weight)
             : Font.system(size: TextSize.pointSize(of: style) * scale, weight: weight ?? (style == .headline ? .bold : .regular), design: design)
-        if italic { font = font.italic() }
         if monospacedDigit { font = font.monospacedDigit() }
         return content.font(font)
     }
@@ -112,12 +109,11 @@ extension View {
     ///   - style: The text style, such as `callout`.
     ///   - design: The design, such as `monospaced`.
     ///   - weight: The weight, or `nil` for the style's own.
-    ///   - italic: `true` for italic.
     ///   - monospacedDigit: `true` for digits of one width.
     /// - Returns: The view with the font set.
     func textStyle(_ style: Font.TextStyle, design: Font.Design = .default, weight: Font.Weight? = nil,
-                   italic: Bool = false, monospacedDigit: Bool = false) -> some View {
-        modifier(ScaledTextStyle(style: style, design: design, weight: weight, italic: italic, monospacedDigit: monospacedDigit))
+                   monospacedDigit: Bool = false) -> some View {
+        modifier(ScaledTextStyle(style: style, design: design, weight: weight, monospacedDigit: monospacedDigit))
     }
 
     /// Sets the text at a point size that follows the detail pane's text size.

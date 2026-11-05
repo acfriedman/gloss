@@ -327,7 +327,7 @@ public enum InterfacePage {
     .tool-button[aria-expanded="true"] { color: var(--accent); }
     .tool-button[aria-expanded="true"] .fill { fill: currentColor; opacity: 0.35; }
     .toolbar h1 { margin: 0; display: flex; align-items: baseline; gap: 10px; min-width: 0; }
-    .toolbar h1 .name { font: italic 400 1.4rem/1 var(--font-gloss); letter-spacing: -0.01em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .toolbar h1 .name { font: 400 1.4rem/1 var(--font-gloss); letter-spacing: -0.01em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .toolbar .seg { margin-left: auto; flex: none; }
     .toolbar .seg button { flex: none; padding: 7px 12px; }
 

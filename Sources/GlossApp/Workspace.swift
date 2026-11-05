@@ -335,8 +335,12 @@ final class Workspace {
     /// The boxes the map lights together while a theme or a commit on the changes page is hovered.
     var litGroup: Set<String> = []
     /// Whether the lists under the map, of what it leaves undrawn, are folded to one line. The choice
-    /// holds for as long as the app runs, across tabs, levels, and folders, and a new launch starts open.
-    var foldsUnderMap = false
+    /// holds for as long as the app runs, across tabs, levels, and folders, and a new launch starts
+    /// folded, so the map has the pane to itself until the reader asks for the rest.
+    var foldsUnderMap = true
+    /// Whether a changed type's list of the dependencies that changed is folded to its heading. The
+    /// choice holds as the map's does, and a new launch starts folded, so the story's reasons read first.
+    var foldsChangedDependencies = true
 
     /// What comparing reads off the main thread: the base, the diff, and what explains it.
     private struct Compared: Sendable {

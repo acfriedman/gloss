@@ -836,13 +836,19 @@ struct MembersView: View {
 struct MemberRowView: View {
     /// The member the row shows: its contract and first sentence, unfolding to its whole doc and findings.
     var member: Atlas.Reviewed
+    /// `false` keeps the doc folded with the rest until the row is opened, as the Changes page does so a
+    /// change's reason in the story reads first.
+    var showsBrief = true
+    /// The doc's summary before and now, shown when the row opens, for a change whose doc changed.
+    var docChange: (was: String?, now: String?)?
     @State private var isOpen = false
 
     var body: some View {
-        let brief = member.summary.map(Wording.firstSentence)
+        let brief = showsBrief ? member.summary.map(Wording.firstSentence) : nil
         DisclosureGroup(isExpanded: $isOpen) {
             VStack(alignment: .leading, spacing: 8) {
                 if let summary = member.summary, summary != brief { DocTextView(text: summary) }
+                if let docChange { DocWasNowView(was: docChange.was, now: docChange.now) }
                 if !member.parameters.isEmpty {
                     TermsView(title: "Parameters", rows: member.parameters.map { ($0.name, $0.doc ?? "Undocumented.", $0.doc == nil) })
                 }
@@ -860,6 +866,8 @@ struct MemberRowView: View {
             }
             .padding(.leading, 4)
             .padding(.bottom, 8)
+            // As wide as the row, so a short unfolding, such as an exemption alone, starts where a long one does.
+            .frame(maxWidth: .infinity, alignment: .leading)
         } label: {
             VStack(alignment: .leading, spacing: 3) {
                 HStack(alignment: .firstTextBaseline, spacing: 6) {
@@ -872,7 +880,7 @@ struct MemberRowView: View {
                 }
                 if let brief {
                     DocTextView(text: brief).textStyle(.callout).foregroundStyle(.secondary)
-                } else if member.requiresDoc {
+                } else if showsBrief, member.requiresDoc {
                     Text("Undocumented").textStyle(.callout).foregroundStyle(Palette.danger)
                 }
             }
@@ -925,6 +933,30 @@ struct EyebrowView: View {
             .textSize(10.5, weight: .semibold)
             .tracking(0.8)
             .foregroundStyle(.secondary)
+    }
+}
+
+/// A small uppercase heading that folds what follows it: its chevron points right while folded, and down
+/// while open, as the map's lists of what it leaves undrawn do.
+struct FoldEyebrowView: View {
+    /// The heading, which the view sets in uppercase.
+    var text: String
+    /// Whether what follows is folded away.
+    @Binding var isFolded: Bool
+
+    var body: some View {
+        Button { isFolded.toggle() } label: {
+            HStack(spacing: 5) {
+                Image(systemName: "chevron.right")
+                    .textSize(8, weight: .bold)
+                    .rotationEffect(.degrees(isFolded ? 0 : 90))
+                    .foregroundStyle(.secondary)
+                EyebrowView(text: text)
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .help(isFolded ? "Show them" : "Fold them away, for as long as gloss runs")
     }
 }
 

@@ -44,6 +44,7 @@ struct ChangePageBarView: View {
 /// A type on the changes level: its declaration and doc, then only what changed in it since the base,
 /// or, for a type that did not change itself, how the changes reach it.
 struct ChangePageView: View {
+    @Environment(Workspace.self) private var workspace
     /// The arranged interface the page reads the type, its members, and the reasons from.
     var atlas: Atlas
     /// The type.
@@ -52,6 +53,7 @@ struct ChangePageView: View {
     var diff: InterfaceDiff
 
     var body: some View {
+        @Bindable var workspace = workspace
         TypeHeaderView(atlas: atlas, node: node)
         if let change = diff.change(ofNode: node.id) {
             StoryThemesView(id: node.id)
@@ -71,9 +73,11 @@ struct ChangePageView: View {
             let edges = diff.edges.filter { $0.from == node.id || ($0.to == node.id && !added.contains($0.from)) }
             if !edges.isEmpty {
                 VStack(alignment: .leading, spacing: 8) {
-                    EyebrowView(text: "Dependencies that changed · \(edges.count)")
-                    ForEach(Array(edges.enumerated()), id: \.offset) { _, edge in
-                        DependencyChangeView(edge: edge, atlas: atlas)
+                    FoldEyebrowView(text: "Dependencies that changed · \(edges.count)", isFolded: $workspace.foldsChangedDependencies)
+                    if !workspace.foldsChangedDependencies {
+                        ForEach(Array(edges.enumerated()), id: \.offset) { _, edge in
+                            DependencyChangeView(edge: edge, atlas: atlas)
+                        }
                     }
                 }
             }
@@ -129,7 +133,11 @@ struct DeclarationChangesView: View {
                     VStack(alignment: .leading, spacing: 4) {
                         if let now = declaration.now,
                            let member = members.first(where: { $0.contract.keyword == declaration.keyword && $0.contract.declaration == now }) {
-                            MemberRowView(member: member)
+                            // The member's doc folds into its row, so the story's reason for the change reads
+                            // first; opening the row shows the doc, and its before and after when it changed.
+                            let docChanged = declaration.docChanged && declaration.wasSummary != declaration.nowSummary
+                            MemberRowView(member: member, showsBrief: false,
+                                          docChange: docChanged ? (declaration.wasSummary, declaration.nowSummary) : nil)
                         } else if let was = declaration.was {
                             CodeView(runs: Highlight.runs(was, projectTypes: Self.projectTypes(atlas)))
                                 .textStyle(.callout, design: .monospaced)
@@ -141,9 +149,6 @@ struct DeclarationChangesView: View {
                                 .textStyle(.caption)
                                 .foregroundStyle(.secondary)
                             if declaration.signatureChanged, let was = declaration.was { WasNowView(was: was, now: nil, atlas: atlas) }
-                            if declaration.docChanged, declaration.wasSummary != declaration.nowSummary {
-                                DocWasNowView(was: declaration.wasSummary, now: declaration.nowSummary)
-                            }
                         } else if declaration.change == .removed {
                             Text("Gone.")
                                 .textStyle(.caption)

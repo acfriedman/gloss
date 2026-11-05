@@ -151,9 +151,8 @@ public struct ChangeStory: Sendable, Equatable {
     /// A first draft of a branch's story, to edit rather than write from nothing: a headline and summary
     /// to fill in, then one theme per commit, its subject as the title, its body as the prose, and links to
     /// the types it changed; then one theme per module for what no commit made, which is everything when
-    /// there are no commits. Each changed type gets a note to fill in under the first theme that names it,
-    /// a type that moved modules only once, and file scope one per declaration in it that changed, since it
-    /// has no name of its own to link.
+    /// there are no commits. Every change gets a note to fill in under the first theme that names its type:
+    /// a type's own change, once even when it moved modules, and each member's, file scope's by name.
     ///
     /// - Parameters:
     ///   - diff: How the branch differs from its base.
@@ -174,13 +173,27 @@ public struct ChangeStory: Sendable, Equatable {
         func sentence(_ ids: [String]) -> String {
             ids.isEmpty ? "" : "Changes " + links(ids).joined(separator: ", ") + "."
         }
-        // Each type gets one note to tell the change from its side, under the first theme that names it.
+        // Each change gets a note to give its reason, the type's own and each member's, under the first
+        // theme that names the type.
+        let owing = Dictionary(grouping: StoryCoverage.membersOwingNotes(diff), by: \.node)
+        let typesOwing = Set(StoryCoverage.typesOwingNotes(diff))
         var noted: Set<String> = []
         func notes(_ ids: [String]) -> String {
-            links(ids).filter { noted.insert($0).inserted }.map { "\n### " + $0 + "\n\nWhat changed in it, from its side, and why.\n" }.joined()
+            let stubs = ids.flatMap { id -> [(link: String, prompt: String)] in
+                // The type's path after its module, empty for file scope, which has no name of its own.
+                let path = (id.firstIndex(of: "/").map { String(id[id.index(after: $0)...]) } ?? id).replacingOccurrences(of: ".", with: "/")
+                guard !path.isEmpty else {
+                    // A note on a file-scope declaration is file scope's own too, so each one changed gets one.
+                    return (diff.change(ofNode: id)?.declarations ?? []).map { ("``" + $0.name + "``", "Why it changed, in a sentence or two.") }
+                }
+                let own = typesOwing.contains(id) ? [("``" + path + "``", "Why the type itself changed, in a sentence or two.")] : []
+                return own + (owing[id] ?? []).map { ("``" + path + "/" + $0.name + "``", "Why it changed, in a sentence or two.") }
+            }
+            return stubs.filter { noted.insert($0.link).inserted }.map { "\n### " + $0.link + "\n\n" + $0.prompt + "\n" }.joined()
         }
         var text = "# What this change does, in a line\n\nWhy it was made, and what a reviewer should look at first.\n"
-        let changed = diff.nodes.filter { $0.change != .implementation }
+        // Every change needs a reason, a body's included, so every type that differs is drafted.
+        let changed = diff.nodes
         var named: Set<String> = []
         if let commits, !commits.commits.isEmpty {
             for commit in commits.commits {
@@ -211,13 +224,16 @@ public struct ChangeStory: Sendable, Equatable {
 ///
 /// A link names a type when its path, with `/` between names, is a type's name in the head or the base,
 /// and a member when the rest is one of the type's members as a caller writes it, with its argument
-/// labels. A bare name names the type of that name in every module, and a module first narrows it to
-/// that module's type; a type the diff sees as moved is explained by a link to either module. A link
-/// with no type in front names a declaration at file scope, such as a free function, and stands for its
-/// module's file scope, which has no name of its own. A theme explains the types it links and their
-/// nested types, and the members it links. Every type whose interface changed, new, gone, moved, or
-/// changed, needs a theme and a note of its own, or one on a type it is nested in; a type changed only inside
-/// its bodies needs neither.
+/// labels; a member neither side declares names nothing. A bare name names the type of that name in every
+/// module, and a module first narrows it to that module's type; a type the diff sees as moved is
+/// explained by a link to either module. A link with no type in front names a declaration at file scope,
+/// such as a free function, and stands for its module's file scope, which has no name of its own. A theme
+/// explains the types it links and their nested types, and the members it links. Every type whose
+/// interface changed, new, gone, moved, or changed, needs a theme and a note of its own, or one on a type
+/// it is nested in; a type changed only inside its bodies needs no theme. Every change also needs a reason
+/// of its own, a note that sits beside it: each declaration that differs, a member's in a note that links
+/// it and a type's own, gone, moved, or declared differently, in a note that links the type; a new type's
+/// reason is its theme and its members' notes.
 public struct StoryCoverage: Sendable, Equatable {
     /// For each theme, in order, the ids of the changed types it explains, in the order it links them.
     public var types: [[String]]
@@ -227,9 +243,12 @@ public struct StoryCoverage: Sendable, Equatable {
     public var unexplained: [String]
     /// The links that name no type in the head or the base, by theme title.
     public var deadLinks: [(theme: String, link: String)]
-    /// The ids of the types whose interface changed that have no note of their own, nor one on a type
-    /// they are nested in, in the diff's order.
+    /// The ids of the types whose own change, gone, moved, or declared differently, has no note of its
+    /// own, in the diff's order.
     public var withoutNotes: [String]
+    /// The members whose change has no note of its own: every declaration that differs from the base, in
+    /// a type that is not gone; in the diff's order.
+    public var membersWithoutNotes: [MemberLink]
     /// Where each type's notes are, by its id, as the theme and the note within it.
     public var typeNotes: [String: [NotePlace]]
     /// Where each member's notes are, by its link.
@@ -282,6 +301,17 @@ public struct StoryCoverage: Sendable, Equatable {
             let id = Graph.id(contract.module, "")
             if !(fileScope[contract.callName]?.contains(id) ?? false) { fileScope[contract.callName, default: []].append(id) }
         }
+        // Each type's members by the name a caller writes, in the head or the base, so a link names only a
+        // member that one of them declares; a case with values or a synthesized member is named bare too.
+        var declared: [String: Set<String>] = [:]
+        for contract in head.contracts + base.contracts where !contract.opensScope {
+            declared[Graph.id(contract.module, Graph.key(of: contract)), default: []].insert(contract.callName)
+        }
+        func declares(_ id: String, _ member: String) -> Bool {
+            let bare = String(member.prefix { $0 != "(" })
+            return declared[id].map { $0.contains(member) || $0.contains(bare) } ?? false
+                || Declaration.knownRequirements.contains(member) || Declaration.knownRequirements.contains(bare)
+        }
         let changed = Set(diff.nodes.map(\.node.id))
         // A moved type's id in the base stands for its move, so a link that names the module it left
         // explains it too.
@@ -303,8 +333,12 @@ public struct StoryCoverage: Sendable, Equatable {
             }
             guard !parts.isEmpty else { return nil }
             if let length = (1...parts.count).reversed().first(where: { !ids(parts.prefix($0).joined(separator: "."), in: byName).isEmpty }) {
-                return (ids(parts.prefix(length).joined(separator: "."), in: byName),
-                        length < parts.count ? parts[length...].joined(separator: "/") : nil, false)
+                let types = ids(parts.prefix(length).joined(separator: "."), in: byName)
+                guard length < parts.count else { return (types, nil, false) }
+                // A member names nothing unless the type declares it, so a mistyped note is caught, not shown nowhere.
+                let member = parts[length...].joined(separator: "/")
+                let declaring = types.filter { declares($0, member) }
+                return declaring.isEmpty ? nil : (declaring, member, false)
             }
             let scopes = parts.count == 1 ? ids(parts[0], in: fileScope) : []
             return scopes.isEmpty ? nil : (scopes, parts[0], true)
@@ -358,13 +392,43 @@ public struct StoryCoverage: Sendable, Equatable {
         }
         let interface = diff.nodes.filter { $0.change != .implementation }
         unexplained = interface.filter { !coveredBy(linked, $0) }.map(\.node.id)
-        withoutNotes = interface.filter { !coveredBy(Set(typeNotes.keys), $0) }.map(\.node.id)
+        withoutNotes = Self.typesOwingNotes(diff).filter { typeNotes[$0] == nil }
+        membersWithoutNotes = Self.membersOwingNotes(diff).filter { memberNotes[$0] == nil }
     }
 
-    /// Whether the story explains every type whose interface changed, each in a note of its own too, and
-    /// every link names something.
+    /// The declarations that open a type, whose change is the type's own rather than a member's.
+    static let typeKeywords: Set<String> = ["struct", "class", "enum", "protocol", "actor"]
+
+    /// The types whose own change a note should tell: one that is gone or moved, or whose declaration is
+    /// declared differently, changes no member row carries; a new type's reason is its theme's blurb and
+    /// its members' notes.
+    ///
+    /// - Parameter diff: How the head differs from the base.
+    /// - Returns: Their ids, in the diff's order.
+    static func typesOwingNotes(_ diff: InterfaceDiff) -> [String] {
+        diff.nodes.filter { node in
+            node.change == .moved || node.change == .removed
+                || (node.change != .added && node.declarations.contains { typeKeywords.contains($0.keyword) })
+        }.map(\.node.id)
+    }
+
+    /// The members whose change a note should tell: every declaration that differs from the base, new,
+    /// gone, declared differently, or changed only in its body, whatever its access, in a type that is not
+    /// gone; a gone type's members go with it, which its own note tells.
+    ///
+    /// - Parameter diff: How the head differs from the base.
+    /// - Returns: Each member as a link, each once, in the diff's order.
+    static func membersOwingNotes(_ diff: InterfaceDiff) -> [MemberLink] {
+        var seen: Set<MemberLink> = []
+        return diff.nodes.filter { $0.change != .removed }.flatMap { node in
+            node.declarations.filter { !typeKeywords.contains($0.keyword) }.map { MemberLink(node: node.node.id, name: $0.name) }
+        }.filter { seen.insert($0).inserted }
+    }
+
+    /// Whether the story explains every type whose interface changed, gives every change a note of its own,
+    /// and every link names something.
     public var isComplete: Bool {
-        unexplained.isEmpty && deadLinks.isEmpty && withoutNotes.isEmpty
+        unexplained.isEmpty && deadLinks.isEmpty && withoutNotes.isEmpty && membersWithoutNotes.isEmpty
     }
 
     /// The themes that explain a type, by index.
@@ -383,6 +447,7 @@ public struct StoryCoverage: Sendable, Equatable {
     /// - Returns: `true` when they say the same.
     public static func == (lhs: StoryCoverage, rhs: StoryCoverage) -> Bool {
         lhs.types == rhs.types && lhs.members == rhs.members && lhs.unexplained == rhs.unexplained && lhs.withoutNotes == rhs.withoutNotes
+            && lhs.membersWithoutNotes == rhs.membersWithoutNotes
             && lhs.typeNotes == rhs.typeNotes && lhs.memberNotes == rhs.memberNotes
             && lhs.deadLinks.map { [$0.theme, $0.link] } == rhs.deadLinks.map { [$0.theme, $0.link] }
     }

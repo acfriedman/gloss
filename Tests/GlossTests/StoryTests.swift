@@ -126,8 +126,8 @@ final class StoryTests: XCTestCase {
         XCTAssertEqual(coverage.typeNotes["Shop/Cart"], [StoryCoverage.NotePlace(theme: 0, note: 0)])
         XCTAssertEqual(coverage.memberNotes[StoryCoverage.MemberLink(node: "Shop/Cart", name: "total()")], [StoryCoverage.NotePlace(theme: 0, note: 1)])
         XCTAssertTrue(coverage.unexplained.isEmpty)
-        XCTAssertEqual(coverage.withoutNotes, ["Shop/Discount", "Shop/Coupon"],
-                       "Explained by a theme, but with no note of their own; Cart's covers its nested Receipt.")
+        XCTAssertEqual(coverage.withoutNotes, ["Shop/Coupon"],
+                       "A gone type needs a note of its own; new ones are told by the theme that links them.")
         XCTAssertFalse(coverage.isComplete)
     }
 
@@ -141,7 +141,8 @@ final class StoryTests: XCTestCase {
         XCTAssertEqual(read.themes.map(\.title), ["Shop"])
         XCTAssertTrue(StoryCoverage(story: read, diff: diff, head: after, base: before).isComplete,
                       "A draft covers the change it was made from, a note to fill in for each type.")
-        XCTAssertEqual(read.themes[0].notes.map(\.link), ["Cart", "Cart/Receipt", "Discount", "Coupon"])
+        XCTAssertEqual(read.themes[0].notes.map(\.link), ["Cart/total()", "Cart/coupon", "Ledger/sum()", "Coupon"],
+                       "Every change gets a reason: each member that differs, a body's too, and the gone coupon; new types are told by the theme.")
     }
 
     private let rounding = """
@@ -209,5 +210,54 @@ final class StoryTests: XCTestCase {
         XCTAssertEqual(read.themes.map(\.title), ["New", "Old"])
         XCTAssertEqual(read.themes.flatMap(\.notes).map(\.link), ["Cart", "round(_:)"], "One note per name, under the first theme.")
         XCTAssertTrue(StoryCoverage(story: read, diff: diff, head: after, base: before).isComplete)
+    }
+
+    func testALinkToAMemberTheTypeDoesNotDeclareNamesNothing() {
+        let before = Interface.build(sources: [("Sources/Shop/Cart.swift", base)])
+        let after = Interface.build(sources: [("Sources/Shop/Cart.swift", head)])
+        let diff = InterfaceDiff(base: before, head: after)
+        let coverage = StoryCoverage(story: ChangeStory.parse("""
+        # Totals
+
+        ## Totals
+
+        ``Cart/total()`` and ``Cart/coupon``, which is gone, but not ``Cart/totl()``.
+
+        ### ``Cart/totl()``
+
+        A typo, shown under no row.
+        """), diff: diff, head: after, base: before)
+        XCTAssertEqual(coverage.deadLinks.map(\.link), ["Cart/totl()"], "A gone member is still named; a mistyped one is not.")
+        XCTAssertEqual(coverage.members[0].map(\.name), ["total()", "coupon"])
+    }
+
+    func testANewOrChangedMemberOfAnExistingTypeNeedsANoteOfItsOwn() {
+        let before = Interface.build(sources: [("Sources/Shop/Cart.swift", base)])
+        let after = Interface.build(sources: [("Sources/Shop/Cart.swift", head)])
+        let diff = InterfaceDiff(base: before, head: after)
+        let typesOnly = StoryCoverage(story: ChangeStory.parse("""
+        # Totals
+
+        ## Totals
+
+        ``Cart``, ``Discount``, and ``Coupon``.
+
+        ### ``Cart``
+
+        Totals in fractions.
+
+        ### ``Discount``
+
+        New.
+
+        ### ``Coupon``
+
+        Gone.
+        """), diff: diff, head: after, base: before)
+        XCTAssertEqual(typesOnly.membersWithoutNotes, [StoryCoverage.MemberLink(node: "Shop/Cart", name: "total()"),
+                                                       StoryCoverage.MemberLink(node: "Shop/Cart", name: "coupon"),
+                                                       StoryCoverage.MemberLink(node: "Shop/Ledger", name: "sum()")],
+                       "Every change needs a reason beside it: the changed total, the gone coupon, and Ledger's body-only sum.")
+        XCTAssertFalse(typesOnly.isComplete)
     }
 }

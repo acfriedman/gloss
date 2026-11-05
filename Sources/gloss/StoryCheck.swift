@@ -45,6 +45,12 @@ enum StoryCheck {
             for id in coverage.withoutNotes {
                 print("no note of its own: \(diff.change(ofNode: id).map { "\($0.node.name) (\($0.change.rawValue))" } ?? id)")
             }
+            for member in coverage.membersWithoutNotes {
+                let node = diff.change(ofNode: member.node)
+                let change = node?.declarations.first { $0.name == member.name }?.change.rawValue ?? "changed"
+                let type = node.map { $0.node.name.replacingOccurrences(of: ".", with: "/") } ?? member.node
+                print("no note of its own: ``\(type.isEmpty ? "" : type + "/")\(member.name)`` (\(change))")
+            }
             for dead in coverage.deadLinks {
                 print("names nothing: ``\(dead.link)`` in \(dead.theme)")
             }

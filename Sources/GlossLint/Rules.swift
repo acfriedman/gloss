@@ -469,6 +469,38 @@ public enum Sentences {
         return count
     }
 
+    /// Splits off a paragraph's first sentences, so a view can lead with them and fold the rest.
+    ///
+    /// - Parameters:
+    ///   - text: A paragraph; sentences end as ``count(in:)`` counts them, never inside a code span.
+    ///   - count: How many sentences lead.
+    /// - Returns: The first `count` sentences, and what follows them, trimmed; the rest is empty when the
+    ///   paragraph has no more.
+    public static func split(_ text: String, after count: Int) -> (lead: String, rest: String) {
+        let chars = Array(text)
+        var found = 0
+        var index = 0
+        var inCode = false
+        while index < chars.count {
+            let char = chars[index]
+            if char == "`" { inCode.toggle() }
+            if !inCode, ".!?".contains(char) {
+                var end = index
+                while end + 1 < chars.count, ".!?".contains(chars[end + 1]) { end += 1 }
+                if end + 1 >= chars.count || chars[end + 1].isWhitespace, !isAbbreviation(chars, before: index) {
+                    found += 1
+                    if found == count {
+                        return (String(chars[...end]).trimmed, String(chars[(end + 1)...]).trimmed)
+                    }
+                }
+                index = end + 1
+                continue
+            }
+            index += 1
+        }
+        return (text.trimmed, "")
+    }
+
     /// Whether `text` ends with a period, after dropping a trailing code span or closing quote.
     ///
     /// - Parameter text: A summary paragraph.

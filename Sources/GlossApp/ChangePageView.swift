@@ -78,7 +78,7 @@ struct ChangePageView: View {
                 }
             }
         } else {
-            ReachedView(atlas: atlas, reasons: atlas.changeReasons(of: node.id, in: diff))
+            ReachedView(atlas: atlas, id: node.id, diff: diff, reasons: atlas.changeReasons(of: node.id, in: diff))
         }
     }
 }
@@ -117,6 +117,8 @@ struct DeclarationChangesView: View {
                 }
                 .padding(.bottom, 10)
             }
+            // Why the type itself is new, gone, moved, or declared differently, beside that change.
+            TypeNotesView(node: change.node.id)
             if !(change.change == .moved && rows.isEmpty) {
                 EyebrowView(text: change.change == .added ? "New \(workspace.comparisonPhrase) · \(rows.count)" : "Declarations that changed · \(rows.count)")
                     .padding(.bottom, 6)
@@ -243,13 +245,18 @@ struct DependencyChangeView: View {
 
 /// How the changes reach a type that did not change itself, one row per way, or that none does.
 struct ReachedView: View {
+    @Environment(Workspace.self) private var workspace
     /// The arranged interface the rows read names from.
     var atlas: Atlas
+    /// The reached type's id.
+    var id: String
+    /// The change.
+    var diff: InterfaceDiff
     /// The ways, as ``GlossMap/Atlas/changeReasons(of:in:)`` gives them.
     var reasons: [ChangeReason]
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 14) {
             EyebrowView(text: "How the changes reach it")
             if reasons.isEmpty {
                 Text("They do not: its dependencies on changed types are as they were, and it uses nothing in them that changed.")
@@ -257,36 +264,9 @@ struct ReachedView: View {
                     .foregroundStyle(.secondary)
             }
             ForEach(Array(reasons.enumerated()), id: \.offset) { _, reason in
-                switch reason.kind {
-                case .dependency(let edge):
-                    DependencyChangeView(edge: edge, atlas: atlas)
-                case .declaration(let declaration):
-                    HStack(alignment: .firstTextBaseline, spacing: 6) {
-                        ChangeBadgeView(change: .changed)
-                        VStack(alignment: .leading, spacing: 4) {
-                            Wrap(spacing: 6) {
-                                Text("Uses").textStyle(.callout)
-                                ChipView(unit: .type(reason.changed), atlas: atlas)
-                                Text("whose declaration changed").textStyle(.callout)
-                            }
-                            if let was = declaration.was { WasNowView(was: was, now: declaration.now, atlas: atlas) }
-                        }
-                    }
-                case .member(let member):
-                    HStack(alignment: .firstTextBaseline, spacing: 6) {
-                        ChangeBadgeView(change: member.change)
-                        VStack(alignment: .leading, spacing: 4) {
-                            Wrap(spacing: 6) {
-                                Text(Self.callers(reason.via)).textStyle(.callout, design: .monospaced)
-                                Text(reason.via.count == 1 ? "uses" : "use").textStyle(.callout)
-                                ChipView(unit: .type(reason.changed), atlas: atlas)
-                                Text(".\(member.name)").textStyle(.callout, design: .monospaced)
-                                Text(member.change == .removed ? "which is gone" : "whose signature changed").textStyle(.callout)
-                            }
-                            if let was = member.was { WasNowView(was: was, now: member.now, atlas: atlas) }
-                        }
-                    }
-                }
+                ReachRowView(reason: reason, atlas: atlas,
+                             why: atlas.why(reason, reaching: id, in: diff, story: workspace.story,
+                                            coverage: workspace.storyCoverage, commits: workspace.changeCommits))
             }
         }
     }
@@ -297,6 +277,134 @@ struct ReachedView: View {
     /// - Returns: The declarations' own names, as a list.
     static func callers(_ via: [String]) -> String {
         Wording.list(via.map { String($0.split(separator: ".").last ?? Substring($0)) })
+    }
+}
+
+/// One way a change reaches a type: what reaches it in a line, then why that changed and why the type
+/// relies on it, a sentence or two each, with the rest folded beneath, so one reach is one thought.
+struct ReachRowView: View {
+    /// The way the change reaches the type.
+    var reason: ChangeReason
+    /// The arranged interface the links read their names from.
+    var atlas: Atlas
+    /// Why the change was made and why the type relies on it.
+    var why: ReachWhy
+    @State private var isOpen = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            what
+            VStack(alignment: .leading, spacing: 6) {
+                WhyLineView(title: "Why it changed", answer: why.changed, missing: "Neither the story nor a commit says yet.")
+                let first = why.uses.first
+                let user = why.user == reason.changed ? atlas.byID[why.user].map(atlas.label) ?? why.user : first?.name ?? "it"
+                WhyLineView(title: "Why \(user) relies on it", answer: first?.answer,
+                            missing: "\(first.map { "\($0.name)'s doc" } ?? "No doc") says nothing about it.")
+                if hasMore {
+                    Button { isOpen.toggle() } label: {
+                        HStack(spacing: 4) {
+                            Image(systemName: isOpen ? "chevron.down" : "chevron.right")
+                            Text(isOpen ? "Less" : "More")
+                        }
+                        .textStyle(.caption)
+                        .foregroundStyle(.secondary)
+                    }
+                    .buttonStyle(.plain)
+                }
+                if isOpen { more }
+            }
+            .padding(.leading, 20)
+        }
+    }
+
+    /// The reach in a line: who relies on what, and what about it changed.
+    @ViewBuilder private var what: some View {
+        switch reason.kind {
+        case .dependency(let edge):
+            DependencyChangeView(edge: edge, atlas: atlas)
+        case .declaration:
+            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                ChangeBadgeView(change: .changed)
+                Wrap(spacing: 6) {
+                    Text("Uses").textStyle(.callout)
+                    ChipView(unit: .type(reason.changed), atlas: atlas)
+                    Text("whose declaration changed").textStyle(.callout)
+                }
+            }
+        case .member(let member):
+            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                ChangeBadgeView(change: member.change)
+                Wrap(spacing: 6) {
+                    Text(ReachedView.callers(reason.via)).textStyle(.callout, design: .monospaced)
+                    Text(reason.via.count == 1 ? "uses" : "use").textStyle(.callout)
+                    ChipView(unit: .type(reason.changed), atlas: atlas)
+                    Text(".\(member.name)").textStyle(.callout, design: .monospaced)
+                    Text(member.change == .removed ? "which is gone" : "whose signature changed").textStyle(.callout)
+                }
+            }
+        }
+    }
+
+    /// The declaration as it was and is, when the reach is through one.
+    private var declaration: InterfaceDiff.DeclarationChange? {
+        switch reason.kind {
+        case .member(let change), .declaration(let change): change
+        case .dependency: nil
+        }
+    }
+
+    /// Whether anything is folded: what was written, the rest of either answer, or more declarations.
+    private var hasMore: Bool {
+        declaration?.was != nil || !(why.changed?.more.isEmpty ?? true) || why.uses.count > 1
+            || !(why.uses.first?.answer?.more.isEmpty ?? true)
+    }
+
+    /// What unfolds: the declaration before and now, each answer's rest and where it was written, and the
+    /// other declarations that rely on the change.
+    @ViewBuilder private var more: some View {
+        if let declaration, let was = declaration.was { WasNowView(was: was, now: declaration.now, atlas: atlas) }
+        if let changed = why.changed { WhyMoreView(answer: changed) }
+        if let answer = why.uses.first?.answer { WhyMoreView(answer: answer) }
+        ForEach(Array(why.uses.dropFirst().enumerated()), id: \.offset) { _, use in
+            WhyLineView(title: "Why \(use.name) relies on it", answer: use.answer, missing: "\(use.name)'s doc says nothing about it.")
+        }
+    }
+}
+
+/// One why: a small title, then an answer's lead in a sentence or two, or a quiet line saying nothing
+/// was written.
+struct WhyLineView: View {
+    /// What the line answers, such as `Why it changed`.
+    var title: String
+    /// The answer, or `nil` when nothing was written.
+    var answer: ReachWhy.Answer?
+    /// What to say when nothing was written.
+    var missing: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(title).textStyle(.caption, weight: .semibold).foregroundStyle(.secondary)
+            if let answer {
+                DocTextView(text: StoryProse.markdown(answer.lead), codeColor: Palette.accent).textStyle(.callout)
+            } else {
+                Text(missing).textStyle(.callout).foregroundStyle(.tertiary)
+            }
+        }
+    }
+}
+
+/// The rest of an answer, unfolded: where it was written, then what follows its lead there.
+struct WhyMoreView: View {
+    /// The answer.
+    var answer: ReachWhy.Answer
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text("From \(answer.source)").textStyle(.caption).foregroundStyle(.secondary)
+            ForEach(Array(answer.more.enumerated()), id: \.offset) { _, paragraph in
+                DocTextView(text: StoryProse.markdown(paragraph), codeColor: Palette.accent).textStyle(.callout).foregroundStyle(.secondary)
+            }
+        }
     }
 }
 

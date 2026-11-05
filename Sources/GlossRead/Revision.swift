@@ -28,8 +28,8 @@ public enum Revision {
         public var kind: Kind
     }
 
-    /// Reads the Swift files under a directory as a revision holds them, choosing them as
-    /// ``SourceFiles/swiftFiles(under:includeTests:)`` chooses files on disk.
+    /// Reads the Swift files under a directory, or the files of other extensions, as a revision holds them,
+    /// choosing them as ``SourceFiles/files(under:includeTests:extensions:)`` chooses files on disk.
     ///
     /// - Parameters:
     ///   - revision: Anything git names a commit by: a branch, a tag, `HEAD`, or a hash.
@@ -37,19 +37,20 @@ public enum Revision {
     ///   - root: The directory the returned paths are relative to, which holds `directory`, as the
     ///     working tree's paths are reported.
     ///   - includeTests: `false` leaves out any directory whose name ends in `Tests`.
+    ///   - extensions: The extensions wanted, without their dots; Swift's alone when not given.
     /// - Returns: Each file's path relative to `root` and its text, sorted by path; a file that is not
     ///   UTF-8 is left out.
     /// - Throws: ``Failure`` when git cannot run, `directory` is not in a repository, or the revision is
     ///   unknown.
     public static func sources(at revision: String, under directory: String, relativeTo root: String,
-                               includeTests: Bool) throws -> [(file: String, source: String)] {
+                               includeTests: Bool, extensions: Set<String> = ["swift"]) throws -> [(file: String, source: String)] {
         let phase = Timing.begin("read revision"); defer { Timing.end(phase, revision) }
         let top = try text(git(["rev-parse", "--show-toplevel"], in: directory))
         let scanned = try text(git(["rev-parse", "--show-prefix"], in: directory))
         let base = try text(git(["rev-parse", "--show-prefix"], in: root))
         let listing = try git(["ls-tree", "-r", "-z", "--name-only", revision, "--", scanned.isEmpty ? "." : scanned], in: top)
         let paths = listing.split(separator: 0).map { String(decoding: $0, as: UTF8.self) }.filter { path in
-            path.hasSuffix(".swift") && !SourceFiles.isSkipped(String(path.dropFirst(scanned.count)), includeTests: includeTests)
+            extensions.contains((path as NSString).pathExtension) && !SourceFiles.isSkipped(String(path.dropFirst(scanned.count)), includeTests: includeTests)
         }.sorted()
         guard !paths.isEmpty else { return [] }
 

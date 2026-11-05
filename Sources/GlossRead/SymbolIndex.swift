@@ -13,6 +13,8 @@ public struct SymbolIndex: Sendable {
     private var modules: Set<String> = []
     /// The modules the sources import, whose symbols a link may name though no scanned file declares them.
     private var imports: Set<String> = []
+    /// The types Objective-C headers declare, whose members a link may name though gloss reads none.
+    private var objectiveCTypes: Set<String> = []
     /// Every name a declaration's path is made of, so a link's first name can be told from a module's.
     private var names: Set<String> = []
 
@@ -36,8 +38,11 @@ public struct SymbolIndex: Sendable {
     /// - Parameters:
     ///   - readings: Each file's path and the declarations read from it.
     ///   - imports: The modules the files import, by their first names.
-    public init(_ readings: [(file: String, entries: [DeclarationReader.Entry])], imports: [String] = []) {
+    ///   - objectiveCTypes: The types Objective-C headers declare, by their Swift names.
+    public init(_ readings: [(file: String, entries: [DeclarationReader.Entry])], imports: [String] = [],
+                objectiveCTypes: [String] = []) {
         self.imports = Set(imports)
+        self.objectiveCTypes = Set(objectiveCTypes)
         for (file, entries) in readings {
             modules.insert(SourceFiles.module(of: file))
             for entry in entries where entry.declaration.kind != .other {
@@ -66,7 +71,7 @@ public struct SymbolIndex: Sendable {
     /// - Returns: `false` only for a link into the scanned sources that matches nothing there.
     ///
     /// Another module's symbol is one under a module the sources import or a well-known one, whose
-    /// declarations gloss cannot see. A first name that nothing scanned declares or imports is taken for
+    /// declarations gloss cannot see; so is an Objective-C type's, named by a header. A first name that nothing scanned declares or imports is taken for
     /// the project's own module named another way, such as an Xcode target whose files gloss names by
     /// their folder, and the rest of the link must still name something.
     public func resolves(_ link: String, from scope: [String]) -> Bool {
@@ -75,7 +80,8 @@ public struct SymbolIndex: Sendable {
             components.removeFirst()
             if components.isEmpty { return true }
         }
-        guard let first = components.first, !Self.externalPrefixes.contains(first), !imports.contains(first) else { return true }
+        guard let first = components.first, !Self.externalPrefixes.contains(first), !imports.contains(first),
+              !objectiveCTypes.contains(first) else { return true }
         if declares(components, from: scope) { return true }
         return components.count > 1 && !names.contains(first) && declares(Array(components.dropFirst()), from: scope)
     }

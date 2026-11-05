@@ -486,10 +486,11 @@ final class Workspace {
             let scanned = scanned(root)
             let pairs: [(file: String, source: String)] = try Timing.measure("read files", head ?? "working tree") {
                 if let head {
-                    return try Revision.sources(at: head, under: scanned.path, relativeTo: root.path, includeTests: false)
+                    return try Revision.sources(at: head, under: scanned.path, relativeTo: root.path, includeTests: false,
+                                                extensions: SourceFiles.readExtensions)
                 }
                 let prefix = root.path.hasSuffix("/") ? root.path : root.path + "/"
-                return try SourceFiles.swiftFiles(under: scanned.path, includeTests: false).compactMap { file in
+                return try SourceFiles.files(under: scanned.path, includeTests: false, extensions: SourceFiles.readExtensions).compactMap { file in
                     guard let source = try? String(contentsOfFile: file, encoding: .utf8) else { return nil }
                     return (file.hasPrefix(prefix) ? String(file.dropFirst(prefix.count)) : file, source)
                 }

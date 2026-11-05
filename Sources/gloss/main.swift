@@ -62,14 +62,14 @@ let style: HouseStyle = {
     }
 }()
 
-/// Collects the `.swift` files under a path. A path that does not exist exits with status 66, so a
-/// typo cannot pass as a clean run.
+/// Collects the `.swift` files under a path, and the Objective-C headers whose types their docs may link.
+/// A path that does not exist exits with status 66, so a typo cannot pass as a clean run.
 ///
 /// - Parameter path: A file or directory, as given on the command line.
-/// - Returns: The files, sorted, so output order is stable across runs; empty for a non-Swift file.
-func swiftFiles(under path: String) -> [String] {
+/// - Returns: The files, sorted, so output order is stable across runs; empty for a file gloss does not read.
+func sourceFiles(under path: String) -> [String] {
     do {
-        return try SourceFiles.swiftFiles(under: path, includeTests: includeTests)
+        return try SourceFiles.files(under: path, includeTests: includeTests, extensions: SourceFiles.readExtensions)
     } catch {
         FileHandle.standardError.write(Data("gloss: no such path: \(path)\n".utf8))
         exit(66)
@@ -78,7 +78,7 @@ func swiftFiles(under path: String) -> [String] {
 
 let (sources, readSamples) = Timing.record {
     Timing.measure("read files") {
-        paths.flatMap(swiftFiles(under:)).compactMap { file -> (file: String, source: String)? in
+        paths.flatMap(sourceFiles(under:)).compactMap { file -> (file: String, source: String)? in
             (try? String(contentsOfFile: file, encoding: .utf8)).map { (file, $0) }
         }
     }
@@ -120,7 +120,7 @@ if interfaceMode {
         }
     }
     let findings = assessments.reduce(0) { $0 + $1.findings.count }
-    FileHandle.standardError.write(Data("\(interface.contracts.count) declarations, \(findings) findings in \(sources.count) files\n".utf8))
+    FileHandle.standardError.write(Data("\(interface.contracts.count) declarations, \(findings) findings in \(interface.files.count) files\n".utf8))
     exit(0)
 }
 
@@ -131,9 +131,11 @@ if !summaryOnly {
 }
 let byRule = Dictionary(grouping: diagnostics, by: \.rule).mapValues(\.count)
 let errors = diagnostics.filter { $0.severity == .error }.count
+// Headers are read for their type names only, so the files counted are the Swift ones linted.
+let swiftCount = sources.filter { !$0.file.hasSuffix(".h") }.count
 let warnings = diagnostics.count - errors
 var summary = "\(errors) error\(errors == 1 ? "" : "s")" + (warnings > 0 ? " and \(warnings) warning\(warnings == 1 ? "" : "s")" : "")
-    + " in \(sources.count) file\(sources.count == 1 ? "" : "s")"
+    + " in \(swiftCount) file\(swiftCount == 1 ? "" : "s")"
 if !byRule.isEmpty {
     summary += "\n" + byRule.sorted { $0.value > $1.value }.map { "  \($0.value)\t\($0.key.rawValue)" }.joined(separator: "\n")
 }

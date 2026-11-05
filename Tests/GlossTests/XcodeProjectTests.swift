@@ -89,4 +89,67 @@ final class XcodeProjectTests: XCTestCase {
         let found = try SourceFiles.swiftFiles(under: root.path, includeTests: false).map { String($0.dropFirst(root.path.count + 1)) }
         XCTAssertEqual(found, ["App/Cart.swift", "App/Ledger.swift"], "A hidden file met first does not end the walk.")
     }
+
+    private let header = """
+    #import <Foundation/Foundation.h>
+    @class Ledger;
+    @protocol Pricing, Taxing;
+
+    /// A cart of lines.
+    @interface CartManager : NSObject
+    @property (nonatomic, readonly) NSArray *lineItems;
+    @end
+
+    @interface CartManager (Totals)
+    @end
+
+    @protocol CartObserver <NSObject>
+    - (void)cartDidChange;
+    @end
+
+    typedef NS_ENUM(NSInteger, CartState) { CartStateOpen, CartStateClosed };
+    typedef NS_OPTIONS(NSUInteger, CartFlags) { CartFlagsGift = 1 };
+    extern NSErrorDomain const FulfillmentErrorDomain;
+    typedef NS_ERROR_ENUM(FulfillmentErrorDomain, FulfillmentErrorCode) { FulfillmentErrorCodeSuperseded };
+    typedef NSString *CartKey NS_TYPED_ENUM;
+    NS_SWIFT_NAME(Receipt)
+    @interface XYZReceipt : NSObject
+    - (void)addLine:(id)line NS_SWIFT_NAME(add(_:));
+    @end
+    // @interface Commented : NSObject
+    /* @interface AlsoCommented : NSObject */
+    """
+
+    func testAHeaderDeclaresItsTypesByTheirSwiftNames() {
+        XCTAssertEqual(ObjectiveCHeaders.typeNames(in: header),
+                       ["CartManager", "XYZReceipt", "CartObserver", "CartState", "CartFlags", "FulfillmentError",
+                        "FulfillmentErrorCode", "CartKey", "Receipt"],
+                       "Forward declarations, a method's Swift name, and comments declare no type.")
+    }
+
+    func testALinkToAnObjectiveCTypeResolvesOnTrust() {
+        let swift = """
+        /// Reads ``CartManager/lineItems``, fails with ``FulfillmentError/Code/superseded``, and prints a
+        /// ``Receipt``, but not a ``Basket/lines``.
+        struct Planner {}
+        """
+        XCTAssertEqual(deadLinks([("App/Planner.swift", swift)]).count, 4, "Without the header, gloss cannot know them.")
+        XCTAssertEqual(deadLinks([("App/Planner.swift", swift), ("App/Cart.h", header)]), ["``Basket/lines``"])
+        let reading = Reading(sources: [("App/Planner.swift", swift), ("App/Cart.h", header)])
+        XCTAssertEqual(reading.files.map(\.file), ["App/Planner.swift"], "A header is not parsed as Swift.")
+        XCTAssertEqual(Interface.build(reading).files, ["App/Planner.swift"])
+    }
+
+    func testHeadersAreGatheredBesideSwiftFiles() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("gloss-headers-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: root) }
+        for file in ["App/Cart.h", "App/Cart.m", "App/Planner.swift"] {
+            let url = root.appendingPathComponent(file)
+            try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try Data().write(to: url)
+        }
+        let found = try SourceFiles.files(under: root.path, includeTests: false, extensions: SourceFiles.readExtensions)
+        XCTAssertEqual(found.map { String($0.dropFirst(root.path.count + 1)) }, ["App/Cart.h", "App/Planner.swift"])
+        XCTAssertEqual(try SourceFiles.swiftFiles(under: root.path, includeTests: false).count, 1)
+    }
 }

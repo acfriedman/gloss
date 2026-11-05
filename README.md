@@ -30,7 +30,8 @@ swift run -c release GlossApp --root path/to/YourPackage      # read it
 ```
 
 Each finding is one line in compiler format, so Xcode and GitHub Actions show it as is, and the exit status
-is 1 when any is an error, so the same command gates CI. A folder is walked for `.swift` files, skipping
+is 1 when any is an error, so the same command gates CI. A folder is walked for `.swift` files, and for `.h`
+files whose Objective-C types the docs may link, skipping
 hidden folders and those dependency managers fill: `SourcePackages`, `DerivedData`, `Pods`, and `Carthage`.
 Build for release: a debug build is several times slower on a large codebase.
 
@@ -91,7 +92,7 @@ no note, or a link names nothing.
 | `parameter-missing`, `parameter-unknown`, `parameter-empty`, `parameter-form`, `parameter-order`, `parameter-duplicate` | a parameter entry is missing, extra, empty, mixes forms, is out of order, or repeats |
 | `returns-*`, `throws-*` | `- Returns:` or `- Throws:` is missing, unexpected, or empty |
 | `symbol-link` | a single-backticked `Type.member` should be a ``` ``Type/member`` ``` link |
-| `dead-link` | a ``` ``Symbol`` ``` link names nothing the sources declare; a link into a module some file imports, as in ``` ``Alamofire/Session`` ```, is taken on trust |
+| `dead-link` | a ``` ``Symbol`` ``` link names nothing the sources declare; a link into a module some file imports, as in ``` ``Alamofire/Session`` ```, or to a type an Objective-C header declares, is taken on trust |
 | `exempt-reason`, `exempt-documented` | a `// gloss:exempt` marker has no reason, or sits beside a doc |
 
 Types, properties, and enum cases get only the summary rules. Code fences in a comment are quoted, not

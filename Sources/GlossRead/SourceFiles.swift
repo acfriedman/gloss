@@ -8,6 +8,10 @@ public enum SourceFiles {
         public var path: String
     }
 
+    /// The extensions of the files gloss reads: Swift sources, and the Objective-C headers whose types a
+    /// Swift doc may link in a project that mixes the two.
+    public static let readExtensions: Set<String> = ["swift", "h"]
+
     /// Collects the `.swift` files under a path, or the path itself when it names one file.
     ///
     /// - Parameters:
@@ -16,14 +20,28 @@ public enum SourceFiles {
     /// - Returns: The files, sorted, so output order is stable across runs; empty for a non-Swift file.
     ///   Each path is `path` joined with the file's path under it.
     /// - Throws: ``Missing`` when nothing exists at `path`.
+    public static func swiftFiles(under path: String, includeTests: Bool) throws -> [String] {
+        try files(under: path, includeTests: includeTests, extensions: ["swift"])
+    }
+
+    /// Collects the files with some extensions under a path, or the path itself when it names one.
+    ///
+    /// - Parameters:
+    ///   - path: A file or directory.
+    ///   - includeTests: `false` skips any directory whose name ends in `Tests`.
+    ///   - extensions: The extensions wanted, without their dots, such as ``readExtensions``.
+    /// - Returns: The files, sorted, so output order is stable across runs; empty for a file of another
+    ///   extension. Each path is `path` joined with the file's path under it.
+    /// - Throws: ``Missing`` when nothing exists at `path`.
     ///
     /// Hidden folders, such as `.build` and `.swiftpm`, and the folders dependency managers check code out
     /// into, ``dependencyFolders``, are always skipped.
-    public static func swiftFiles(under path: String, includeTests: Bool) throws -> [String] {
+    public static func files(under path: String, includeTests: Bool, extensions: Set<String>) throws -> [String] {
         let phase = Timing.begin("list files"); defer { Timing.end(phase, path) }
+        func wanted(_ file: String) -> Bool { extensions.contains((file as NSString).pathExtension) }
         var isDirectory: ObjCBool = false
         guard FileManager.default.fileExists(atPath: path, isDirectory: &isDirectory) else { throw Missing(path: path) }
-        guard isDirectory.boolValue else { return path.hasSuffix(".swift") ? [path] : [] }
+        guard isDirectory.boolValue else { return wanted(path) ? [path] : [] }
         guard let enumerator = FileManager.default.enumerator(atPath: path) else { return [] }
         var files: [String] = []
         for case let relative as String in enumerator {
@@ -32,7 +50,7 @@ public enum SourceFiles {
                 if enumerator.fileAttributes?[.type] as? FileAttributeType == .typeDirectory { enumerator.skipDescendants() }
                 continue
             }
-            if relative.hasSuffix(".swift") { files.append((path as NSString).appendingPathComponent(relative)) }
+            if wanted(relative) { files.append((path as NSString).appendingPathComponent(relative)) }
         }
         return files.sorted()
     }

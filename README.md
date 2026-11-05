@@ -40,6 +40,8 @@ Build for release: a debug build is several times slower on a large codebase.
 | Command | Does |
 | --- | --- |
 | `gloss <paths>` | lints; `--include-tests` reads `*Tests` folders too, `--summary` prints only counts by rule, `--style <file>` reads a house style other than the nearest |
+| `gloss --staged <paths>` | lints only the declarations the next commit adds or changes, for a pre-commit hook |
+| `gloss --since <rev> <paths>` | lints only the declarations changed since a revision, for a pull request's check |
 | `gloss interface <paths>` | exports the interface: `--json <file>`, `--html <file>`, `--title <name>`, `--style <file>` |
 | `gloss story [--base main] <paths>` | prints what the branch's story covers; fails while a changed type is left out |
 | `gloss bench [--base <rev>] <paths>` | runs the app's work without a window and times each phase |
@@ -105,6 +107,22 @@ A protocol requirement inherits the protocol's doc, so gloss skips:
 - **members of a conformance extension** (`extension T: P`), for `missing-doc` only;
 - **memberwise initializers**, whose body only assigns their parameters;
 - **anything marked** `// gloss:exempt <reason>` on the line above.
+
+## Hooks and CI
+
+A codebase that predates its house style has findings nobody will fix at once. `--staged` and `--since`
+read the whole project, so links into untouched files resolve, but report only the declarations the
+change added or changed, a body edit included. New and touched code answers to the style; the rest is
+left alone until someone works on it.
+
+```bash
+#!/bin/sh
+# .git/hooks/pre-commit: judge what this commit holds, staged edits only
+exec gloss --staged .
+```
+
+In CI, `gloss --since origin/main .` judges a branch the same way. A build phase can keep linting
+everything, with the house style's warnings keeping old findings from failing the build.
 
 ## House style
 

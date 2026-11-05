@@ -5,15 +5,16 @@ import GlossMap
 import GlossPage
 import Foundation
 
-/// Command-line entry: `gloss [--include-tests] [--summary] [--style <file>] <path>...` lints;
+/// Command-line entry: `gloss [--include-tests] [--summary] [--style <file>] [--staged | --since <revision>] <path>...`
+/// lints, `--staged` and `--since` judging only the declarations a change added or changed;
 /// `gloss interface [--include-tests] [--json <file>] [--html <file>] [--title <name>] <path>...` exports;
 /// `gloss bench [--include-tests] [--base <revision>] <path>...` times what the app does with the paths;
 /// `gloss story [--include-tests] [--base <revision>] <path>...` checks the branch's story covers its change.
 ///
 /// Paths may be files or directories; directories are walked for `.swift` files, skipping hidden folders,
 /// the folders dependency managers check code out into, and, unless `--include-tests` is given, any
-/// directory whose name ends in `Tests`. The interface
-/// command writes JSON to standard output when neither `--json` nor `--html` names a file. The lint, the
+/// directory whose name ends in `Tests`. The interface command writes JSON to standard output when neither
+/// `--json` nor `--html` names a file. The lint, the
 /// export, and the bench follow the project's house style: the file `--style` names, else the nearest
 /// `.gloss/style.json` in the current directory or above it, else gloss's own.
 var arguments = Array(CommandLine.arguments.dropFirst())
@@ -23,6 +24,8 @@ let storyMode = arguments.first == "story"
 if interfaceMode || benchMode || storyMode { arguments.removeFirst() }
 let includeTests = arguments.contains("--include-tests")
 let summaryOnly = arguments.contains("--summary")
+let lintMode = !interfaceMode && !benchMode && !storyMode
+let staged = lintMode && arguments.contains("--staged")
 var options: [String: String] = [:]
 var paths: [String] = []
 var index = 0
@@ -31,7 +34,7 @@ while index < arguments.count {
     index += 1
     guard argument.hasPrefix("--") else { paths.append(argument); continue }
     if (interfaceMode && ["--json", "--html", "--title"].contains(argument)) || ((benchMode || storyMode) && argument == "--base")
-        || (!storyMode && argument == "--style") {
+        || (!storyMode && argument == "--style") || (lintMode && argument == "--since") {
         guard index < arguments.count else {
             FileHandle.standardError.write(Data("gloss: \(argument) needs a value\n".utf8))
             exit(64)
@@ -43,7 +46,7 @@ while index < arguments.count {
 
 guard !paths.isEmpty else {
     FileHandle.standardError.write(Data("""
-    usage: gloss [--include-tests] [--summary] [--style <file>] <path>...
+    usage: gloss [--include-tests] [--summary] [--style <file>] [--staged | --since <revision>] <path>...
            gloss interface [--include-tests] [--style <file>] [--json <file>] [--html <file>] [--title <name>] <path>...
            gloss bench [--include-tests] [--style <file>] [--base <revision>] <path>...
            gloss story [--include-tests] [--base <revision>] <path>...
@@ -124,7 +127,20 @@ if interfaceMode {
     exit(0)
 }
 
-let diagnostics = Linter.check(sources: sources, style: style)
+// A change's lint judges only what it touched; without one, the whole of every path is judged.
+let changed: ChangeLint.Result?
+if staged || options["--since"] != nil {
+    do {
+        changed = try ChangeLint.run(paths: paths, since: options["--since"], workingTree: sources, style: style, includeTests: includeTests)
+    } catch {
+        // What git said reads better than the error's own description.
+        FileHandle.standardError.write(Data("gloss: \((error as? Revision.Failure)?.message ?? "\(error)")\n".utf8))
+        exit(65)
+    }
+} else {
+    changed = nil
+}
+let diagnostics = changed?.diagnostics ?? Linter.check(sources: sources, style: style)
 
 if !summaryOnly {
     for diagnostic in diagnostics { print(diagnostic.rendered) }
@@ -134,8 +150,10 @@ let errors = diagnostics.filter { $0.severity == .error }.count
 // Headers are read for their type names only, so the files counted are the Swift ones linted.
 let swiftCount = sources.filter { !$0.file.hasSuffix(".h") }.count
 let warnings = diagnostics.count - errors
+let judged = changed.map { "\($0.declarations) changed declaration\($0.declarations == 1 ? "" : "s")" }
+    ?? "\(swiftCount) file\(swiftCount == 1 ? "" : "s")"
 var summary = "\(errors) error\(errors == 1 ? "" : "s")" + (warnings > 0 ? " and \(warnings) warning\(warnings == 1 ? "" : "s")" : "")
-    + " in \(swiftCount) file\(swiftCount == 1 ? "" : "s")"
+    + " in " + judged
 if !byRule.isEmpty {
     summary += "\n" + byRule.sorted { $0.value > $1.value }.map { "  \($0.value)\t\($0.key.rawValue)" }.joined(separator: "\n")
 }

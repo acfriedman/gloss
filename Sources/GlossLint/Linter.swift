@@ -28,8 +28,18 @@ public enum Linter {
     /// - Returns: Violations, file by file in the order given, each file's in source order, at the levels
     ///   the style sets.
     public static func check(sources: [(file: String, source: String)], style: HouseStyle = HouseStyle()) -> [Diagnostic] {
-        let reading = Reading(sources: sources)
-        return reading.files.filter { !style.excludes($0.file) }.flatMap { file in
+        check(Reading(sources: sources), style: style)
+    }
+
+    /// Lints sources already read, so a caller that builds the interface from the same reading parses once.
+    ///
+    /// - Parameters:
+    ///   - reading: The sources, read once.
+    ///   - style: The project's house style; gloss's own when not given.
+    /// - Returns: Violations, file by file in the order read, each file's in source order, at the levels the
+    ///   style sets.
+    public static func check(_ reading: Reading, style: HouseStyle = HouseStyle()) -> [Diagnostic] {
+        reading.files.filter { !style.excludes($0.file) }.flatMap { file in
             style.report(file.entries.flatMap { Rules.check($0.declaration, doc: $0.doc, style: style) + deadLinks($0, index: reading.index) }
                 .sorted(by: inSourceOrder))
         }

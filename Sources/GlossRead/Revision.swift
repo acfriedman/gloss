@@ -45,18 +45,84 @@ public enum Revision {
     public static func sources(at revision: String, under directory: String, relativeTo root: String,
                                includeTests: Bool, extensions: Set<String> = ["swift"]) throws -> [(file: String, source: String)] {
         let phase = Timing.begin("read revision"); defer { Timing.end(phase, revision) }
-        let top = try text(git(["rev-parse", "--show-toplevel"], in: directory))
-        let scanned = try text(git(["rev-parse", "--show-prefix"], in: directory))
-        let base = try text(git(["rev-parse", "--show-prefix"], in: root))
-        let listing = try git(["ls-tree", "-r", "-z", "--name-only", revision, "--", scanned.isEmpty ? "." : scanned], in: top)
-        let paths = listing.split(separator: 0).map { String(decoding: $0, as: UTF8.self) }.filter { path in
-            extensions.contains((path as NSString).pathExtension) && !SourceFiles.isSkipped(String(path.dropFirst(scanned.count)), includeTests: includeTests)
-        }.sorted()
-        guard !paths.isEmpty else { return [] }
+        let place = try place(of: directory, relativeTo: root)
+        let listing = try git(["ls-tree", "-r", "-z", "--name-only", revision, "--", place.scanned.isEmpty ? "." : place.scanned], in: place.top)
+        return try read(chosen(listing, place: place, includeTests: includeTests, extensions: extensions), place: place) { "\(revision):\($0)" }
+    }
 
-        // One `cat-file` reads every file: a header line, the bytes, and a newline for each.
-        let request = Data(paths.map { "\(revision):\($0)\n" }.joined().utf8)
-        let objects = try git(["cat-file", "--batch"], in: top, input: request)
+    /// Reads the files under a directory as git's index holds them: what the next commit will hold, edits
+    /// not yet staged left out, so a pre-commit hook judges the commit and not the working tree.
+    ///
+    /// - Parameters:
+    ///   - directory: The directory whose files to read, inside a git work tree.
+    ///   - root: The directory the returned paths are relative to, which holds `directory`.
+    ///   - includeTests: `false` leaves out any directory whose name ends in `Tests`.
+    ///   - extensions: The extensions wanted, without their dots; Swift's alone when not given.
+    /// - Returns: Each staged file's path relative to `root` and its text, sorted by path; a file that is
+    ///   not UTF-8, or is mid-merge with no one staged version, is left out.
+    /// - Throws: ``Failure`` when git cannot run or `directory` is not in a repository.
+    public static func stagedSources(under directory: String, relativeTo root: String, includeTests: Bool,
+                                     extensions: Set<String> = ["swift"]) throws -> [(file: String, source: String)] {
+        let phase = Timing.begin("read index"); defer { Timing.end(phase, directory) }
+        let place = try place(of: directory, relativeTo: root)
+        let listing = try git(["ls-files", "-z", "--cached", "--", place.scanned.isEmpty ? "." : place.scanned], in: place.top)
+        return try read(chosen(listing, place: place, includeTests: includeTests, extensions: extensions), place: place) { ":\($0)" }
+    }
+
+    /// Where a directory sits in its repository, as git's commands that take paths need it.
+    private struct Place {
+        /// The repository's top folder.
+        var top: String
+        /// The directory's path from the top, ending in `/`, or empty at the top.
+        var scanned: String
+        /// The root's path from the top, which returned paths drop.
+        var base: String
+    }
+
+    /// Finds where a directory and the root its paths are reported from sit in their repository.
+    ///
+    /// - Parameters:
+    ///   - directory: A directory inside a git work tree.
+    ///   - root: The directory paths are reported relative to.
+    /// - Returns: The repository's top and both prefixes.
+    /// - Throws: ``Failure`` when git cannot run or the directory is not in a repository.
+    private static func place(of directory: String, relativeTo root: String) throws -> Place {
+        Place(top: try text(git(["rev-parse", "--show-toplevel"], in: directory)),
+              scanned: try text(git(["rev-parse", "--show-prefix"], in: directory)),
+              base: try text(git(["rev-parse", "--show-prefix"], in: root)))
+    }
+
+    /// Chooses the listed paths gloss reads, as ``SourceFiles/files(under:includeTests:extensions:)``
+    /// chooses files on disk.
+    ///
+    /// - Parameters:
+    ///   - listing: Paths from the top, each ended by a zero byte, as git's `-z` lists them.
+    ///   - place: Where the scanned directory is.
+    ///   - includeTests: `false` leaves out any directory whose name ends in `Tests`.
+    ///   - extensions: The extensions wanted.
+    /// - Returns: The paths, each once, sorted.
+    private static func chosen(_ listing: Data, place: Place, includeTests: Bool, extensions: Set<String>) -> [String] {
+        Set(listing.split(separator: 0).map { String(decoding: $0, as: UTF8.self) }.filter { path in
+            extensions.contains((path as NSString).pathExtension)
+                && !SourceFiles.isSkipped(String(path.dropFirst(place.scanned.count)), includeTests: includeTests)
+        }).sorted()
+    }
+
+    /// Reads files' text from git's object store in one `cat-file` call.
+    ///
+    /// - Parameters:
+    ///   - paths: The files, as paths from the top.
+    ///   - place: Where the scanned directory is, for the paths returned.
+    ///   - object: The object name git reads each path's text by, such as `HEAD:path` or `:path`.
+    /// - Returns: Each file's path relative to the root and its text; a file git has no such object for, or
+    ///   that is not UTF-8, is left out.
+    /// - Throws: ``Failure`` when git cannot run.
+    private static func read(_ paths: [String], place: Place, object: (String) -> String) throws -> [(file: String, source: String)] {
+        guard !paths.isEmpty else { return [] }
+        // One `cat-file` reads every file: a header line, the bytes, and a newline for each, or a header
+        // saying the object is missing.
+        let request = Data(paths.map { object($0) + "\n" }.joined().utf8)
+        let objects = try git(["cat-file", "--batch"], in: place.top, input: request)
         var files: [(file: String, source: String)] = []
         var offset = objects.startIndex
         for path in paths {
@@ -67,7 +133,7 @@ public enum Revision {
             let body = objects[offset..<offset + size]
             offset += size + 1
             guard let source = String(data: body, encoding: .utf8) else { continue }
-            files.append((path.hasPrefix(base) ? String(path.dropFirst(base.count)) : path, source))
+            files.append((path.hasPrefix(place.base) ? String(path.dropFirst(place.base.count)) : path, source))
         }
         return files
     }

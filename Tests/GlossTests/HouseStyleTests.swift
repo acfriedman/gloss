@@ -70,7 +70,8 @@ final class HouseStyleTests: XCTestCase {
     func testAnExcludedFileIsReadButNotLinted() throws {
         let style = try style(#"{ "exclude": ["Sources/Gen"] }"#, root: "/repo", base: "/repo")
         let sources = [("Sources/Gen/Rates.swift", "struct Rates {}"), ("Sources/Shop/Cart.swift", "/// Priced by ``Rates``.\nstruct Cart {}")]
-        XCTAssertEqual(Linter.check(sources: sources, style: style).map(\.rule), [], "No missing doc in Gen, and the link into it resolves.")
+        XCTAssertEqual(Linter.check(sources: sources, style: style).map(\.rule), [.moduleDocMissing],
+                       "No missing doc in Gen, and the link into it resolves; only Shop's page is missing, Gen being left out.")
         let assessments = Linter.assess(Reading(sources: sources), style: style)
         XCTAssertEqual(assessments.map(\.requiresDoc), [false, true])
         XCTAssertEqual(assessments.first?.exemption, "Excluded by the house style")

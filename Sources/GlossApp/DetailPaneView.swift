@@ -353,7 +353,8 @@ struct ModulesView: View {
     }
 }
 
-/// One module: its entry points, the modules it depends on and is used by, its folders, and its types.
+/// One module: what its page says it does, its entry points, the modules it depends on and is used by,
+/// its folders, and its types, grouped as its page's Topics group them.
 struct ModuleView: View {
     /// The arranged interface the page reads the module's entry points, dependencies, and types from.
     var atlas: Atlas
@@ -363,12 +364,76 @@ struct ModuleView: View {
     var body: some View {
         let (uses, usedBy) = atlas.dependencies(ofModule: module)
         let folders = atlas.folders(in: module)
-        HeadingView(eyebrow: "Module", title: module, lede: atlas.summary(of: atlas.types(in: module)))
+        let types = atlas.types(in: module)
+        let page = atlas.page(ofModule: module)
+        HeadingView(eyebrow: "Module", title: module, lede: atlas.summary(of: types))
+        if let page { ModuleProseView(page: page) }
         ChipBlockView(title: "Entry points", units: atlas.entryPoints(in: module).map { .type($0.id) }, atlas: atlas)
         ChipBlockView(title: "Depends on", units: uses.map { .module($0) }, atlas: atlas)
         ChipBlockView(title: "Used by", units: usedBy.map { .module($0) }, atlas: atlas)
         if folders.count > 1 { ChipBlockView(title: "Folders", units: folders.map { .folder(module, $0) }, atlas: atlas) }
-        ChipBlockView(title: "Types", units: atlas.types(in: module).map { .type($0.id) }, atlas: atlas)
+        if let page, !page.topics.isEmpty {
+            // The page's groups, in its order; a type it groups nowhere still has a place below them.
+            let byName = Dictionary(types.map { ($0.name, $0) }, uniquingKeysWith: { first, _ in first })
+            let grouped = page.topics.map { topic in
+                (topic, topic.links.compactMap { Self.type(named: $0, in: module, from: byName) })
+            }
+            ForEach(Array(grouped.enumerated()), id: \.offset) { _, group in
+                TopicView(topic: group.0, units: group.1.map { .type($0.id) }, atlas: atlas)
+            }
+            let placed = Set(grouped.flatMap { $0.1.map(\.id) })
+            ChipBlockView(title: "Other types", units: types.filter { !placed.contains($0.id) }.map { .type($0.id) }, atlas: atlas)
+        } else {
+            ChipBlockView(title: "Types", units: types.map { .type($0.id) }, atlas: atlas)
+        }
+    }
+
+    /// The type a page's link names, by its first name after the module.
+    ///
+    /// - Parameters:
+    ///   - link: A link as the page writes it, such as `Reading` or `GlossRead/Reading`.
+    ///   - module: The module whose page it is.
+    ///   - types: The module's root types, by name.
+    /// - Returns: The type, or `nil` when the link names none of the module's.
+    static func type(named link: String, in module: String, from types: [String: Graph.Node]) -> Graph.Node? {
+        var parts = link.split(separator: "/").map(String.init)
+        if parts.count > 1, parts[0] == module { parts.removeFirst() }
+        return parts.first.flatMap { types[$0] }
+    }
+}
+
+/// What a module's page says before its Topics: its summary, then its Overview, a paragraph at a time.
+struct ModuleProseView: View {
+    /// The module's page.
+    var page: ModulePage
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            if !page.summary.isEmpty {
+                DocTextView(text: StoryProse.markdown(page.summary.map(\.text).joined(separator: " ")), codeColor: Palette.accent)
+                    .textStyle(.body)
+            }
+            ForEach(Array(page.overviewParagraphs.enumerated()), id: \.offset) { _, paragraph in
+                DocTextView(text: StoryProse.markdown(paragraph), codeColor: Palette.accent)
+                    .textStyle(.callout)
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+}
+
+/// One group of a module page's Topics: its title and lead over the types it links.
+struct TopicView: View {
+    /// The group.
+    var topic: ModulePage.Topic
+    /// The types it links that the module has, in its order.
+    var units: [MapScope.Unit]
+    /// The arranged interface the chips read their names and findings from.
+    var atlas: Atlas
+
+    var body: some View {
+        ChipBlockView(title: topic.title, units: units, atlas: atlas,
+                      lede: topic.lead.isEmpty ? nil : topic.lead.map(\.text).joined(separator: " "))
     }
 }
 
@@ -822,7 +887,7 @@ struct MemberRowView: View {
 struct HeadingView: View {
     /// The small uppercase label over the title, such as Module, or `nil` for none.
     var eyebrow: String?
-    /// The page's name, set large in an italic serif.
+    /// The page's name, set large in a serif.
     var title: String
     /// One line of context under the title, such as how many types the page holds, or `nil` for none.
     var lede: String?
@@ -998,6 +1063,8 @@ struct ChipBlockView: View {
     var atlas: Atlas
     /// A tooltip for each chip, at the same index.
     var notes: [String] = []
+    /// A line under the heading saying what the chips have in common, or `nil` for none.
+    var lede: String? = nil
     @State private var showsAll = false
 
     /// The most chips shown before the rest wait behind a button: about a screenful, since laying out
@@ -1012,6 +1079,9 @@ struct ChipBlockView: View {
                     HStack(spacing: 6) {
                         Text(title).textStyle(.callout, weight: .semibold)
                         Text("\(units.count)").textStyle(.caption, monospacedDigit: true).foregroundStyle(.secondary)
+                    }
+                    if let lede {
+                        Text(lede).textStyle(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                     }
                 }
                 Wrap(spacing: 6) {

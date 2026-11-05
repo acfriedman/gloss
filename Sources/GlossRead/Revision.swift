@@ -103,7 +103,7 @@ public enum Revision {
     /// - Returns: The paths, each once, sorted.
     private static func chosen(_ listing: Data, place: Place, includeTests: Bool, extensions: Set<String>) -> [String] {
         Set(listing.split(separator: 0).map { String(decoding: $0, as: UTF8.self) }.filter { path in
-            extensions.contains((path as NSString).pathExtension)
+            SourceFiles.reads(path, extensions: extensions)
                 && !SourceFiles.isSkipped(String(path.dropFirst(place.scanned.count)), includeTests: includeTests)
         }).sorted()
     }

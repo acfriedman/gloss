@@ -12,6 +12,8 @@ public struct Interface: Sendable, Equatable, Codable {
     public var contracts: [Contract]
     /// The dependency graph drawn from the contracts' mentions.
     public var graph: Graph
+    /// Each module's page, in the order read, for a view to lead the module with.
+    public var pages: [ModulePage] = []
 
     /// Reads every source once, then builds the contracts from that reading.
     ///
@@ -43,6 +45,6 @@ public struct Interface: Sendable, Equatable, Codable {
         }
         var contracts = made.flatMap { $0 }
         let graph = Timing.measure("graph", "\(contracts.count) declarations") { Graph.build(&contracts) }
-        return Interface(files: reading.files.map(\.file), contracts: contracts, graph: graph)
+        return Interface(files: reading.files.map(\.file), contracts: contracts, graph: graph, pages: reading.modulePages)
     }
 }

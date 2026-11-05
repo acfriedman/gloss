@@ -97,9 +97,37 @@ no note, or a link names nothing.
 | `symbol-link` | a single-backticked `Type.member` should be a ``` ``Type/member`` ``` link |
 | `dead-link` | a ``` ``Symbol`` ``` link names nothing the sources declare; a link into a module some file imports, as in ``` ``Alamofire/Session`` ```, or to a type an Objective-C header declares, is taken on trust |
 | `exempt-reason`, `exempt-documented` | a `// gloss:exempt` marker has no reason, or sits beside a doc |
+| `module-doc-missing`, `module-doc-title` | a module under `Sources` has no `README.md` page, or its page's `# Title` names another module |
+| `module-doc-unlisted`, `module-doc-length` | a public type is linked nowhere on its module's page, or the page's Overview runs past five sentences, or a Topics group's lead past one |
 
 Types, properties, and enum cases get only the summary rules. Code fences in a comment are quoted, not
 checked.
+
+## Module pages
+
+Each module under `Sources` keeps a `README.md` that says what it does and groups its types, short enough
+to read at a glance, and the lint keeps it in step with the code:
+
+```markdown
+# GlossRead
+
+Parses the sources once, so the lint and the model read the same thing.
+
+## Overview
+
+Every other module starts from a ``Reading``. (Five sentences at most.)
+
+## Topics
+
+### Reading the sources
+
+- ``Reading``
+- ``DeclarationReader``
+```
+
+The summary answers to the same rules as a doc's, a link must name something, and every public type
+must be linked somewhere on the page. The app leads a module's page with it, its types grouped by Topics.
+SwiftPM wants each target to leave the file out of the build: `exclude: ["README.md"]`.
 
 ## Exemptions
 

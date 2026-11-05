@@ -88,6 +88,17 @@ public struct Atlas: Sendable {
     private var rolledWithBody: [Rolled] = []
     private var rolledSignature: [Rolled] = []
 
+    /// Each module's page, by the module whose folder it is in.
+    private var pages: [String: ModulePage] = [:]
+
+    /// The page a module keeps in its folder, which says what the module does and groups its types.
+    ///
+    /// - Parameter module: A module's name.
+    /// - Returns: Its page, or `nil` when it has none.
+    public func page(ofModule module: String) -> ModulePage? {
+        pages[module]
+    }
+
     /// Indexes the interface by node, with the lint's findings beside its contracts when they are given.
     ///
     /// - Parameters:
@@ -100,6 +111,7 @@ public struct Atlas: Sendable {
     public init(_ interface: Interface, assessments: [Assessment]? = nil) {
         precondition(assessments.map { $0.count == interface.contracts.count } ?? true, "one assessment per contract")
         let phase = Timing.begin("arrange")
+        pages = Dictionary(interface.pages.map { (SourceFiles.module(of: $0.file), $0) }, uniquingKeysWith: { first, _ in first })
         nodes = interface.graph.nodes
         edges = interface.graph.edges
         var seenModules = Set<String>()

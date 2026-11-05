@@ -8,9 +8,21 @@ public enum SourceFiles {
         public var path: String
     }
 
-    /// The extensions of the files gloss reads: Swift sources, and the Objective-C headers whose types a
-    /// Swift doc may link in a project that mixes the two.
-    public static let readExtensions: Set<String> = ["swift", "h"]
+    /// The extensions of the files gloss reads: Swift sources, the Objective-C headers whose types a Swift
+    /// doc may link in a project that mixes the two, and the README that is each module's page.
+    public static let readExtensions: Set<String> = ["swift", "h", "md"]
+
+    /// Whether a file is one gloss reads among some extensions: one of them, and a Markdown file only when
+    /// it is a module's page, so no other README or note is read as one.
+    ///
+    /// - Parameters:
+    ///   - path: A file's path.
+    ///   - extensions: The extensions wanted, without their dots.
+    /// - Returns: `true` when the file is read.
+    public static func reads(_ path: String, extensions: Set<String>) -> Bool {
+        let ext = (path as NSString).pathExtension
+        return extensions.contains(ext) && (ext != "md" || ModulePage.isPage(path))
+    }
 
     /// Collects the `.swift` files under a path, or the path itself when it names one file.
     ///
@@ -38,7 +50,7 @@ public enum SourceFiles {
     /// into, ``dependencyFolders``, are always skipped.
     public static func files(under path: String, includeTests: Bool, extensions: Set<String>) throws -> [String] {
         let phase = Timing.begin("list files"); defer { Timing.end(phase, path) }
-        func wanted(_ file: String) -> Bool { extensions.contains((file as NSString).pathExtension) }
+        func wanted(_ file: String) -> Bool { reads(file, extensions: extensions) }
         var isDirectory: ObjCBool = false
         guard FileManager.default.fileExists(atPath: path, isDirectory: &isDirectory) else { throw Missing(path: path) }
         guard isDirectory.boolValue else { return wanted(path) ? [path] : [] }
@@ -50,7 +62,9 @@ public enum SourceFiles {
                 if enumerator.fileAttributes?[.type] as? FileAttributeType == .typeDirectory { enumerator.skipDescendants() }
                 continue
             }
-            if wanted(relative) { files.append((path as NSString).appendingPathComponent(relative)) }
+            // Judged by its whole path, since a module's page is known by the folders above it.
+            let file = (path as NSString).appendingPathComponent(relative)
+            if wanted(file) { files.append(file) }
         }
         return files.sorted()
     }

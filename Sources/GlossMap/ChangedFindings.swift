@@ -1,3 +1,4 @@
+import GlossRead
 import GlossLint
 import GlossModel
 
@@ -6,7 +7,8 @@ import GlossModel
 ///
 /// Code nobody touched keeps its old findings without failing the change, so a project can bring its
 /// house style in as it goes, while a declaration that changed at all answers to the style in full. A
-/// type that only moved, or a member that is gone, touches nothing.
+/// type that only moved, or a member that is gone, touches nothing. A module the change touched answers
+/// for its page too, so a new public type its page does not list is caught in the change that adds it.
 public struct ChangedFindings: Sendable {
     /// The lines of each declaration the change added or changed, by file as the head names it.
     public private(set) var touched: [String: [ClosedRange<Int>]] = [:]
@@ -26,11 +28,18 @@ public struct ChangedFindings: Sendable {
         }
     }
 
-    /// Keeps the diagnostics on a new or changed declaration: on its doc comment or on the declaration.
+    /// Keeps the diagnostics on a new or changed declaration, on its doc comment or on the declaration,
+    /// and those on the page of a module the change touched.
     ///
     /// - Parameter diagnostics: What the lint found in the head.
-    /// - Returns: The ones on lines a touched declaration takes, in the same order.
+    /// - Returns: The ones on lines a touched declaration takes or about a touched module's page, in the
+    ///   same order.
     public func filter(_ diagnostics: [Diagnostic]) -> [Diagnostic] {
-        diagnostics.filter { diagnostic in touched[diagnostic.file]?.contains { $0.contains(diagnostic.line) } ?? false }
+        let modules = Set(touched.keys.map(SourceFiles.module(of:)))
+        return diagnostics.filter { diagnostic in
+            let aboutPage = ModulePage.isPage(diagnostic.file) || diagnostic.rule == .moduleDocMissing
+            if aboutPage { return modules.contains(SourceFiles.module(of: diagnostic.file)) }
+            return touched[diagnostic.file]?.contains { $0.contains(diagnostic.line) } ?? false
+        }
     }
 }

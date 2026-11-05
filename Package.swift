@@ -22,12 +22,13 @@ let package = Package(
         .package(url: "https://github.com/swiftlang/swift-syntax.git", exact: "603.0.1")
     ],
     targets: [
+        // Each module's README is its page, which gloss reads and the build leaves out.
         .target(name: "GlossRead", dependencies: [
             .product(name: "SwiftSyntax", package: "swift-syntax"),
             .product(name: "SwiftParser", package: "swift-syntax")
-        ]),
-        .target(name: "GlossLint", dependencies: ["GlossRead"]),
-        .target(name: "GlossModel", dependencies: ["GlossRead"]),
+        ], exclude: ["README.md"]),
+        .target(name: "GlossLint", dependencies: ["GlossRead"], exclude: ["README.md"]),
+        .target(name: "GlossModel", dependencies: ["GlossRead"], exclude: ["README.md"]),
         .target(name: "GlossMap", dependencies: [
             "GlossRead",
             "GlossLint",
@@ -35,10 +36,10 @@ let package = Package(
             .product(name: "SwiftSyntax", package: "swift-syntax"),
             .product(name: "SwiftParser", package: "swift-syntax"),
             .product(name: "SwiftIDEUtils", package: "swift-syntax")
-        ]),
-        .target(name: "GlossPage", dependencies: ["GlossRead", "GlossLint", "GlossModel", "GlossMap"]),
-        .executableTarget(name: "gloss", dependencies: ["GlossRead", "GlossLint", "GlossModel", "GlossMap", "GlossPage"]),
-        .executableTarget(name: "GlossApp", dependencies: ["GlossRead", "GlossLint", "GlossModel", "GlossMap"]),
+        ], exclude: ["README.md"]),
+        .target(name: "GlossPage", dependencies: ["GlossRead", "GlossLint", "GlossModel", "GlossMap"], exclude: ["README.md"]),
+        .executableTarget(name: "gloss", dependencies: ["GlossRead", "GlossLint", "GlossModel", "GlossMap", "GlossPage"], exclude: ["README.md"]),
+        .executableTarget(name: "GlossApp", dependencies: ["GlossRead", "GlossLint", "GlossModel", "GlossMap"], exclude: ["README.md"]),
         .testTarget(name: "GlossTests", dependencies: ["GlossRead", "GlossLint", "GlossModel", "GlossMap", "GlossPage"])
     ]
 )

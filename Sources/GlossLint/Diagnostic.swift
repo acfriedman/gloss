@@ -57,6 +57,14 @@ public enum Rule: String, CaseIterable, Sendable {
     case exemptReason = "exempt-reason"
     /// A declaration carries both a `// gloss:exempt` marker and a doc comment.
     case exemptDocumented = "exempt-documented"
+    /// A module in SwiftPM's layout has no `README.md` page in its folder.
+    case moduleDocMissing = "module-doc-missing"
+    /// A module's page has no `# Title`, or its title names another module than its folder's.
+    case moduleDocTitle = "module-doc-title"
+    /// A public type of the module is linked nowhere on its page.
+    case moduleDocUnlisted = "module-doc-unlisted"
+    /// A module page's Overview runs past five sentences, or a Topics group's lead past one.
+    case moduleDocLength = "module-doc-length"
 }
 
 /// A single violation, addressed the way Xcode and GitHub Actions parse diagnostics.

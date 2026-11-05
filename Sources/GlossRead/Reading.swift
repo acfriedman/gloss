@@ -3,7 +3,7 @@
 ///
 /// The lint and the contract model are both built from one reading, and neither knows the other. An
 /// Objective-C header among the sources is not parsed: only the type names it declares are read, so a
-/// link to one resolves.
+/// link to one resolves. A module's page is read as a page, for the lint to check and the app to show.
 public struct Reading: Sendable {
     /// Each file's path, as it is reported, and the declarations read from it, in the order given.
     public var files: [(file: String, entries: [DeclarationReader.Entry])]
@@ -13,14 +13,17 @@ public struct Reading: Sendable {
     public var imports: [String]
     /// The types the Objective-C headers declare, by the names Swift imports them as, sorted.
     public var objectiveCTypes: [String]
+    /// The module pages among the sources, in the order given.
+    public var modulePages: [ModulePage]
 
     /// Reads every source, spreading the files over every core, then indexes what they declare.
     ///
     /// - Parameter sources: Each file's path, as it should be reported, and its contents: Swift files,
-    ///   and any Objective-C headers whose types the Swift docs may link.
+    ///   any Objective-C headers whose types the Swift docs may link, and the module pages.
     public init(sources: [(file: String, source: String)]) {
-        let swift = sources.filter { !$0.file.hasSuffix(".h") }
+        let swift = sources.filter { $0.file.hasSuffix(".swift") }
         let headers = sources.filter { $0.file.hasSuffix(".h") }
+        modulePages = sources.filter { ModulePage.isPage($0.file) }.map { ModulePage.parse($0.source, file: $0.file) }
         let read = Timing.measure("parse", "\(swift.count) files") {
             concurrentMap(swift) { (file: $0.file, read: DeclarationReader.readFile(source: $0.source, file: $0.file)) }
         }

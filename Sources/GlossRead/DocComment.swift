@@ -4,7 +4,7 @@ import SwiftSyntax
 /// stars, removed, tagged with its source line.
 ///
 /// Keeping the line number per entry lets a rule point at the exact offending line, not the block.
-public struct DocLine: Sendable, Equatable {
+public struct DocLine: Sendable, Equatable, Codable {
     /// The line with its `///` prefix and one following space removed; deeper indentation is kept.
     public var text: String
     /// The 1-based source line the text came from.

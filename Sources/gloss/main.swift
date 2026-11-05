@@ -147,8 +147,8 @@ if !summaryOnly {
 }
 let byRule = Dictionary(grouping: diagnostics, by: \.rule).mapValues(\.count)
 let errors = diagnostics.filter { $0.severity == .error }.count
-// Headers are read for their type names only, so the files counted are the Swift ones linted.
-let swiftCount = sources.filter { !$0.file.hasSuffix(".h") }.count
+// Headers and module pages are read for their names and prose, so the files counted are the Swift ones.
+let swiftCount = sources.filter { $0.file.hasSuffix(".swift") }.count
 let warnings = diagnostics.count - errors
 let judged = changed.map { "\($0.declarations) changed declaration\($0.declarations == 1 ? "" : "s")" }
     ?? "\(swiftCount) file\(swiftCount == 1 ? "" : "s")"

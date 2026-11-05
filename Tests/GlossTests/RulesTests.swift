@@ -159,7 +159,8 @@ final class RulesTests: XCTestCase {
         }
         """)
         func rules(_ report: String) -> [Rule] {
-            Linter.check(sources: [cart, ("Sources/Shop/Report.swift", report)]).map(\.rule)
+            // The Shop module has no page, which ModulePageTests pin; only the links are asked about here.
+            Linter.check(sources: [cart, ("Sources/Shop/Report.swift", report)]).map(\.rule).filter { $0 != .moduleDocMissing }
         }
         XCTAssertEqual(rules("/// Reads ``Cart/total``, ``Cart/add(_:)``, ``Shop/Cart``, ``String``, and ``Swift/Array``.\nstruct Report {}"), [])
         XCTAssertEqual(rules("/// Reads ``Cart/count``.\nstruct Report {}"), [.deadLink])

@@ -1,0 +1,123 @@
+1
+00:00:00,600 --> 00:00:03,080
+Gloss App is the macOS app for gloss.
+
+2
+00:00:03,400 --> 00:00:06,780
+It is where you read a package through its interface, day to day.
+
+3
+00:00:07,506 --> 00:00:09,426
+The window has three panes.
+
+4
+00:00:09,686 --> 00:00:10,886
+A list on the left.
+
+5
+00:00:11,106 --> 00:00:13,606
+The details of whatever is selected in the middle.
+
+6
+00:00:13,886 --> 00:00:15,306
+And a map on the right.
+
+7
+00:00:15,996 --> 00:00:20,096
+The details and the map sit under a bar of tabs, as they do in Xcode.
+
+8
+00:00:22,100 --> 00:00:24,440
+One object holds what is open.
+
+9
+00:00:24,700 --> 00:00:26,540
+It is called Workspace.
+
+10
+00:00:27,290 --> 00:00:33,330
+It remembers the folder, the reading of that folder, the selection, and the comparison with a
+
+11
+00:00:33,330 --> 00:00:33,590
+base.
+
+12
+00:00:34,340 --> 00:00:36,240
+It makes no decisions about what to show.
+
+13
+00:00:36,680 --> 00:00:39,080
+Those come from the same arrangement the page uses.
+
+14
+00:00:39,440 --> 00:00:42,640
+So the app and the page never disagree about the system.
+
+15
+00:00:44,667 --> 00:00:46,527
+The map moves like a canvas.
+
+16
+00:00:46,867 --> 00:00:48,907
+The mouse wheel zooms toward the pointer.
+
+17
+00:00:49,387 --> 00:00:51,187
+Dragging with the right button pans.
+
+18
+00:00:51,487 --> 00:00:54,327
+The left button is left free to click and select.
+
+19
+00:00:55,077 --> 00:00:58,417
+The text in the details can be made bigger or smaller.
+
+20
+00:00:58,777 --> 00:01:02,737
+There are seven steps, from a little smaller to twice as big.
+
+21
+00:01:02,997 --> 00:01:06,337
+The second is the size macOS itself uses.
+
+22
+00:01:07,087 --> 00:01:10,247
+You choose a step in Settings, or from the View menu.
+
+23
+00:01:10,607 --> 00:01:13,207
+The list and the map keep their sizes.
+
+24
+00:01:15,233 --> 00:01:16,953
+The app also reads changes.
+
+25
+00:01:17,253 --> 00:01:20,773
+Compare against a base, and the changes page shows what is new,
+
+26
+00:01:20,993 --> 00:01:23,113
+what moved, and what changed inside.
+
+27
+00:01:23,863 --> 00:01:27,403
+A change story appears on the page of each type it explains:
+
+28
+00:01:27,663 --> 00:01:30,383
+each theme, with its title over its prose.
+
+29
+00:01:31,013 --> 00:01:36,293
+And for every way a change reaches a type, a reach row gives one line,
+
+30
+00:01:36,473 --> 00:01:37,373
+then the reason.
+
+31
+00:01:37,733 --> 00:01:40,373
+The rest stays folded until you ask.

@@ -1,0 +1,123 @@
+1
+00:00:00,600 --> 00:00:05,280
+Gloss Lint checks doc comments and module pages against a project's house style.
+
+2
+00:00:06,030 --> 00:00:09,130
+Take a comment that begins with, this method records it.
+
+3
+00:00:09,490 --> 00:00:12,150
+Gloss Lint reports it in the format a compiler uses.
+
+4
+00:00:12,450 --> 00:00:18,230
+The file, the line, the column, the severity, then the fix, and the rule code in
+
+5
+00:00:18,230 --> 00:00:18,530
+brackets.
+
+6
+00:00:19,280 --> 00:00:25,180
+Because it looks like compiler output, Xcode, continuous integration and a commit hook can all show
+
+7
+00:00:25,180 --> 00:00:25,820
+it as it is.
+
+8
+00:00:27,833 --> 00:00:29,913
+The Linter is the entry point.
+
+9
+00:00:30,173 --> 00:00:33,193
+It runs the Rules over every declaration it reads.
+
+10
+00:00:33,943 --> 00:00:37,463
+Each rule is a single teachable failure, with a code.
+
+11
+00:00:37,703 --> 00:00:39,183
+A missing doc comment.
+
+12
+00:00:39,483 --> 00:00:41,643
+A summary that opens with this method.
+
+13
+00:00:41,963 --> 00:00:45,503
+A function that returns a value but has no returns entry.
+
+14
+00:00:46,253 --> 00:00:52,953
+Every finding becomes a Diagnostic, which knows its file, line, column, rule and message,
+
+15
+00:00:53,193 --> 00:00:55,093
+and renders itself as one line.
+
+16
+00:00:57,100 --> 00:01:03,420
+Each project sets its own house style, in a file named style dot json inside its
+
+17
+00:01:03,420 --> 00:01:04,060
+gloss folder.
+
+18
+00:01:04,650 --> 00:01:07,550
+A rule can be an error, a warning, or off.
+
+19
+00:01:07,830 --> 00:01:11,530
+A prefix such as summary star sets a whole family at once.
+
+20
+00:01:11,910 --> 00:01:16,690
+Some paths can be excluded, and the style says which declarations owe a doc comment.
+
+21
+00:01:17,440 --> 00:01:22,640
+With no file, every rule is an error, and every declaration but the private ones needs
+
+22
+00:01:22,640 --> 00:01:23,240
+a doc comment.
+
+23
+00:01:23,620 --> 00:01:28,100
+A key gloss doesn't know is an error, so a typo never leaves a rule quietly
+
+24
+00:01:28,100 --> 00:01:28,420
+on.
+
+25
+00:01:30,300 --> 00:01:33,420
+Nothing in Gloss Lint knows the contract model.
+
+26
+00:01:33,880 --> 00:01:38,320
+So a team can lint without the app, and the app can read docs without the
+
+27
+00:01:38,320 --> 00:01:38,560
+lint.
+
+28
+00:01:39,310 --> 00:01:41,730
+The one thing that crosses is the Assessment.
+
+29
+00:01:42,190 --> 00:01:44,530
+It is what the views take from the linter.
+
+30
+00:01:45,110 --> 00:01:46,990
+That is all the module does.
+
+31
+00:01:47,230 --> 00:01:51,270
+It checks the prose, and says so in a line any tool can read.

@@ -3,6 +3,10 @@
 A doc-comment linter for Swift, and a macOS app for reading a package through the interface those docs
 describe.
 
+<!-- lyceum:video -->
+[![gloss: doc comments you can read as an interface: a narrated explainer](https://pub-cb02f96c3d8442a694d6a124e46839fd.r2.dev/videos/gloss/poster.jpg)](https://pub-cb02f96c3d8442a694d6a124e46839fd.r2.dev/videos/gloss/index.html)
+<!-- /lyceum:video -->
+
 ## How it works
 
 gloss parses every file once with swift-syntax. The linter checks each `///` comment against one shape: a

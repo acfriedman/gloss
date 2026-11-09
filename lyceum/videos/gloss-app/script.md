@@ -22,6 +22,7 @@ sources:
   - Sources/GlossApp/StoryView.swift (the story on a type's page)
 # The one file this video explains: always watched, and `lyceum embed gloss-app` shows the video in it.
 explains: "Sources/GlossApp/README.md"
+verified: "c2effe0758ea"
 ---
 
 <!--

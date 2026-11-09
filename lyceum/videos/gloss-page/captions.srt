@@ -1,0 +1,79 @@
+1
+00:00:00,600 --> 00:00:02,800
+The gloss app is a window on your Mac.
+
+2
+00:00:03,040 --> 00:00:08,100
+But a build server has no window, and a teammate may want to read the interface
+
+3
+00:00:08,100 --> 00:00:09,320
+without installing anything.
+
+4
+00:00:10,070 --> 00:00:11,970
+Gloss Page is for them.
+
+5
+00:00:12,350 --> 00:00:19,150
+It renders the arranged interface as one self-contained web page, for continuous integration and for sharing.
+
+6
+00:00:19,900 --> 00:00:24,000
+It draws from the same Atlas as the app, so the two never disagree.
+
+7
+00:00:26,000 --> 00:00:29,800
+The page loads nothing from the network, and it stamps no time.
+
+8
+00:00:30,410 --> 00:00:33,810
+So the same sources always render the same bytes.
+
+9
+00:00:34,150 --> 00:00:38,970
+The tests check exactly that: render twice, and the pages must be equal.
+
+10
+00:00:39,720 --> 00:00:41,860
+That matters in continuous integration.
+
+11
+00:00:42,220 --> 00:00:46,800
+A saved page diffs cleanly, and a change in the page means a change in the
+
+12
+00:00:46,800 --> 00:00:47,060
+code.
+
+13
+00:00:49,067 --> 00:00:55,067
+Writing every contract out as markup would make a large codebase's page larger than a browser
+
+14
+00:00:55,067 --> 00:00:55,987
+opens comfortably.
+
+15
+00:00:56,737 --> 00:01:00,417
+So the page embeds its data once, as compact JSON.
+
+16
+00:01:00,977 --> 00:01:05,257
+When a reader reaches a type, the page's script builds that type's view from it.
+
+17
+00:01:05,977 --> 00:01:10,717
+Everything that takes judgment is decided before that, so the script only fills templates.
+
+18
+00:01:11,467 --> 00:01:13,927
+The page shows only what the model holds.
+
+19
+00:01:14,187 --> 00:01:16,727
+A gap on the page is a gap in the model.
+
+20
+00:01:17,477 --> 00:01:22,117
+Next, it is shrinking toward a pull request's report of findings and changes.

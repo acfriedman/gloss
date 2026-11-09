@@ -1,0 +1,24 @@
+{
+  "videos": "videos",
+  "cache": ".cache",
+  "project": "project.md",
+  "pronounce": {
+    "GlossRead": "Gloss Read",
+    "GlossLint": "Gloss Lint",
+    "GlossModel": "Gloss Model",
+    "GlossMap": "Gloss Map",
+    "GlossPage": "Gloss Page",
+    "GlossApp": "Gloss App",
+    "SwiftPM": "Swift Package Manager",
+    "DocC": "Doc C"
+  },
+  "allowSpoken": [],
+  "store": {
+    "endpoint": "https://0c79d010ba18e0050f25bb99a1d849d1.r2.cloudflarestorage.com",
+    "bucket": "gloss",
+    "public": "https://pub-cb02f96c3d8442a694d6a124e46839fd.r2.dev"
+  },
+  "coverage": {
+    "explains": "**/README.md"
+  }
+}

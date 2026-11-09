@@ -1,0 +1,19 @@
+{
+  "name": "gloss-explainers",
+  "private": true,
+  "type": "module",
+  "imports": {
+    "#kit": "lyceum/kit"
+  },
+  "scripts": {
+    "new": "lyceum new",
+    "narrate": "lyceum narrate",
+    "scenes": "lyceum scenes",
+    "stills": "lyceum stills",
+    "render": "lyceum render",
+    "typecheck": "lyceum typecheck"
+  },
+  "dependencies": {
+    "lyceum": "github:acfriedman/lyceum#semver:^0.4.0"
+  }
+}

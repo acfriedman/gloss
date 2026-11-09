@@ -1,0 +1,106 @@
+# Keeps this repository's Lyceum videos current, with no one reviewing them. On a push to main, every
+# week, and by hand, it checks which videos need work (`lyceum stale`). An agent revises each one,
+# `lyceum ship` gates and publishes it, and the changes land as a pull request that merges itself.
+# Written by `lyceum ci init`; edit freely.
+name: Lyceum videos
+
+on:
+  push:
+    branches: [main]
+    # The bot's own merges change only the project (and video blocks), and runs it starts don't
+    # trigger workflows, so a refresh never sets off another.
+    paths-ignore: ["lyceum/**"]
+  schedule:
+    - cron: "23 7 * * 1"
+  workflow_dispatch:
+    inputs:
+      videos:
+        description: "Only these videos (slugs, space-separated); empty for every one that needs work"
+        required: false
+        default: ""
+      max:
+        description: "At most this many videos in one run"
+        required: false
+        default: "3"
+
+# One run at a time; a push during a run queues the next.
+concurrency:
+  group: lyceum-videos
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 330
+    defaults:
+      run:
+        working-directory: lyceum
+    env:
+      LYCEUM_UNATTENDED: "1"
+      LYCEUM_NO_UPDATE_CHECK: "1"
+      LYCEUM_STORE_ACCESS_KEY_ID: ${{ secrets.LYCEUM_STORE_ACCESS_KEY_ID }}
+      LYCEUM_STORE_SECRET_ACCESS_KEY: ${{ secrets.LYCEUM_STORE_SECRET_ACCESS_KEY }}
+      OPENAI_KEY: ${{ secrets.OPENAI_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # `stale` reads the history since each video was verified
+          persist-credentials: false # the agent runs without push rights; `ci land` pushes
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: lyceum/package-lock.json
+
+      # The lockfile names Lyceum by git+ssh; the runner has no SSH key, and the repository is public.
+      - run: git config --global url."https://github.com/".insteadOf ssh://git@github.com/
+
+      - run: npm ci
+
+      - name: What needs work
+        id: plan
+        env:
+          VIDEOS: ${{ inputs.videos }}
+          MAX: ${{ inputs.max || '3' }}
+        run: npx lyceum ci plan --max "$MAX" $VIDEOS
+
+      - name: Tools for narrating and rendering
+        if: steps.plan.outputs.work == 'true'
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg
+
+      - uses: astral-sh/setup-uv@v6
+        if: steps.plan.outputs.work == 'true'
+
+      # Chrome, the Whisper venv and its model: about 2 GB, fetched once and kept between runs.
+      - uses: actions/cache@v4
+        if: steps.plan.outputs.work == 'true'
+        with:
+          path: |
+            ~/.cache/lyceum
+            ~/.cache/huggingface
+          key: lyceum-home-${{ runner.os }}-${{ hashFiles('lyceum/package-lock.json') }}
+          restore-keys: lyceum-home-${{ runner.os }}-
+
+      - name: Install Claude Code
+        if: steps.plan.outputs.work == 'true'
+        run: |
+          curl -fsSL https://claude.ai/install.sh | bash
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Refresh the videos
+        if: steps.plan.outputs.work == 'true'
+        env:
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+        run: npx lyceum ci run
+
+      - name: Land the changes
+        if: always() && steps.plan.outputs.work == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: npx lyceum ci land

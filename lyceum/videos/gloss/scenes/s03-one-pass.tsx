@@ -16,8 +16,8 @@ export const OnePass: React.FC = () => {
   return (
     <>
       <Node x={300} y={330} w={400} h={110} label="swift-syntax parse" sub="every file, once" color={ROLE.source} at={0} />
-      <Node x={300} y={620} w={420} h={90} label="declaration contracts" color={ROLE.docs} at={contract} />
-      <Node x={300} y={790} w={420} h={90} label="dependency graph of types" color={ROLE.docs} at={graph} />
+      <Node x={300} y={620} w={520} h={90} label="declaration contracts" color={ROLE.docs} at={contract} />
+      <Node x={300} y={790} w={520} h={90} label="dependency graph of types" color={ROLE.docs} at={graph} />
       <Svg>
         <Arrow from={[300, 390]} to={[300, 570]} at={cue("one pass")} color={ROLE.source} />
         <Arrow from={[300, 665]} to={[300, 745]} at={graph} color={ROLE.docs} />

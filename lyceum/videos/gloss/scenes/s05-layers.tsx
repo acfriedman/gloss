@@ -1,5 +1,5 @@
 import React from "react";
-import { C, Arrow, Node, Svg, Text, useScene } from "#kit";
+import { C, Arrow, Line, Node, Svg, Text, useScene } from "#kit";
 import { ROLE } from "./shared";
 
 export const Layers: React.FC = () => {
@@ -19,12 +19,14 @@ export const Layers: React.FC = () => {
       <Node x={620} y={390} w={440} h={90} label="GlossPage" color={ROLE.output} at={page} mono />
       <Node x={1300} y={390} w={440} h={90} label="GlossApp" color={ROLE.output} at={app} mono />
       <Svg>
-        <Arrow from={[620, 685]} to={[860, 945]} at={lint} color={C.dim} />
-        <Arrow from={[1300, 685]} to={[1060, 945]} at={model} color={C.dim} />
-        <Arrow from={[860, 515]} to={[620, 685]} at={map} color={C.dim} />
-        <Arrow from={[1060, 515]} to={[1300, 685]} at={map} color={C.dim} />
-        <Arrow from={[620, 345]} to={[860, 515]} at={page} color={C.dim} />
-        <Arrow from={[1300, 345]} to={[1060, 515]} at={app} color={C.dim} />
+        <Arrow from={[620, 775]} to={[860, 855]} at={lint} color={C.dim} />
+        <Arrow from={[1300, 775]} to={[1060, 855]} at={model} color={C.dim} />
+        <Arrow from={[860, 605]} to={[620, 685]} at={map} color={C.dim} />
+        <Arrow from={[1060, 605]} to={[1300, 685]} at={map} color={C.dim} />
+        <Arrow from={[620, 435]} to={[860, 515]} at={page} color={C.dim} />
+        <Arrow from={[1300, 435]} to={[1060, 515]} at={app} color={C.dim} />
+        <Line from={[900, 690]} to={[1020, 770]} at={cue("never read from each other")} color={ROLE.wrong} />
+        <Line from={[1020, 690]} to={[900, 770]} at={cue("never read from each other")} color={ROLE.wrong} />
       </Svg>
       <Text x={960} y={130} size={44} at={0} reveal="fade">each layer depends only on the ones below it</Text>
       <Text x={960} y={250} size={36} color={ROLE.wrong} at={cue("never read from each other")} reveal="fade">Lint and Model never read from each other</Text>

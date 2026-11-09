@@ -11,6 +11,7 @@ sources:
   - Sources/GlossModel/Contract.swift (a declaration's contract)
   - Sources/gloss/StoryCheck.swift (the gloss story command)
 explains: "README.md"
+verified: "dbfe30d4c812"
 ---
 
 # Intent

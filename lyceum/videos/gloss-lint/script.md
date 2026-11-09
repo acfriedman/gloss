@@ -20,7 +20,7 @@ sources:
 
 # The one file this video explains.
 explains: "Sources/GlossLint/README.md"
-verified: "dc775d6cbf92"
+verified: "c2effe0758ea"
 ---
 
 <!--

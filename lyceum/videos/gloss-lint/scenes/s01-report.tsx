@@ -2,14 +2,14 @@ import React from "react";
 import { C, Svg, Box, Text, useScene } from "#kit";
 import { ROLE } from "./shared";
 
-const W = 18; // mono advance at size 30
-const X0 = 150;
+const W = 16.8; // mono advance at size 28
+const X0 = 230;
 
 export const Report: React.FC = () => {
   const { cue } = useScene();
   const parts: { s: string; color: string; label: string; phrase: string }[] = [
     { s: "Store.swift", color: C.teal, label: "file", phrase: "The file," },
-    { s: ":1:1", color: C.blue, label: "line, column", phrase: "the line," },
+    { s: ":1:1", color: C.blue, label: "position", phrase: "the line," },
     { s: ": ", color: C.dim, label: "", phrase: "" },
     { s: "error", color: ROLE.wrong, label: "severity", phrase: "the severity," },
     { s: ": ", color: C.dim, label: "", phrase: "" },
@@ -30,10 +30,10 @@ export const Report: React.FC = () => {
       </Svg>
       <Text x={600} y={270} size={34} font="mono" anchor="left" color={C.text} at={cue("Take a comment")}>/// This method records it.</Text>
       <Text x={600} y={330} size={34} font="mono" anchor="left" color={C.dim} at={cue("Take a comment")}>{"func f() { }"}</Text>
-      <Text x={960} y={190} size={36} color={C.dim} at={cue("Gloss Lint checks")}>a doc comment</Text>
+      <Text x={960} y={150} size={36} color={C.dim} at={cue("Gloss Lint checks")}>a doc comment</Text>
       {placed.map((p, i) => (
         <React.Fragment key={i}>
-          <Text x={p.x} y={560} size={30} font="mono" anchor="left" color={p.color} at={p.phrase ? cue(p.phrase) : cue("reports it in")}>{p.s}</Text>
+          <Text x={p.x} y={560} size={28} font="mono" anchor="left" color={p.color} at={p.phrase ? cue(p.phrase) : cue("reports it in")}>{p.s}</Text>
           {p.label && (
             <Text x={p.x + p.w / 2} y={620} size={26} color={p.color} at={cue(p.phrase)}>{p.label}</Text>
           )}

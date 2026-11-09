@@ -1,0 +1,155 @@
+1
+00:00:00,600 --> 00:00:03,720
+Gloss Model reads what the docs say as contracts.
+
+2
+00:00:04,380 --> 00:00:08,140
+For every declaration, the Interface builds a Contract.
+
+3
+00:00:08,440 --> 00:00:12,680
+It holds the signature as written, and the doc comment read as a promise.
+
+4
+00:00:13,020 --> 00:00:13,820
+The summary.
+
+5
+00:00:14,140 --> 00:00:16,680
+Each parameter with its type and its entry.
+
+6
+00:00:16,920 --> 00:00:20,240
+What it returns, what it throws, and any callouts.
+
+7
+00:00:20,990 --> 00:00:24,310
+It also lists the type names the declaration mentions.
+
+8
+00:00:24,670 --> 00:00:27,110
+Those mentions are what the next piece uses.
+
+9
+00:00:29,133 --> 00:00:31,393
+From those mentions, the Graph is drawn.
+
+10
+00:00:31,753 --> 00:00:33,673
+A node is a type with its members.
+
+11
+00:00:34,133 --> 00:00:39,113
+An edge says that one type mentions another, and its roles say where.
+
+12
+00:00:39,783 --> 00:00:43,523
+A type can appear in a property, in a parameter, in a return,
+
+13
+00:00:43,803 --> 00:00:45,803
+in a throws clause, or in a conformance.
+
+14
+00:00:46,003 --> 00:00:50,283
+An edge made only of body mentions is implementation, not interface.
+
+15
+00:00:51,033 --> 00:00:52,953
+And a Reason says why.
+
+16
+00:00:53,373 --> 00:00:58,133
+It reads what the declaration wrote about the type it uses, in the entry for the
+
+17
+00:00:58,133 --> 00:01:01,973
+parameter or in the summary, so the answer is the author's own.
+
+18
+00:01:04,000 --> 00:01:07,120
+An Interface Diff compares two interfaces.
+
+19
+00:01:07,850 --> 00:01:10,510
+Things are matched by name, never by place.
+
+20
+00:01:10,790 --> 00:01:15,070
+Code that only moves inside a file, or between files, is no change.
+
+21
+00:01:15,820 --> 00:01:18,280
+Every difference is one of five kinds.
+
+22
+00:01:18,680 --> 00:01:19,280
+Added.
+
+23
+00:01:19,520 --> 00:01:20,220
+Removed.
+
+24
+00:01:20,600 --> 00:01:23,180
+Changed, when the signature or the doc differs.
+
+25
+00:01:23,880 --> 00:01:28,920
+Implementation, when only what the body does differs, which changes no one's view of the interface.
+
+26
+00:01:29,660 --> 00:01:33,240
+And moved, when a type keeps its name and goes to another module.
+
+27
+00:01:33,990 --> 00:01:37,610
+A renamed type reads as one removed and one added.
+
+28
+00:01:39,500 --> 00:01:41,320
+A diff says what changed.
+
+29
+00:01:41,680 --> 00:01:46,460
+Change Commits says who changed it, by reading git blame, so each change can quote the
+
+30
+00:01:46,460 --> 00:01:48,240
+commit messages that wrote its lines.
+
+31
+00:01:48,990 --> 00:01:53,030
+A Change Story says why, in the author's words.
+
+32
+00:01:53,370 --> 00:01:56,830
+It lives in the repository, in a file named for the branch.
+
+33
+00:01:57,090 --> 00:02:02,170
+A heading, a summary, and themes, with links to the types and members each theme is
+
+34
+00:02:02,170 --> 00:02:02,390
+about.
+
+35
+00:02:03,140 --> 00:02:06,440
+Story Coverage then checks the story against the diff.
+
+36
+00:02:06,780 --> 00:02:09,520
+Every type whose interface changed needs a theme.
+
+37
+00:02:09,880 --> 00:02:11,960
+Every change needs a note of its own.
+
+38
+00:02:12,160 --> 00:02:14,400
+And every link has to name something real.
+
+39
+00:02:15,150 --> 00:02:18,590
+So the reason for a change is written down, and checked.

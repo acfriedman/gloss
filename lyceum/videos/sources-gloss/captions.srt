@@ -1,0 +1,199 @@
+1
+00:00:00,600 --> 00:00:03,680
+The gloss command is the way in to everything else.
+
+2
+00:00:04,020 --> 00:00:06,280
+Point it at a folder, and it lints.
+
+3
+00:00:07,030 --> 00:00:10,810
+It reads the whole of each path, and reports every finding.
+
+4
+00:00:11,370 --> 00:00:13,870
+Each one prints in the format a compiler uses.
+
+5
+00:00:14,290 --> 00:00:19,610
+So Xcode shows it inline, a build server can read it, and a commit hook can
+
+6
+00:00:19,610 --> 00:00:20,150
+stop on it.
+
+7
+00:00:20,800 --> 00:00:24,020
+Two options narrow the lint to a change.
+
+8
+00:00:24,840 --> 00:00:26,660
+Staged judges the next commit.
+
+9
+00:00:26,660 --> 00:00:30,000
+Since takes a revision, and judges your branch against it.
+
+10
+00:00:30,658 --> 00:00:35,818
+Either way, the whole change is read, so links into untouched files still resolve.
+
+11
+00:00:36,458 --> 00:00:41,378
+But only findings on declarations the change added or changed are reported.
+
+12
+00:00:43,400 --> 00:00:46,280
+The second job is to export the interface.
+
+13
+00:00:47,030 --> 00:00:50,770
+Give it a folder and the interface command writes JSON.
+
+14
+00:00:51,270 --> 00:00:54,110
+With no file named, it goes to standard output.
+
+15
+00:00:54,370 --> 00:00:56,510
+Or you can ask for a web page instead.
+
+16
+00:00:57,260 --> 00:01:03,200
+The JSON holds the files read, one contract for every declaration, and the graph of how
+
+17
+00:01:03,200 --> 00:01:04,060
+they mention each other.
+
+18
+00:01:04,480 --> 00:01:09,520
+Beside the contracts sit the lint's assessments, one for each, at the same index.
+
+19
+00:01:10,270 --> 00:01:15,030
+The reading is done once, and the contracts and the lint meet only here.
+
+20
+00:01:15,450 --> 00:01:20,430
+The shape carries a schema number, now two, so other tools know when it changes.
+
+21
+00:01:22,433 --> 00:01:24,713
+The third job is the story check.
+
+22
+00:01:25,153 --> 00:01:30,733
+Every branch is meant to explain why it changed things, in a story file named for
+
+23
+00:01:30,733 --> 00:01:31,133
+the branch.
+
+24
+00:01:31,883 --> 00:01:37,883
+The story command finds where the branch left its base, and compares the interface then with
+
+25
+00:01:37,883 --> 00:01:38,703
+the interface now.
+
+26
+00:01:39,203 --> 00:01:43,243
+Every type that changed must appear in the story, with a note of its own.
+
+27
+00:01:43,993 --> 00:01:45,793
+It prints what is missing.
+
+28
+00:01:46,133 --> 00:01:47,433
+Types not in the story.
+
+29
+00:01:47,793 --> 00:01:49,013
+Types with no note.
+
+30
+00:01:49,473 --> 00:01:50,613
+Links that name nothing.
+
+31
+00:01:51,233 --> 00:01:53,093
+The exit status says the rest.
+
+32
+00:01:53,093 --> 00:01:55,333
+Zero for a complete story.
+
+33
+00:01:55,333 --> 00:01:58,253
+One for gaps, or no story at all.
+
+34
+00:01:58,253 --> 00:02:00,473
+Two when git cannot answer.
+
+35
+00:02:02,467 --> 00:02:04,107
+The last job is the bench.
+
+36
+00:02:04,567 --> 00:02:08,487
+It does the work the app does for a package, and times each phase.
+
+37
+00:02:09,237 --> 00:02:12,657
+It reads the files, builds the map, narrows the list as you type,
+
+38
+00:02:12,977 --> 00:02:16,257
+lays out every level, and works on the pages of the busiest types.
+
+39
+00:02:16,677 --> 00:02:17,957
+Then it prints a table.
+
+40
+00:02:18,077 --> 00:02:21,637
+For each phase, how many times it ran, how long it took in all,
+
+41
+00:02:21,797 --> 00:02:23,037
+and its slowest run.
+
+42
+00:02:23,297 --> 00:02:27,537
+A slow phase shows at a glance, and a change that slows one shows against an
+
+43
+00:02:27,537 --> 00:02:28,097
+earlier run.
+
+44
+00:02:28,791 --> 00:02:31,631
+The command also keeps its promises to other tools.
+
+45
+00:02:31,871 --> 00:02:36,391
+The lint exits with one only when there are errors, so a style can bring a
+
+46
+00:02:36,391 --> 00:02:37,771
+rule in as a warning first.
+
+47
+00:02:38,011 --> 00:02:40,171
+A missing value gives usage status.
+
+48
+00:02:40,451 --> 00:02:42,611
+A broken style file stops the run.
+
+49
+00:02:42,811 --> 00:02:47,131
+And a path that does not exist is an error, so a typo cannot pass as
+
+50
+00:02:47,131 --> 00:02:47,711
+a clean run.

@@ -1,0 +1,163 @@
+1
+00:00:00,600 --> 00:00:02,820
+Gloss has two front ends.
+
+2
+00:00:03,000 --> 00:00:05,020
+The app, and the page.
+
+3
+00:00:05,680 --> 00:00:07,420
+Both show the same code.
+
+4
+00:00:07,620 --> 00:00:12,580
+If each one decided for itself which types lead a module, or what a map draws,
+
+5
+00:00:12,880 --> 00:00:13,920
+they would drift apart.
+
+6
+00:00:14,670 --> 00:00:16,730
+So Gloss Map decides once.
+
+7
+00:00:17,030 --> 00:00:21,230
+It arranges the model for reading, and both front ends draw from it.
+
+8
+00:00:23,233 --> 00:00:25,713
+The Atlas is where the model and the lint meet.
+
+9
+00:00:26,463 --> 00:00:31,443
+It takes each contract, which is a declaration as read, and pairs it with the lint's
+
+10
+00:00:31,443 --> 00:00:32,203
+assessment of it.
+
+11
+00:00:32,603 --> 00:00:35,083
+That pair is called a reviewed contract.
+
+12
+00:00:35,603 --> 00:00:36,883
+The lint is optional.
+
+13
+00:00:37,203 --> 00:00:41,443
+Without it, the contracts read the same, and there are simply no findings.
+
+14
+00:00:42,193 --> 00:00:45,093
+From there the Atlas answers what a view asks.
+
+15
+00:00:45,293 --> 00:00:46,433
+The levels of the map.
+
+16
+00:00:46,633 --> 00:00:47,273
+The focus.
+
+17
+00:00:47,653 --> 00:00:48,733
+What a type reaches.
+
+18
+00:00:49,073 --> 00:00:50,653
+And why one type uses another.
+
+19
+00:00:52,667 --> 00:00:56,387
+A big codebase can't be drawn as one graph a reader can follow.
+
+20
+00:00:56,747 --> 00:00:58,267
+So the map has levels.
+
+21
+00:00:58,867 --> 00:01:03,607
+It opens at the most detailed level that fits the budget, which is thirty boxes.
+
+22
+00:01:04,127 --> 00:01:05,887
+Every type, if they fit.
+
+23
+00:01:06,447 --> 00:01:10,687
+Otherwise each module as one box, and a reader steps into a module.
+
+24
+00:01:11,127 --> 00:01:14,207
+A module too large for the budget is drawn as folders.
+
+25
+00:01:14,957 --> 00:01:19,977
+What a level leaves outside is drawn as boundary boxes a reader can step into.
+
+26
+00:01:20,727 --> 00:01:23,847
+Graph Layout places the boxes in rows, top to bottom.
+
+27
+00:01:24,167 --> 00:01:28,967
+It runs once, in Swift, so the page draws fixed pictures and the app draws the
+
+28
+00:01:28,967 --> 00:01:29,547
+same boxes.
+
+29
+00:01:29,907 --> 00:01:32,367
+The same graph always gives the same drawing.
+
+30
+00:01:34,367 --> 00:01:37,787
+For a change, Gloss Map finds what the change reaches.
+
+31
+00:01:38,347 --> 00:01:42,567
+That is the blast radius, drawn from the types that changed, outward.
+
+32
+00:01:43,317 --> 00:01:47,517
+A reach can follow what a type depends on, what uses it,
+
+33
+00:01:47,697 --> 00:01:48,437
+or both.
+
+34
+00:01:49,017 --> 00:01:51,717
+For each type reached, the map can say why.
+
+35
+00:01:51,997 --> 00:01:54,937
+Why the thing it relies on changed, from the branch's story.
+
+36
+00:01:55,157 --> 00:01:57,677
+And why it relies on that thing, from the docs.
+
+37
+00:01:58,427 --> 00:02:00,247
+Findings are judged the same way.
+
+38
+00:02:01,027 --> 00:02:05,867
+Changed Findings keeps only the findings on declarations the change added or changed.
+
+39
+00:02:06,347 --> 00:02:09,067
+Code nobody touched can't fail the change.
+
+40
+00:02:09,817 --> 00:02:11,617
+Gloss Map decides what to show.
+
+41
+00:02:11,937 --> 00:02:13,917
+The app and the page just draw it.

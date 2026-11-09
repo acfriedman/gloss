@@ -1,0 +1,183 @@
+1
+00:00:00,600 --> 00:00:05,280
+Doc comments are the one description of a Swift package that sits right beside the code.
+
+2
+00:00:05,500 --> 00:00:08,140
+And most of the time, nobody reads them.
+
+3
+00:00:08,890 --> 00:00:09,630
+They drift.
+
+4
+00:00:09,930 --> 00:00:12,750
+They have no shape, so each one is different.
+
+5
+00:00:13,130 --> 00:00:15,030
+A tool can't rely on them.
+
+6
+00:00:15,780 --> 00:00:17,980
+gloss starts from a simple bet.
+
+7
+00:00:18,380 --> 00:00:21,980
+If every doc comment has the same shape, the docs can be checked,
+
+8
+00:00:21,980 --> 00:00:24,500
+and then they can be read as the interface they describe.
+
+9
+00:00:26,500 --> 00:00:30,580
+The linter checks every triple-slash comment against one shape.
+
+10
+00:00:31,330 --> 00:00:35,450
+First, a summary of one or two sentences: what the declaration does,
+
+11
+00:00:35,730 --> 00:00:36,390
+then why.
+
+12
+00:00:37,770 --> 00:00:39,290
+Then a blank line.
+
+13
+00:00:39,590 --> 00:00:43,810
+Then a markup block, with an entry for every parameter, the return value,
+
+14
+00:00:43,950 --> 00:00:44,850
+and what it throws.
+
+15
+00:00:45,600 --> 00:00:51,540
+Each finding is one line in compiler format, so Xcode and GitHub Actions show it as
+
+16
+00:00:51,540 --> 00:00:51,840
+it is.
+
+17
+00:00:52,220 --> 00:00:56,820
+The exit status is one when any finding is an error, so the same command can
+
+18
+00:00:56,820 --> 00:00:58,060
+gate continuous integration.
+
+19
+00:01:00,067 --> 00:01:04,167
+gloss parses every file once, with swift-syntax.
+
+20
+00:01:04,917 --> 00:01:11,117
+From that one pass, it builds each declaration's contract, and a dependency graph of types.
+
+21
+00:01:11,867 --> 00:01:16,247
+From those come an interface export, as JSON or a web page.
+
+22
+00:01:16,447 --> 00:01:21,047
+A map of the package: its modules, folders, and types, and what each uses.
+
+23
+00:01:21,347 --> 00:01:25,747
+The reason one type depends on another, in the words of the docs gloss already requires.
+
+24
+00:01:25,747 --> 00:01:30,847
+What changed against a base revision, read straight from git, and what that change reaches.
+
+25
+00:01:32,867 --> 00:01:34,667
+A branch can explain itself.
+
+26
+00:01:34,947 --> 00:01:38,687
+It keeps a change story in a file under dot gloss, changes,
+
+27
+00:01:38,947 --> 00:01:39,967
+named for the branch.
+
+28
+00:01:40,717 --> 00:01:43,797
+A story has a headline, themes, and notes.
+
+29
+00:01:44,317 --> 00:01:46,037
+Themes link the types they are about.
+
+30
+00:01:46,337 --> 00:01:48,637
+A note tells the change from one type's side.
+
+31
+00:01:49,387 --> 00:01:51,547
+Then gloss story checks it.
+
+32
+00:01:51,847 --> 00:01:56,087
+It fails while a type whose interface changed has no theme, or no note,
+
+33
+00:01:56,267 --> 00:01:58,247
+or while a link names nothing.
+
+34
+00:01:58,687 --> 00:02:00,767
+A change can't land unexplained.
+
+35
+00:02:02,733 --> 00:02:07,893
+The package is built in layers, and each depends only on the ones below it.
+
+36
+00:02:08,543 --> 00:02:10,003
+Gloss Read parses the sources.
+
+37
+00:02:10,763 --> 00:02:12,483
+Gloss Lint holds the house style.
+
+38
+00:02:13,243 --> 00:02:15,223
+Gloss Model holds what the docs say.
+
+39
+00:02:16,123 --> 00:02:18,103
+Gloss Map arranges the model for reading.
+
+40
+00:02:19,003 --> 00:02:23,363
+Gloss Page draws it as a web page, and Gloss App draws it in a macOS
+
+41
+00:02:23,363 --> 00:02:23,663
+window.
+
+42
+00:02:24,413 --> 00:02:30,593
+Gloss Lint and Gloss Model never read from each other, so the model holds what the
+
+43
+00:02:30,593 --> 00:02:33,193
+docs say whether or not the lint runs.
+
+44
+00:02:33,943 --> 00:02:38,223
+The page and the app draw from the same map, so they can't disagree.
+
+45
+00:02:38,623 --> 00:02:42,523
+One shape for the docs, one pass over the code, and a package you read through
+
+46
+00:02:42,523 --> 00:02:43,143
+its own words.

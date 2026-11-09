@@ -21,7 +21,7 @@ on:
       max:
         description: "At most this many videos in one run"
         required: false
-        default: "3"
+        default: "1"
 
 # One run at a time; a push during a run queues the next.
 concurrency:
@@ -58,7 +58,7 @@ jobs:
           cache: npm
           cache-dependency-path: lyceum/package-lock.json
 
-      # The lockfile names Lyceum by git+ssh; the runner has no SSH key, and the repository is public.
+      # A lockfile may name Lyceum by git+ssh; the runner has no SSH key, and the repository is public.
       - run: git config --global url."https://github.com/".insteadOf ssh://git@github.com/
 
       - run: npm ci
@@ -67,7 +67,7 @@ jobs:
         id: plan
         env:
           VIDEOS: ${{ inputs.videos }}
-          MAX: ${{ inputs.max || '3' }}
+          MAX: ${{ inputs.max || '1' }} # one video a run, for quick feedback while the loop beds in
         run: npx lyceum ci plan --max "$MAX" $VIDEOS
 
       - name: Tools for narrating and rendering
@@ -86,6 +86,13 @@ jobs:
             ~/.cache/huggingface
           key: lyceum-home-${{ runner.os }}-${{ hashFiles('lyceum/package-lock.json') }}
           restore-keys: lyceum-home-${{ runner.os }}-
+
+      # Ubuntu 24.04's AppArmor forbids the unprivileged user namespaces Chrome's sandbox runs in, and
+      # Chrome won't start without them ("No usable sandbox!"). This lets the sandbox work, rather than
+      # turning it off.
+      - name: Let Chrome sandbox itself
+        if: steps.plan.outputs.work == 'true'
+        run: echo 0 | sudo tee /proc/sys/kernel/apparmor_restrict_unprivileged_userns
 
       - name: Install Claude Code
         if: steps.plan.outputs.work == 'true'

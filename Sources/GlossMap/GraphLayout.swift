@@ -1,4 +1,4 @@
-import GlossRead
+import LucidRead
 import GlossModel
 
 /// Places boxes and edge curves for a dependency map, top to bottom.

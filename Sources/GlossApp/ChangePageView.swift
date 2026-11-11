@@ -1,4 +1,4 @@
-import GlossRead
+import LucidRead
 import GlossModel
 import GlossMap
 import SwiftUI

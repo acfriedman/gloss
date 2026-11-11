@@ -1,4 +1,4 @@
-import GlossRead
+import LucidRead
 import Foundation
 
 /// The story of a change in its author's words: a headline, a summary, and themes, each explaining one

@@ -8,7 +8,7 @@ Arranges the model for reading: which types a module leads with, what each map l
 
 ## Overview
 
-``Atlas`` joins each contract with the lint's assessment and answers what a view asks: levels, focus, reaches, and why one type uses another. ``GraphLayout`` lays a ``MapFigure`` out in rows, and ``Highlight`` colors code as the pages show it. For a change, it finds what the change reaches, as ``ChangeReason`` and ``ReachWhy``, and which findings fall on it, as ``ChangedFindings``.
+``Atlas`` joins each contract with the lint's assessment and answers what a view asks: levels, focus, reaches, and why one type uses another. ``GraphLayout`` lays a ``MapFigure`` out in rows, and ``Highlight`` colors code as the pages show it. For a change, it finds what the change reaches, as ``ChangeReason`` and ``ReachWhy``.
 
 ## Topics
 
@@ -37,4 +37,3 @@ Arranges the model for reading: which types a module leads with, what each map l
 - ``ChangeReason``
 - ``ChangesFigure``
 - ``ReachWhy``
-- ``ChangedFindings``

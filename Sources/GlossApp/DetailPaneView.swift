@@ -1,5 +1,5 @@
-import GlossRead
-import GlossLint
+import LucidRead
+import LucidLint
 import GlossModel
 import GlossMap
 import SwiftUI
@@ -391,7 +391,7 @@ struct ModuleView: View {
     /// The type a page's link names, by its first name after the module.
     ///
     /// - Parameters:
-    ///   - link: A link as the page writes it, such as `Reading` or `GlossRead/Reading`.
+    ///   - link: A link as the page writes it, such as `Reading` or `LucidRead/Reading`.
     ///   - module: The module whose page it is.
     ///   - types: The module's root types, by name.
     /// - Returns: The type, or `nil` when the link names none of the module's.

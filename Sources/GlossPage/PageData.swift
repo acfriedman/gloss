@@ -1,5 +1,5 @@
 import Foundation
-import GlossRead
+import LucidRead
 import GlossModel
 import GlossMap
 
@@ -135,7 +135,7 @@ extension InterfacePage {
     /// The bit each role sets in an edge's role mask, in model order.
     ///
     /// - Parameter roles: The roles of one edge.
-    /// - Returns: A mask with bit `n` set for the `n`th role of ``Mention/Role/allCases``.
+    /// - Returns: A mask with bit `n` set for the `n`th role of ``LucidRead/Mention/Role/allCases``.
     static func roleMask(_ roles: [Mention.Role]) -> Int {
         let all = Mention.Role.allCases
         return roles.reduce(0) { mask, role in mask | (1 << (all.firstIndex(of: role) ?? 0)) }

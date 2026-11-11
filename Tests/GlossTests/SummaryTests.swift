@@ -1,6 +1,6 @@
-import GlossRead
+import LucidRead
 import GlossModel
-import GlossLint
+import LucidLint
 import GlossMap
 import XCTest
 

@@ -1,4 +1,4 @@
-import GlossRead
+import LucidRead
 
 /// How the scanned types depend on one another, drawn from the type names each declaration mentions.
 ///
@@ -28,7 +28,7 @@ public struct Graph: Sendable, Equatable, Codable {
         public var from: String
         /// The id of the mentioned node, never the same as ``Graph/Edge/from``.
         public var to: String
-        /// The roles in ``Mention/Role`` order; an edge made only of `body` is implementation.
+        /// The roles in ``LucidRead/Mention/Role`` order; an edge made only of `body` is implementation.
         public var roles: [Mention.Role]
         /// The qualified names of the declarations whose mentions make this edge.
         public var via: [String]

@@ -3,7 +3,7 @@ import AppKit
 /// Writes the window to a PNG and quits, so the app can be reviewed from a script without screen access.
 ///
 /// Set `GLOSS_SNAPSHOT` to the output path. `GLOSS_SELECT` names what to select first: a node id such
-/// as `GlossLint/Linter`, `module:Name`, `overview`, `summary`, or `changes`, or several to select in turn, joined by commas,
+/// as `GlossMap/Atlas`, `module:Name`, `overview`, `summary`, or `changes`, or several to select in turn, joined by commas,
 /// such as `changes,GlossMap/Atlas`. `GLOSS_ZOOM` is how many times to zoom in after that, and
 /// `GLOSS_PREVIEW` names a node to preview as if the pointer rested on it. `GLOSS_COMPARE` compares
 /// with a base from where the head left it, `develop`, or names the head too, `develop..feature`, and

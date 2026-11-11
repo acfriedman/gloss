@@ -1,5 +1,5 @@
-import GlossRead
-import GlossLint
+import LucidRead
+import LucidLint
 import GlossModel
 
 /// The interface arranged for reading: nodes, the contracts each one shows, and lookups between them.
@@ -52,7 +52,7 @@ public struct Atlas: Sendable {
         public var from: String
         /// The id of the root node it depends on, never the same as ``from``.
         public var to: String
-        /// The roles of every edge folded into it, each once, in ``GlossRead/Mention/Role`` order; never
+        /// The roles of every edge folded into it, each once, in ``LucidRead/Mention/Role`` order; never
         /// empty, and only `body` means implementation.
         public var roles: [Mention.Role]
     }
@@ -108,7 +108,7 @@ public struct Atlas: Sendable {
     ///
     /// - Parameters:
     ///   - interface: The interface to arrange.
-    ///   - assessments: One assessment per contract, at the same index, as ``GlossLint/Linter/assess(_:style:)``
+    ///   - assessments: One assessment per contract, at the same index, as ``LucidLint/Linter/assess(_:style:)``
     ///     makes them from the reading the interface was built from; `nil` arranges the interface alone.
     ///
     /// The contracts come from what the docs say, so an interface arranged without the lint reads the same;

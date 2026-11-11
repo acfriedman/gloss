@@ -1,5 +1,5 @@
-@testable import GlossRead
-@testable import GlossLint
+@testable import LucidRead
+@testable import LucidLint
 @testable import GlossModel
 import XCTest
 

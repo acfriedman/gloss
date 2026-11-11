@@ -1,9 +1,10 @@
-import GlossRead
+import LucidRead
 
 /// What one declaration promises: its signature as written, and the doc comment read as a contract.
 ///
 /// This is the record the interface view renders and the JSON export carries. It says nothing about
-/// whether the doc follows the rules; that is the ``Assessment`` the ``Linter`` makes beside it.
+/// whether the doc follows the rules; that is the ``LucidLint/Assessment`` the ``LucidLint/Linter``
+/// makes beside it.
 public struct Contract: Sendable, Equatable, Codable {
     /// One parameter with its type as written and the doc entry that describes it.
     public struct Parameter: Sendable, Equatable, Codable {
@@ -28,7 +29,7 @@ public struct Contract: Sendable, Equatable, Codable {
         public var text: String
     }
 
-    /// The module the declaration belongs to, named from its path by ``GlossRead/SourceFiles/module(of:)``.
+    /// The module the declaration belongs to, named from its path by ``LucidRead/SourceFiles/module(of:)``.
     public var module: String
     /// The syntactic category, which decides which rules apply to the declaration.
     public var kind: Declaration.Kind
@@ -99,7 +100,7 @@ public struct Contract: Sendable, Equatable, Codable {
     /// Builds the contract of one declaration as read. The doc is parsed with the same parser the rules
     /// use, so the contract and the lint can never disagree about a comment.
     ///
-    /// - Parameter entry: The declaration, its doc comment, and its details, from ``DeclarationReader``.
+    /// - Parameter entry: The declaration, its doc comment, and its details, from ``LucidRead/DeclarationReader``.
     /// - Returns: The contract, with `module` left empty for ``Interface/build(sources:)`` to fill in.
     static func make(_ entry: DeclarationReader.Entry) -> Contract {
         let (declaration, doc, facts) = (entry.declaration, entry.doc, entry.details)

@@ -1,5 +1,5 @@
-@testable import GlossRead
-@testable import GlossLint
+@testable import LucidRead
+@testable import LucidLint
 @testable import GlossModel
 @testable import GlossMap
 @testable import GlossPage
@@ -100,7 +100,7 @@ final class InterfaceTests: XCTestCase {
     }
 
     func testModuleComesFromTheSwiftPMLayout() {
-        XCTAssertEqual(SourceFiles.module(of: "Sources/GlossLint/Rules.swift"), "GlossLint")
+        XCTAssertEqual(SourceFiles.module(of: "Sources/LucidLint/Rules.swift"), "LucidLint")
         XCTAssertEqual(SourceFiles.module(of: "/repo/Packages/Shop/Sources/Cart/Views/Line.swift"), "Cart")
         XCTAssertEqual(SourceFiles.module(of: "App/Features/Checkout.swift"), "Features")
         XCTAssertEqual(SourceFiles.module(of: "main.swift"), "Module")
@@ -402,11 +402,11 @@ final class InterfaceTests: XCTestCase {
     }
 
     func testModuleColorsAreStableAndDistinct() {
-        let modules = ["GlossRead", "GlossLint", "GlossModel", "GlossMap", "GlossPage", "GlossApp", "gloss"]
+        let modules = ["LucidRead", "LucidLint", "GlossModel", "GlossMap", "GlossPage", "GlossApp", "gloss"]
         let slots = Atlas.colorSlots(for: modules)
         XCTAssertEqual(Set(slots.values).count, modules.count, "No two modules share a color while slots last.")
         XCTAssertEqual(slots, Atlas.colorSlots(for: modules.reversed()), "Order of appearance does not matter.")
-        XCTAssertEqual(Atlas.colorSlots(for: ["GlossRead"])["GlossRead"], Atlas.colorSlots(for: ["GlossRead", "Zebra"])["GlossRead"],
+        XCTAssertEqual(Atlas.colorSlots(for: ["LucidRead"])["LucidRead"], Atlas.colorSlots(for: ["LucidRead", "Zebra"])["LucidRead"],
                        "Adding a module that does not collide leaves the others' colors alone.")
         XCTAssertTrue(slots.values.allSatisfy { (0..<Atlas.moduleColorCount).contains($0) })
     }
@@ -626,7 +626,7 @@ final class InterfaceTests: XCTestCase {
         }
         """)])
         let edges = interface.graph.edges.map { "\($0.from) -> \($0.to) \($0.roles)" }
-        XCTAssertEqual(edges, ["App/Screen -> App/Store [GlossRead.Mention.Role.property]"],
+        XCTAssertEqual(edges, ["App/Screen -> App/Store [LucidRead.Mention.Role.property]"],
                        "A wrapper's argument is a dependency even with no type annotation; a wrapper no scanned source declares is not.")
     }
 

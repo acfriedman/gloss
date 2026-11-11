@@ -1,6 +1,6 @@
 import Foundation
-import GlossRead
-import GlossLint
+import LucidRead
+import LucidLint
 import GlossModel
 import GlossMap
 

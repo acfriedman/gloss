@@ -1,4 +1,4 @@
-import GlossRead
+import LucidRead
 import GlossModel
 
 /// The interface's size and health at a glance: how much it declares and how much of that is public, how

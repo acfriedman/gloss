@@ -1,11 +1,11 @@
-import GlossRead
-import GlossLint
+import LucidRead
+import LucidLint
 import GlossModel
 import GlossMap
 import Foundation
 
 /// What `gloss bench` times: the work the app does for a package, from reading it to drawing every map
-/// level and the pages of its busiest types, each phase measured with ``GlossRead/Timing``, so a slow
+/// level and the pages of its busiest types, each phase measured with ``LucidRead/Timing``, so a slow
 /// phase shows at a glance and a change that slows one shows against an earlier run.
 enum Bench {
     /// How many of the most connected types have their focus and page work timed.

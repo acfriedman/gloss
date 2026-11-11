@@ -1,4 +1,4 @@
-import GlossRead
+import LucidRead
 import GlossModel
 
 /// The words every front end uses for the model: roles, kinds, folders, and one-line summaries.

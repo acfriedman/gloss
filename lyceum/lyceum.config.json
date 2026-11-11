@@ -3,8 +3,9 @@
   "cache": ".cache",
   "project": "project.md",
   "pronounce": {
-    "GlossRead": "Gloss Read",
-    "GlossLint": "Gloss Lint",
+    "LucidRead": "Lucid Read",
+    "LucidLint": "Lucid Lint",
+    "SwiftLucid": "Swift Lucid",
     "GlossModel": "Gloss Model",
     "GlossMap": "Gloss Map",
     "GlossPage": "Gloss Page",

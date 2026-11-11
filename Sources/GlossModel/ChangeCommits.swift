@@ -1,4 +1,4 @@
-import GlossRead
+import LucidRead
 import Foundation
 
 /// The commits that made each change since a base, read with `git blame`, so a change can say why in
@@ -75,7 +75,7 @@ public struct ChangeCommits: Sendable, Equatable {
     ///     edits then count too.
     ///   - root: The directory the interface's file names are relative to, inside the repository.
     /// - Returns: The commits behind each change.
-    /// - Throws: ``Revision/Failure`` when git cannot list the range's commits.
+    /// - Throws: ``LucidRead/Revision/Failure`` when git cannot list the range's commits.
     public static func read(_ diff: InterfaceDiff, base: String, head: String?, root: String) throws -> ChangeCommits {
         let phase = Timing.begin("read change commits")
         defer { Timing.end(phase, "\(diff.nodes.count) types") }

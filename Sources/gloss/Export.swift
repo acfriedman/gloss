@@ -1,4 +1,4 @@
-import GlossLint
+import LucidLint
 import GlossModel
 
 /// What `gloss interface --json` writes: the interface with the lint's assessments beside it, one

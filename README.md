@@ -1,7 +1,7 @@
 # gloss
 
-A doc-comment linter for Swift, and a macOS app for reading a package through the interface those docs
-describe.
+A macOS app for reading a Swift package through the interface its doc comments describe. The
+doc-comment linter it builds on is its own project, [SwiftLucid](https://github.com/acfriedman/SwiftLucid).
 
 <!-- lyceum:video -->
 [![gloss: doc comments you can read as an interface: a narrated explainer](https://pub-cb02f96c3d8442a694d6a124e46839fd.r2.dev/videos/gloss/poster.jpg)](https://pub-cb02f96c3d8442a694d6a124e46839fd.r2.dev/videos/gloss/index.html)
@@ -9,10 +9,9 @@ describe.
 
 ## How it works
 
-gloss parses every file once with swift-syntax. The linter checks each `///` comment against one shape: a
-one- or two-sentence summary (what, then why), a blank line, then a markup block for every parameter, the
-return value, and what it throws. From the same pass, gloss builds each declaration's contract and a
-dependency graph of types, and from those:
+gloss reads every file once through SwiftLucid, which parses it with swift-syntax and lints each `///`
+comment against the project's house style. From the same reading, gloss builds each declaration's
+contract and a dependency graph of types, and from those:
 - an interface export, as JSON or a self-contained HTML page;
 - a map of the package: its modules, folders, and types, and what each uses and is used by;
 - why one type depends on another, in the words of the docs gloss already requires;
@@ -29,26 +28,23 @@ dependency graph of types, and from those:
 ```bash
 git clone https://github.com/acfriedman/gloss && cd gloss
 swift build -c release
-swift run -c release gloss path/to/YourPackage/Sources        # lint
 swift run -c release GlossApp --root path/to/YourPackage      # read it
 ```
 
-Each finding is one line in compiler format, so Xcode and GitHub Actions show it as is, and the exit status
-is 1 when any is an error, so the same command gates CI. A folder is walked for `.swift` files, and for `.h`
-files whose Objective-C types the docs may link, skipping
-hidden folders and those dependency managers fill: `SourcePackages`, `DerivedData`, `Pods`, and `Carthage`.
-Build for release: a debug build is several times slower on a large codebase.
+A folder is walked for `.swift` files, and for `.h` files whose Objective-C types the docs may link,
+skipping hidden folders and those dependency managers fill: `SourcePackages`, `DerivedData`, `Pods`, and
+`Carthage`. Build for release: a debug build is several times slower on a large codebase. To lint, use
+SwiftLucid's `swiftlucid` command.
 
 ## Commands
 
 | Command | Does |
 | --- | --- |
-| `gloss <paths>` | lints; `--include-tests` reads `*Tests` folders too, `--summary` prints only counts by rule, `--style <file>` reads a house style other than the nearest |
-| `gloss --staged <paths>` | lints only the declarations the next commit adds or changes, for a pre-commit hook |
-| `gloss --since <rev> <paths>` | lints only the declarations changed since a revision, for a pull request's check |
 | `gloss interface <paths>` | exports the interface: `--json <file>`, `--html <file>`, `--title <name>`, `--style <file>` |
 | `gloss story [--base main] <paths>` | prints what the branch's story covers; fails while a changed type is left out |
 | `gloss bench [--base <rev>] <paths>` | runs the app's work without a window and times each phase |
+
+Each reads `*Tests` folders too with `--include-tests`.
 
 ## The app
 
@@ -88,105 +84,44 @@ Carts showed totals before tax, so checkout disagreed with the receipt.
 The Changes page leads with it. `gloss story` fails while a type whose interface changed has no theme or
 no note, or a link names nothing.
 
-## Rules
+## The lint
 
-| Code | Fires when |
-| --- | --- |
-| `missing-doc` | a non-private declaration has no `///` comment; the house style can ask only from `public` |
-| `block-doc` | the comment is `/** */`; what it says is still checked |
-| `summary-empty`, `summary-sentences`, `summary-terminator`, `summary-capital`, `summary-opener` | the summary is missing, isn't one or two sentences, has no period, starts lowercase, or opens with "This method…" |
-| `markup-order`, `markup-spacing`, `markup-case`, `markup-unknown` | a callout follows prose, touches the summary, is lowercase, or is a near miss like `- Return:` |
-| `parameter-missing`, `parameter-unknown`, `parameter-empty`, `parameter-form`, `parameter-order`, `parameter-duplicate` | a parameter entry is missing, extra, empty, mixes forms, is out of order, or repeats |
-| `returns-*`, `throws-*` | `- Returns:` or `- Throws:` is missing, unexpected, or empty |
-| `symbol-link` | a single-backticked `Type.member` should be a ``` ``Type/member`` ``` link |
-| `dead-link` | a ``` ``Symbol`` ``` link names nothing the sources declare; a link into a module some file imports, as in ``` ``Alamofire/Session`` ```, or to a type an Objective-C header declares, is taken on trust |
-| `exempt-reason`, `exempt-documented` | a `// gloss:exempt` marker has no reason, or sits beside a doc |
-| `module-doc-missing`, `module-doc-title` | a module under `Sources` has no `README.md` page, or its page's `# Title` names another module |
-| `module-doc-unlisted`, `module-doc-length` | a public type is linked nowhere on its module's page, or the page's Overview runs past five sentences, or a Topics group's lead past one |
-
-Types, properties, and enum cases get only the summary rules. Code fences in a comment are quoted, not
-checked.
+gloss shows SwiftLucid's findings beside each declaration, at the levels the project's house style sets
+in `.swiftlucid.json`, read from the folder the app opens or, for `gloss interface` and `gloss bench`, the
+nearest above the current directory. The rules, exemptions, hook modes, and the house style's keys are in
+[SwiftLucid's README](https://github.com/acfriedman/SwiftLucid#rules).
 
 ## Module pages
 
 Each module under `Sources` keeps a `README.md` that says what it does and groups its types, short enough
-to read at a glance, and the lint keeps it in step with the code:
+to read at a glance, and SwiftLucid's lint keeps it in step with the code:
 
 ```markdown
-# GlossRead
+# GlossModel
 
-Parses the sources once, so the lint and the model read the same thing.
+Reads what the docs say as contracts and a graph.
 
 ## Overview
 
-Every other module starts from a ``Reading``. (Five sentences at most.)
+Every view starts from an ``Interface``. (Five sentences at most.)
 
 ## Topics
 
-### Reading the sources
+### The model
 
-- ``Reading``
-- ``DeclarationReader``
+- ``Interface``
+- ``Contract``
 ```
 
 The summary answers to the same rules as a doc's, a link must name something, and every public type
 must be linked somewhere on the page. The app leads a module's page with it, its types grouped by Topics.
 SwiftPM wants each target to leave the file out of the build: `exclude: ["README.md"]`.
 
-## Exemptions
-
-A protocol requirement inherits the protocol's doc, so gloss skips:
-- **known requirements** by signature, such as `hash(into:)`, `init(from:)`, `body`, and `description`;
-- **members of a conformance extension** (`extension T: P`), for `missing-doc` only;
-- **memberwise initializers**, whose body only assigns their parameters;
-- **anything marked** `// gloss:exempt <reason>` on the line above.
-
-## Hooks and CI
-
-A codebase that predates its house style has findings nobody will fix at once. `--staged` and `--since`
-read the whole project, so links into untouched files resolve, but report only the declarations the
-change added or changed, a body edit included. New and touched code answers to the style; the rest is
-left alone until someone works on it.
-
-```bash
-#!/bin/sh
-# .git/hooks/pre-commit: judge what this commit holds, staged edits only
-exec gloss --staged .
-```
-
-In CI, `gloss --since origin/main .` judges a branch the same way. A build phase can keep linting
-everything, with the house style's warnings keeping old findings from failing the build.
-
-## House style
-
-The rules above are gloss's own house style. A project picks its own in `.gloss/style.json`, which gloss
-reads from the current directory or the nearest folder above it, and the app from the folder it opens.
-Every key is optional:
-
-```json
-{
-  "severity": "warning",
-  "rules": { "missing-doc": "error", "summary-*": "off" },
-  "exclude": ["Sources/Generated", "**/*.pb.swift"],
-  "requireDocs": "public"
-}
-```
-
-| Key | Does |
-| --- | --- |
-| `severity` | the level of every rule `rules` doesn't name: `error` (the default), `warning`, or `off` |
-| `rules` | a level per rule code, or per prefix ending in `*`; a code wins over a prefix |
-| `exclude` | paths not linted, from the folder holding `.gloss`: `*`, `**`, `?`, or a folder for all of it; their declarations still resolve links |
-| `requireDocs` | the narrowest access that owes a doc for `missing-doc`: `public`, `package`, or `internal` (the default) |
-
-Warnings print as `warning:` and leave the exit status 0, so a team can bring a rule in before it gates
-anything. A key or rule code gloss doesn't know stops the run, so a typo can't leave a rule on unnoticed.
-
 ## Environment
 
 | Variable | Does |
 | --- | --- |
-| `GLOSS_TIMING=1` | prints every timed phase to standard error; they're also in Instruments and `log stream --predicate 'subsystem == "gloss"'` |
+| `SWIFTLUCID_TIMING=1` | prints every timed phase to standard error; they're also in Instruments and `log stream --predicate 'subsystem == "swiftlucid"'`, since the timing is SwiftLucid's |
 | `GLOSS_SNAPSHOT=<file.png>` | writes the app's window to a PNG once the sources are read, then quits |
 | `GLOSS_SELECT` | selects first, comma-separated: `overview`, `summary`, `changes`, `module:Name`, or a type's id |
 | `GLOSS_COMPARE` | compares with `<base>` or `<base>..<head>` first |
@@ -198,15 +133,14 @@ anything. A key or rule code gloss doesn't know stops the run, so a typo can't l
 
 | Target | Holds |
 | --- | --- |
-| `GlossRead` | one pass over the sources: declarations, doc comments, links, and git revisions |
-| `GlossLint` | the house style: the rules, their findings, and which declarations owe a doc |
 | `GlossModel` | what the docs say: contracts, their graph, diffs, and stories |
 | `GlossMap` | the model arranged for reading (`Atlas`), with the lint's findings beside it |
 | `GlossPage` | the HTML page |
 | `GlossApp` | the macOS app |
 
-Each depends only on the ones above it. `GlossLint` and `GlossModel` both read from `GlossRead` and never
-from each other, so the model holds what the docs say whether or not the lint runs. The page and the app
+Each depends only on the ones above it, and all of them on SwiftLucid's `LucidRead`, the one reading of
+the sources. `GlossModel` never imports `LucidLint`, so the model holds what the docs say whether or not
+the lint runs. The page and the app
 draw from the same `Atlas`, so they can't disagree.
 
 ## License

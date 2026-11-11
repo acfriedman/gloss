@@ -1,4 +1,4 @@
-import GlossRead
+import LucidRead
 import GlossModel
 
 /// One type found by a few typed letters, with where the letters landed in its name.

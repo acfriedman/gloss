@@ -1,5 +1,5 @@
-import GlossRead
-import GlossLint
+import LucidRead
+import LucidLint
 import GlossModel
 
 /// Why a change reaches a type, in two short answers: why the thing it relies on changed, from the

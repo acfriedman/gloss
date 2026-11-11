@@ -1,5 +1,5 @@
 import Foundation
-import GlossRead
+import LucidRead
 import GlossModel
 import GlossMap
 

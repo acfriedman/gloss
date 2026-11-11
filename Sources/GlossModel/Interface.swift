@@ -1,10 +1,10 @@
-import GlossRead
+import LucidRead
 
 /// Every declaration found under a set of paths: what each one promises, and how the types depend on
 /// one another. The interface as one document.
 ///
-/// It is built from a ``GlossRead/Reading`` and holds only what the docs say, never whether they follow
-/// the house style; that is the lint's, which reads the same ``GlossRead/Reading`` on its own.
+/// It is built from a ``LucidRead/Reading`` and holds only what the docs say, never whether they follow
+/// the house style; that is the lint's, which reads the same ``LucidRead/Reading`` on its own.
 public struct Interface: Sendable, Equatable, Codable {
     /// The scanned paths, in the order they were read and as they are reported.
     public var files: [String]

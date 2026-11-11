@@ -1,6 +1,6 @@
 import AppKit
-import GlossRead
-import GlossLint
+import LucidRead
+import LucidLint
 import GlossModel
 import GlossMap
 import Observation
@@ -486,9 +486,9 @@ final class Workspace {
         ///   - root: The folder.
         ///   - head: The revision to read, or `nil` for the files on disk.
         /// - Returns: The interface and its arrangement, with files named relative to `root`.
-        /// - Throws: ``GlossRead/SourceFiles/Missing`` when the folder is gone,
-        ///   ``GlossRead/Revision/Failure`` when git cannot read the revision, or
-        ///   ``GlossLint/HouseStyle/Problem`` when the folder's house style cannot be read.
+        /// - Throws: ``LucidRead/SourceFiles/Missing`` when the folder is gone,
+        ///   ``LucidRead/Revision/Failure`` when git cannot read the revision, or
+        ///   ``LucidLint/HouseStyle/Problem`` when the folder's house style cannot be read.
         static func read(_ root: URL, head: String?) throws -> Loaded {
             let scanned = scanned(root)
             let pairs: [(file: String, source: String)] = try Timing.measure("read files", head ?? "working tree") {

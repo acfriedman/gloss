@@ -1,4 +1,4 @@
-import GlossRead
+import LucidRead
 
 /// What one declaration says about a type it mentions: the source's own answer to why one type uses
 /// another.
@@ -41,7 +41,7 @@ public struct Reason: Sendable, Equatable {
     public var name: String
     /// The introducing keyword, such as `func`, `var`, or `struct`.
     public var keyword: String
-    /// Every role the declaration mentions the type in, in ``Mention/Role`` order.
+    /// Every role the declaration mentions the type in, in ``LucidRead/Mention/Role`` order.
     public var roles: [Mention.Role]
     /// The entries that answer for one role apart from the summary: each parameter that takes the type,
     /// then the return, then the thrown error.
@@ -68,7 +68,7 @@ public struct Reason: Sendable, Equatable {
 extension Contract {
     /// What the declaration says about a type it mentions.
     ///
-    /// - Parameter target: A node id, as ``Mention/resolved`` holds it once ``Graph/build(_:)`` has run.
+    /// - Parameter target: A node id, as ``LucidRead/Mention/resolved`` holds it once ``Graph/build(_:)`` has run.
     /// - Returns: The reason, or `nil` when the declaration does not mention the type.
     public func reason(toward target: String) -> Reason? {
         let mentions = self.mentions.filter { $0.resolved == target }

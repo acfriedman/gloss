@@ -1,5 +1,5 @@
 import Foundation
-import GlossRead
+import LucidRead
 import GlossModel
 
 /// Notices when the main thread cannot respond, whatever kept it busy, a view's body included, and

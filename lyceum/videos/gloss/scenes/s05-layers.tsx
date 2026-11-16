@@ -4,16 +4,16 @@ import { ROLE } from "./shared";
 
 export const Layers: React.FC = () => {
   const { cue } = useScene();
-  const read = cue("Gloss Read");
-  const lint = cue("Gloss Lint holds");
+  const read = cue("Lucid Read");
+  const lint = cue("Lucid Lint, also");
   const model = cue("Gloss Model holds");
   const map = cue("Gloss Map arranges");
   const page = cue("Gloss Page draws");
   const app = cue("Gloss App draws");
   return (
     <>
-      <Node x={960} y={900} w={560} h={90} label="GlossRead" sub="" color={ROLE.source} at={read} mono />
-      <Node x={620} y={730} w={440} h={90} label="GlossLint" color={ROLE.rule} at={lint} mono />
+      <Node x={960} y={900} w={560} h={90} label="LucidRead" sub="SwiftLucid" color={ROLE.source} at={read} mono />
+      <Node x={620} y={730} w={440} h={90} label="LucidLint" sub="SwiftLucid" color={ROLE.rule} at={lint} mono />
       <Node x={1300} y={730} w={440} h={90} label="GlossModel" color={ROLE.docs} at={model} mono />
       <Node x={960} y={560} w={560} h={90} label="GlossMap" color={ROLE.output} at={map} mono />
       <Node x={620} y={390} w={440} h={90} label="GlossPage" color={ROLE.output} at={page} mono />
@@ -25,11 +25,11 @@ export const Layers: React.FC = () => {
         <Arrow from={[1060, 605]} to={[1300, 685]} at={map} color={C.dim} />
         <Arrow from={[620, 435]} to={[860, 515]} at={page} color={C.dim} />
         <Arrow from={[1300, 435]} to={[1060, 515]} at={app} color={C.dim} />
-        <Line from={[900, 690]} to={[1020, 770]} at={cue("never read from each other")} color={ROLE.wrong} />
-        <Line from={[1020, 690]} to={[900, 770]} at={cue("never read from each other")} color={ROLE.wrong} />
+        <Line from={[900, 690]} to={[1020, 770]} at={cue("never imports Lucid Lint")} color={ROLE.wrong} />
+        <Line from={[1020, 690]} to={[900, 770]} at={cue("never imports Lucid Lint")} color={ROLE.wrong} />
       </Svg>
       <Text x={960} y={130} size={44} at={0} reveal="fade">each layer depends only on the ones below it</Text>
-      <Text x={960} y={250} size={36} color={ROLE.wrong} at={cue("never read from each other")} reveal="fade">Lint and Model never read from each other</Text>
+      <Text x={960} y={250} size={36} color={ROLE.wrong} at={cue("never imports Lucid Lint")} reveal="fade">GlossModel never imports LucidLint</Text>
       <Text x={960} y={990} size={36} color={ROLE.output} at={cue("can't disagree")} reveal="fade">page and app draw from the same map</Text>
     </>
   );

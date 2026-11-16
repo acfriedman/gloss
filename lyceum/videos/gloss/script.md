@@ -1,26 +1,25 @@
 ---
 title: "gloss: doc comments you can read as an interface"
-status: draft 1
-updated: 2026-11-09
+status: draft 2
+updated: 2026-11-16
 pronounce: {}
 sources:
-  - README.md (the story told: what gloss is, its commands, rules, change stories and layers)
-  - Package.swift (the modules and which depends on which)
-  - Sources/GlossLint/Rules.swift (the house style's rules)
+  - README.md (the story told: what gloss is, SwiftLucid, its commands, change stories and layers)
+  - Package.swift (the modules, the SwiftLucid dependency, and which depends on which)
   - Sources/GlossModel/ChangeStory.swift (change stories and what coverage demands)
   - Sources/GlossModel/Contract.swift (a declaration's contract)
   - Sources/gloss/StoryCheck.swift (the gloss story command)
 explains: "README.md"
-verified: "dbfe30d4c812"
+verified: "a79b8bfe8c50"
 ---
 
 # Intent
 
-- **Point:** gloss makes doc comments one checked shape, then reads the package through what those docs say: the same pass feeds a linter, a map, and a check that a branch explains itself.
+- **Point:** gloss reads the package through what its doc comments say. The linter that keeps those docs in one shape is SwiftLucid, its own project; gloss builds a map, a reading of each change, and a check that a branch explains itself on the same reading.
 - **For:** the project's audience: Swift developers who have not met gloss.
-- **Angle:** start from the problem that doc comments drift and nobody reads them, then show each thing gloss builds on one parse, ending with the layers that keep it honest.
+- **Angle:** start from the problem that doc comments drift and nobody reads them, then show what gloss builds from one reading of the sources, ending with the layers that keep it honest.
 - **Length:** about three minutes, five scenes.
-- **Notes:** the app cannot run in CI, so it is described from its README, never shown as screens. Rules and commands are quoted from the README and checked against the code.
+- **Notes:** the app cannot run in CI, so it is described from its README, never shown as screens. The lint's rules now live in SwiftLucid and are not repeated here.
 
 ## 01 · hook — Docs nobody trusts
 
@@ -34,21 +33,23 @@ gloss starts from a simple bet. If every doc comment has the same shape, the doc
 
 ## 02 · shape — One shape for a comment
 
-> Visual: A doc comment built line by line. A summary line labelled "what, then why". A blank line. Then callouts: Parameter, Returns, Throws, each lit as it is named. Code simplified.
+> Visual: A doc comment built line by line. A summary line labelled "what, then why". A blank line. Then callouts: Parameter, Returns, Throws, each lit as it is named. Under it, a pill "SwiftLucid checks this" and the file name `.swiftlucid.json`. Code simplified.
 
-The linter checks every triple-slash comment against one shape.
+The checking is done by Swift Lucid, the linter gloss builds on. It is its own project now.
 
-First, a summary of one or two sentences: what the declaration does, then why. Then a blank line. Then a markup block, with an entry for every parameter, the return value, and what it throws.
+It checks every triple-slash comment against the house style a project sets in a file named dot swiftlucid dot json.
 
-Each finding is one line in compiler format, so Xcode and GitHub Actions show it as it is. The exit status is one when any finding is an error, so the same command can gate continuous integration.
+gloss's own docs keep one shape. A summary of one or two sentences: what, then why. A blank line. Then a markup block, with an entry for every parameter, the return value, and what it throws.
 
-## 03 · one-pass — One parse, many uses
+gloss shows those findings beside each declaration.
 
-> Visual: A single box "swift-syntax parse" on the left. Arrows fan out to: lint findings, contracts, dependency graph. Then from those, five outputs listed on the right: interface export, map, why one type depends on another, what changed, change story check.
+## 03 · one-pass — One reading, many uses
 
-gloss parses every file once, with swift-syntax.
+> Visual: A single box "Swift Lucid reading" on the left. Arrows lead to: declaration contracts, dependency graph. Then from those, four outputs listed on the right: interface export, map, why one type depends on another, what changed; then a line "and what the change reaches".
 
-From that one pass, it builds each declaration's contract, and a dependency graph of types.
+gloss reads every file once, through Swift Lucid, which parses it with swift-syntax.
+
+From that one pass, it builds each declaration's contract, and a graph of the dependencies between types.
 
 From those come an interface export, as JSON or a web page. A map of the package: its modules, folders, and types, and what each uses. The reason one type depends on another, in the words of the docs gloss already requires. What changed against a base revision, read straight from git, and what that change reaches.
 
@@ -64,12 +65,12 @@ Then gloss story checks it. It fails while a type whose interface changed has no
 
 ## 05 · layers — Layers that keep it honest
 
-> Visual: Six boxes stacked: Gloss Read at the bottom, then Gloss Lint and Gloss Model side by side, Gloss Map above, then Gloss Page and Gloss App. Arrows only point downward. A cross between Lint and Model.
+> Visual: Six boxes stacked: LucidRead (from SwiftLucid) at the bottom, then LucidLint (from SwiftLucid) and GlossModel side by side, GlossMap above, then GlossPage and GlossApp. Arrows only point downward. A cross between LucidLint and GlossModel.
 
 The package is built in layers, and each depends only on the ones below it.
 
-Gloss Read parses the sources. Gloss Lint holds the house style. Gloss Model holds what the docs say. Gloss Map arranges the model for reading. Gloss Page draws it as a web page, and Gloss App draws it in a macOS window.
+Lucid Read, from Swift Lucid, reads the sources. Lucid Lint, also from Swift Lucid, holds the house style. Gloss Model holds what the docs say. Gloss Map arranges the model for reading. Gloss Page draws it as a web page, and Gloss App draws it in a macOS window.
 
-Gloss Lint and Gloss Model never read from each other, so the model holds what the docs say whether or not the lint runs.
+Gloss Model never imports Lucid Lint, so the model holds what the docs say whether or not the lint runs.
 
-The page and the app draw from the same map, so they can't disagree. One shape for the docs, one pass over the code, and a package you read through its own words.
+The page and the app draw from the same map, so they can't disagree. One shape for the docs, one reading of the code, and a package you read through its own words.

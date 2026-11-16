@@ -12,10 +12,10 @@ const OUT = [
 export const OnePass: React.FC = () => {
   const { cue } = useScene();
   const contract = cue("contract");
-  const graph = cue("graph");
+  const graph = cue("graph of the");
   return (
     <>
-      <Node x={300} y={330} w={400} h={110} label="swift-syntax parse" sub="every file, once" color={ROLE.source} at={0} />
+      <Node x={300} y={330} w={400} h={110} label="SwiftLucid reading" sub="swift-syntax, every file once" color={ROLE.source} at={0} />
       <Node x={300} y={620} w={520} h={90} label="declaration contracts" color={ROLE.docs} at={contract} />
       <Node x={300} y={790} w={520} h={90} label="dependency graph of types" color={ROLE.docs} at={graph} />
       <Svg>

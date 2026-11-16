@@ -18,13 +18,13 @@ export const Shape: React.FC = () => {
     markup: cue("markup block"),
     ret: cue("return value"),
     thr: cue("what it throws"),
-    find: cue("Each finding"),
-    exit: cue("exit status"),
+    lucid: cue("Swift Lucid"),
+    show: cue("beside each declaration"),
   };
   return (
     <>
       <Text x={960} y={130} size={46} at={0}>One shape for a comment</Text>
-      <Code code={CODE} x={140} y={240} size={30} at={cue("triple-slash")} cps={80}
+      <Code code={CODE} x={140} y={240} size={30} at={cue("keep one shape")} cps={80}
         highlights={[
           { line: 0, at: t.sum, out: t.blank, color: ROLE.docs },
           { line: 1, at: t.blank, out: t.markup, color: ROLE.rule },
@@ -35,9 +35,9 @@ export const Shape: React.FC = () => {
       <Pill x={140} y={560} text="summary: what, then why" color={ROLE.docs} at={t.sum} anchor="left" />
       <Pill x={620} y={560} text="blank line" color={ROLE.rule} at={t.blank} anchor="left" />
       <Pill x={860} y={560} text="parameters · returns · throws" color={ROLE.output} at={t.markup} anchor="left" />
-      <Text x={140} y={720} size={34} color={C.dim} font="mono" at={t.find} reveal="fade" anchor="left">Sources/Cart.swift:12:6: error: [parameter-missing] ...</Text>
-      <Text x={140} y={800} size={34} color={C.dim} font="mono" at={t.find} reveal="fade" anchor="left">(simplified finding, compiler format)</Text>
-      <Text x={140} y={900} size={40} color={ROLE.wrong} at={t.exit} reveal="fade" anchor="left">any error: exit status 1 → gates continuous integration</Text>
+      <Pill x={140} y={720} text="SwiftLucid checks every /// comment" color={ROLE.rule} at={t.lucid} anchor="left" />
+      <Text x={140} y={810} size={34} color={C.dim} font="mono" at={cue("dot swiftlucid")} reveal="fade" anchor="left">.swiftlucid.json: the project's house style</Text>
+      <Text x={140} y={920} size={40} color={ROLE.output} at={t.show} reveal="fade" anchor="left">gloss shows the findings beside each declaration</Text>
     </>
   );
 };
